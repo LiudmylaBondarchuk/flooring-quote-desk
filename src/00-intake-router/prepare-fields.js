@@ -103,7 +103,7 @@ return $input.all().map((item, i) => {
         from_email: fromEmail,
         from_name: from.name || '',
         reply_to_email: replyToEmail,
-        contact_email: contactEmail || '',
+        contact_email: contactEmail,
         to_emails: (m.to?.value || []).map((v) => lower(v.address)).filter(Boolean),
         cc_emails: (hdr(m, 'cc') || '').match(new RegExp(ADDR.source, 'g'))?.map(lower) || [],
 

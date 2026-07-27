@@ -60,7 +60,7 @@ CREATE TABLE messages (
     direction                 text        NOT NULL,
     sender                    text        NOT NULL,
     source                    text        NOT NULL DEFAULT 'gmail_direct',
-    contact_email             text        NOT NULL DEFAULT '',
+    contact_email             text,
     from_name                 text        NOT NULL DEFAULT '',
     is_outbound               boolean     NOT NULL DEFAULT false,
     needs_sender_extraction   boolean     NOT NULL DEFAULT false,
@@ -228,6 +228,8 @@ CREATE TABLE failures (
 
 CREATE INDEX failures_open_idx ON failures (created_at DESC) WHERE resolved_at IS NULL;
 
+COMMENT ON COLUMN messages.contact_email IS
+    'Null when the sender is unknown — a platform lead with no reply-to. Null never matches null, so an unknown sender cannot inherit anyone else''s history.';
 COMMENT ON COLUMN messages.extracted IS
     'What the model claimed. Never constrained, never trusted on its own.';
 COMMENT ON COLUMN messages.intent IS

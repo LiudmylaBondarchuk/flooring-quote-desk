@@ -22,14 +22,14 @@ SELECT
   (SELECT count(*) FROM messages m
     WHERE m.thread_id = $9::text AND m.gmail_message_id <> $2::text) AS prior_in_thread,
   (SELECT count(*) FROM messages m
-    WHERE m.contact_email = lower($10::text) AND m.gmail_message_id <> $2::text) AS prior_from_contact,
+    WHERE lower(m.contact_email) = lower($10::text) AND m.gmail_message_id <> $2::text) AS prior_from_contact,
   (SELECT count(*) FROM messages m
-    WHERE m.contact_email = lower($10::text) AND m.offer_id IS NOT NULL) AS prior_offers,
+    WHERE lower(m.contact_email) = lower($10::text) AND m.offer_id IS NOT NULL) AS prior_offers,
   -- validated history only: material_category / area_sqft are what the gate accepted,
   -- never raw model output, so a hallucination cannot suppress a future quote
   (SELECT json_agg(json_build_object('m', m.material_category, 'a', m.area_sqft, 'st', m.area_status))
      FROM messages m
-    WHERE m.contact_email = lower($10::text)
+    WHERE lower(m.contact_email) = lower($10::text)
       AND m.gmail_message_id <> $2::text
       AND m.created_at > now() - interval '30 days'
       AND m.material_category IS NOT NULL
