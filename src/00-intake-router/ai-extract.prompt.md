@@ -25,6 +25,9 @@ nail_down, staple_down, loose_lay, peel_and_stick, mortar_set, thinset.
 "existing_floor" is what is on the floor now, in the customer's own words.
 These are three different things and must not be mixed. All are null when the email does not say.
 
+"zip" is the five-digit US postcode, and only when the email writes one out; a city name is not a zip.
+"lift" is true only when the email says there is a lift or elevator. A missing lift is not a claim — leave it null.
+
 Set "is_commercial" true only if the sender writes on behalf of a company, property manager,
 realtor, HOA, insurer or builder — and only with evidence.
 

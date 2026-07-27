@@ -1,31 +1,217 @@
 {
-  "intent": "new_quote",
-  "material": "LVP",
-  "area_sqft": 300,
-  "rooms": "living room",
-  "floor_level": "ground",
-  "lift": null,
-  "pattern": "straight",
-  "subfloor_flag": false,
-  "old_floor_removal": null,
-  "city": "Round Rock",
-  "zip": null,
-  "urgency": null,
-  "evidence": {
-    "material": "install LVP",
-    "area_sqft": "about 300 sq ft",
-    "city": "Round Rock, TX",
-    "zip": null,
-    "floor_level": "Ground floor",
-    "pattern": null,
-    "subfloor_flag": null,
-    "old_floor_removal": null,
-    "existing_floor": "the old carpet",
-    "existing_floor_action": "please remove the old carpet",
-    "fixing_method": "click lock"
-  },
-  "is_commercial": false,
-  "existing_floor": "old carpet",
-  "existing_floor_action": "remove_first",
-  "fixing_method": "click_lock"
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "intent",
+    "material",
+    "area_sqft",
+    "rooms",
+    "floor_level",
+    "lift",
+    "pattern",
+    "subfloor_flag",
+    "old_floor_removal",
+    "city",
+    "zip",
+    "urgency",
+    "is_commercial",
+    "existing_floor",
+    "existing_floor_action",
+    "fixing_method",
+    "evidence"
+  ],
+  "properties": {
+    "intent": {
+      "type": "string"
+    },
+    "material": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "area_sqft": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "rooms": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "floor_level": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "lift": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "pattern": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "subfloor_flag": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "old_floor_removal": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "city": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "zip": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "urgency": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "is_commercial": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "existing_floor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "existing_floor_action": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "fixing_method": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "material",
+        "area_sqft",
+        "city",
+        "zip",
+        "floor_level",
+        "lift",
+        "pattern",
+        "subfloor_flag",
+        "old_floor_removal",
+        "existing_floor",
+        "existing_floor_action",
+        "fixing_method",
+        "is_commercial"
+      ],
+      "properties": {
+        "material": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "area_sqft": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "city": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "zip": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "floor_level": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lift": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pattern": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subfloor_flag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "old_floor_removal": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "existing_floor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "existing_floor_action": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fixing_method": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "is_commercial": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
 }

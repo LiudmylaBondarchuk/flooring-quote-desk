@@ -204,6 +204,8 @@ for (const item of $input.all()) {
     : (ex.old_floor_removal === false ? false : null));
   const floorLevel = norm(take('floor_level', ex.floor_level));
   const subfloor = take('subfloor_flag', ex.subfloor_flag === true ? true : null) === true;
+  const lift = take('lift', ex.lift === true ? true : null) === true;
+  const commercialClaim = take('is_commercial', ex.is_commercial === true ? true : null) === true;
   const intent = norm(ex.intent);
   const said = (re) => re.test(src);
 
@@ -341,7 +343,7 @@ for (const item of $input.all()) {
     }
 
     const upper = floorLevel && !/ground|first|1st|main|slab/.test(floorLevel);
-    if (upper && ex.lift !== true) {
+    if (upper && !lift) {
       reasons.push(`upper floor (${floorLevel}), no lift stated — access surcharge`);
     }
     if (intent === 'follow_up') {
@@ -397,7 +399,7 @@ for (const item of $input.all()) {
     reasons.unshift('⚠️ payment/credential details being changed — verify by PHONE, never act on this email alone');
   }
 
-  const segment = (ex.is_commercial === true || said(RE.commercial)) ? 'commercial' : 'residential';
+  const segment = (commercialClaim || said(RE.commercial)) ? 'commercial' : 'residential';
   if (segment === 'commercial') {
     if (color === 'green') color = 'yellow';
     autoBlocked = true;
