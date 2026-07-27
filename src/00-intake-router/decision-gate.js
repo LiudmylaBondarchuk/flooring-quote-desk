@@ -36,16 +36,16 @@ const RE = {
 
   stairs: /\bstairs?\b|staircase|stairwell|stair treads?/,
   scopeWords: /\bremov\w*|tear ?out|rip ?up|haul ?away|dispose|disposal|over the existing|on top of|existing (tile|vinyl|carpet|laminate|hardwood|floor)|underlay\w*|vapou?r barrier|baseboard|transition strip|threshold|subfloor prep/,
-  metricArea: /\b(m2|m²|sq ?m|square met\w*|metr\w*)/,
+  metricArea: /\b(m2|m²|sq ?m|square met(er|re)s?|met(er|re)s?\b)/,
   flooring: /floor|flooring|carpet|vinyl|laminate|hardwood|lvp|lvt|plank|subfloor|underlay|baseboard|sq ?ft|square feet/,
   commercial: /property manag|realtor|\bhoa\b|insurance (claim|adjuster)|multi-?family|apartment complex|bid (invitation|package)|\brfp\b|w-?9|\bcoi\b|certificate of insurance|general contractor/,
 };
 
 const SQFT_PER_SQM = 10.7639;
-const DIMENSIONS = /(\d+(?:[.,]\d+)?)\s*[x×by]\s*(\d+(?:[.,]\d+)?)/i;
+const DIMENSIONS = /(\d+(?:[.,]\d+)?)\s*(?:x|×|by)\s*(\d+(?:[.,]\d+)?)/i;
 const COUNT_NOT_AREA = /\b(rooms?|bedrooms?|bathrooms?|units?|pieces?|boxes?)\b/i;
 
-const num = (v) => Number(String(v ?? '').replace(',', '.'));
+const num = (v) => Number(String(v ?? '').replace(/,(?=\d{3}\b)/g, '').replace(',', '.'));
 
 const asQuantity = (value, evidenceText) => {
   const ev = String(evidenceText ?? '');
@@ -137,7 +137,8 @@ for (const item of $input.all()) {
   const fullyQuoted = row.body_fully_quoted === true;
   const isReturning = Number(row.prior_from_contact || 0) > 0 || Number(row.prior_in_thread || 0) > 0;
   const hadOffer = Number(row.prior_offers || 0) > 0;
-  const isAutomated = !!row.auto_submitted
+  const autoSubmitted = norm(row.auto_submitted);
+  const isAutomated = (autoSubmitted !== '' && autoSubmitted !== 'no')
     || /bulk|junk|list|auto_reply/.test(norm(row.precedence))
     || row.list_unsubscribe === true;
 
@@ -391,8 +392,8 @@ for (const item of $input.all()) {
   }
 
   if (danger) {
-    color = 'red';
     autoBlocked = true;
+    if (!['ignore_auto', 'owner_reply', 'operations'].includes(category)) color = 'red';
     reasons.unshift('⚠️ payment/credential details being changed — verify by PHONE, never act on this email alone');
   }
 

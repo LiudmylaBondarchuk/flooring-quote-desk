@@ -1,8 +1,8 @@
 -- Applied once, on 2026-07-27, against the Neon instance as it stood that day:
 -- a schema grown by hand through the build, with legacy category and route values
 -- and no constraints. It is not reproducible from an empty database and is kept
--- only as the record of how that instance was brought up to 0001-schema.sql.
--- A fresh install runs 0001-schema.sql and nothing else.
+-- only as the record of how that instance was brought up to db/schema.sql.
+-- A fresh install runs db/schema.sql and nothing else.
 
 BEGIN;
 

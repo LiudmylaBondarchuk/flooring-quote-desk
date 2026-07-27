@@ -83,7 +83,7 @@ return $input.all().map((item, i) => {
     const bin = item.binary || {};
     const imageKeys = Object.keys(bin).filter((k) => /^image\//i.test(bin[k]?.mimeType || ''));
     const pdfKeys = Object.keys(bin).filter((k) => /pdf/i.test(bin[k]?.mimeType || ''));
-    const hasPhoto = imageKeys.length > 0 || /<img\b/i.test(String(m.html || ''));
+    const hasPhoto = imageKeys.length > 0;
 
     const stripped = stripQuote(bodyText);
     const fullyQuoted = !bodyEmpty && stripped.length === 0;
@@ -97,17 +97,17 @@ return $input.all().map((item, i) => {
 
         gmail_message_id: m.id,
         internet_message_id: m.messageId || null,
-        thread_id: m.threadId || null,
+        thread_id: m.threadId || m.id || '',
         is_outbound: isOutbound,
 
         from_email: fromEmail,
         from_name: from.name || '',
         reply_to_email: replyToEmail,
-        contact_email: contactEmail,
+        contact_email: contactEmail || '',
         to_emails: (m.to?.value || []).map((v) => lower(v.address)).filter(Boolean),
         cc_emails: (hdr(m, 'cc') || '').match(new RegExp(ADDR.source, 'g'))?.map(lower) || [],
 
-        source: isOutbound ? 'owner_sent' : (isPlatform ? 'lead_platform' : 'gmail_direct'),
+        source: isOutbound ? 'owner_sent' : (isPlatform ? 'platform' : 'gmail_direct'),
         needs_sender_extraction: isPlatform && !contactEmail,
 
         subject,

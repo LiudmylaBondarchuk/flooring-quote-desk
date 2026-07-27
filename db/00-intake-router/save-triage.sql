@@ -2,6 +2,8 @@ WITH upd AS (
 UPDATE messages SET
   extracted                 = $1::jsonb,
   category                  = $2,
+  matched_rule              = $24,
+  out_of_scope              = $25,
   route                     = $3,
   handling                  = $4,
   segment                   = $5,

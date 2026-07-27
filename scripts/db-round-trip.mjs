@@ -1,0 +1,265 @@
+import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const url = process.env.CHECK_DATABASE_URL;
+if (!url) {
+  console.error('CHECK_DATABASE_URL is not set — point it at an empty throwaway database. It gets written to.');
+  process.exit(1);
+}
+
+const run = (args, input) =>
+  execFileSync('psql', [url, '-q', ...args], { input, encoding: 'utf8' });
+
+const ask = (sql) => execFileSync('psql', [url, '-t', '-A', '-c', sql], { encoding: 'utf8' }).trim();
+
+const existing = ask("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'");
+if (existing !== '0') {
+  console.error(`refusing to run: CHECK_DATABASE_URL already holds ${existing} tables in public.`);
+  console.error('it must be empty and disposable — never the database holding real data.');
+  process.exit(1);
+}
+
+const read = (...p) => readFileSync(join(root, ...p), 'utf8');
+
+const params = (path) => {
+  const body = JSON.parse(read(path)).queryReplacement.replace(/^=\{\{\s*/, '').replace(/\s*\}\}$/, '');
+  return new Function('$json', `return ${body}`);
+};
+
+const literal = (v) => {
+  if (v === null || v === undefined) return 'NULL';
+  if (typeof v === 'boolean') return v ? 'true' : 'false';
+  if (typeof v === 'number') return String(v);
+  const text = String(v);
+  let tag = 'lit';
+  while (text.includes(`$${tag}$`)) tag += 'x';
+  return `$${tag}$${text}$${tag}$`;
+};
+
+const fill = (sql, values) => sql.replace(/\$(\d+)/g, (whole, n) => {
+  const i = Number(n);
+  return i >= 1 && i <= values.length ? literal(values[i - 1]) : whole;
+});
+
+const columnOfPlaceholder = (sql) =>
+  new Map([...sql.matchAll(/^\s{2}(\w+)\s+=\s+\$(\d+)/gm)].map((m) => [Number(m[2]), m[1]]));
+
+const gateKeys = (sql, path) => {
+  const columns = columnOfPlaceholder(sql);
+  const body = JSON.parse(read(path)).queryReplacement.replace(/^=\{\{\s*\[/, '').replace(/\]\s*\}\}$/, '');
+  const parts = body.split(/,\s*(?![^(]*\))/).map((x) => x.trim());
+  const pairs = [];
+  for (const [position, column] of columns) {
+    const match = parts[position - 1] && parts[position - 1].match(/\$json\.(\w+)/);
+    if (match) pairs.push([column, match[1]]);
+  }
+  return pairs;
+};
+
+const prepareSource = read('src', '00-intake-router', 'prepare-fields.js');
+const gateSource = read('src', '00-intake-router', 'decision-gate.js');
+const runNode = (source, items) =>
+  new Function('$input', source)({ all: () => items.map((json) => ({ json })) });
+
+const logSql = read('db', '00-intake-router', 'log-inbound-dedupe.sql');
+const logParams = params(join('db', '00-intake-router', 'log-inbound-dedupe.params.json'));
+const triageSql = read('db', '00-intake-router', 'save-triage.sql');
+const triageParams = params(join('db', '00-intake-router', 'save-triage.params.json'));
+
+const message = (over = {}) => ({
+  id: 'transport',
+  threadId: 't-1',
+  labelIds: ['INBOX'],
+  from: { value: [{ address: 'someone@example.com', name: 'Someone' }] },
+  text: 'Hi, I need laminate in the hallway, 210 sq ft, Buda TX.',
+  html: '',
+  headers: {},
+  ...over,
+});
+
+const TRANSPORT = [
+  ['an ordinary inbound email', message()],
+  ['a lead forwarded by a platform, with a reply-to', message({
+    from: { value: [{ address: 'leads@mail.angi.com', name: 'Angi' }] },
+    headers: { 'reply-to': 'customer@example.com' },
+  })],
+  ['a lead from a platform with no reply-to at all', message({
+    from: { value: [{ address: 'leads@mail.thumbtack.com', name: 'Thumbtack' }] },
+  })],
+  ['a message Gmail gave no thread for', message({ threadId: undefined })],
+  ['an email that says Auto-Submitted: no', message({ headers: { 'auto-submitted': 'no' } })],
+  ['an out of office reply', message({ headers: { 'auto-submitted': 'auto-replied' } })],
+  ['an email the owner sent', message({ labelIds: ['SENT'] })],
+  ['an email with no sender address at all', message({ from: { value: [{}] } })],
+  ['an html-only email', message({ text: '', html: '<p>Carpet in the bedroom, 180 sq ft, Kyle TX.</p>' })],
+  ['an email quoting a rival price in dollars', message({
+    text: 'I was quoted $1,200 by another company for 320 sq ft of LVP in Austin TX. Can you beat that?',
+  })],
+];
+
+const cases = JSON.parse(read('tests', 'fixtures', 'decision-gate.json'));
+
+const failures = [];
+const decisions = [];
+let stored = '0';
+
+try {
+  run(['-v', 'ON_ERROR_STOP=1', '-f', join(root, 'db', 'schema.sql'),
+    '-f', join(root, 'db', 'seeds', 'reference-data.sql')]);
+
+  const services = JSON.parse(ask(
+    `SELECT coalesce(json_agg(json_build_object('label', label, 'we_do', we_do,
+       'match_words', match_words, 'answer', answer) ORDER BY priority), '[]') FROM services`));
+
+  const DEFAULTS = {
+    categories: ['Carpet', 'LVP', 'Laminate', 'Vinyl', 'Wood'],
+    services,
+    body_empty: false, body_fully_quoted: false, has_photo: false, is_outbound: false,
+    needs_sender_extraction: false, list_unsubscribe: false,
+    prior_in_thread: 0, prior_from_contact: 0, prior_offers: 0, prior_signatures: [],
+  };
+
+  const script = [];
+  const labels = [];
+  const step = (stage, name, sql) => {
+    labels.push({ stage, name });
+    script.push(`\\warn CASE ${labels.length - 1}`, sql.replace(/;\s*$/, '') + ';');
+  };
+
+  TRANSPORT.forEach(([name, m], i) => {
+    const [item] = runNode(prepareSource, [{ ...m, id: `transport-${i}` }]);
+    step('storing the email', name, fill(logSql, logParams(item.json)));
+  });
+
+  cases.forEach(({ name, row }, i) => {
+    const id = `gate-${i}`;
+    const [inbound] = runNode(prepareSource, [message({ id, threadId: `t-${i}` })]);
+    step('storing the email', name, fill(logSql, logParams(inbound.json)));
+    const [decided] = runNode(gateSource, [{ ...DEFAULTS, ...row, gmail_message_id: id }]);
+    decisions.push({ id, name, json: decided.json });
+    step('storing the decision', name, fill(triageSql, triageParams(decided.json)));
+  });
+
+  let output = '';
+  try {
+    output = execFileSync('sh', ['-c', 'psql "$0" -q -f - 2>&1', url],
+      { input: script.join('\n') + '\n', encoding: 'utf8' });
+  } catch (e) {
+    output = String(e.stdout || '') + String(e.stderr || '');
+  }
+
+  let current = null;
+  for (const line of output.split('\n')) {
+    const marker = line.match(/^CASE (\d+)$/);
+    if (marker) { current = Number(marker[1]); continue; }
+    const problem = line.match(/(?:ERROR|FATAL):\s+(.*)$/);
+    if (problem) {
+      failures.push({ ...(labels[current] || { stage: 'before any case ran', name: '' }), error: problem[1] });
+    }
+  }
+
+  stored = ask('SELECT count(*) FROM messages');
+  const expected = TRANSPORT.length + cases.length;
+  if (Number(stored) !== expected) {
+    failures.push({ stage: 'counting what survived', name: '',
+      error: `${expected} emails went in, ${stored} came out — a statement was accepted and stored nothing` });
+  }
+
+  const undecided = ask("SELECT count(*) FROM messages WHERE gmail_message_id LIKE 'gate-%' AND status = 'new'");
+  if (Number(undecided) !== 0) {
+    failures.push({ stage: 'counting what survived', name: '',
+      error: `${undecided} decisions matched no row — those emails would keep their untriaged defaults` });
+  }
+
+  const pairs = gateKeys(triageSql, join('db', '00-intake-router', 'save-triage.params.json'));
+  const columns = pairs.map(([column]) => `'${column}', ${column}`).join(', ');
+  const back = new Map(JSON.parse(ask(
+    `SELECT coalesce(json_agg(json_build_object('id', gmail_message_id, ${columns})), '[]')
+       FROM messages WHERE gmail_message_id LIKE 'gate-%'`))
+    .map((r) => [r.id, r]));
+
+  const canonical = (v) => {
+    if (Array.isArray(v)) return v.map(canonical);
+    if (v && typeof v === 'object') {
+      return Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical(v[k])]));
+    }
+    return v;
+  };
+
+  const same = (stored, meant) => {
+    if (stored === null || stored === undefined) return meant === null || meant === undefined;
+    if (typeof meant === 'object') return JSON.stringify(canonical(stored)) === JSON.stringify(canonical(meant));
+    if (typeof meant === 'number' || typeof stored === 'number') return Number(stored) === Number(meant);
+    return String(stored) === String(meant);
+  };
+
+  decisions.forEach(({ id, name, json }) => {
+    const row = back.get(id);
+    if (!row) return;
+    for (const [column, key] of pairs) {
+      if (!same(row[column], json[key])) {
+        failures.push({ stage: 'reading the decision back', name,
+          error: `${column} holds ${JSON.stringify(row[column])}, the gate decided ${key} = ${JSON.stringify(json[key])}` });
+      }
+    }
+  });
+
+  const [firstStored] = TRANSPORT.map((_, i) => `transport-${i}`);
+  const lanes = [];
+  for (const dir of ['10-quote', '20-project', '30-support', '40-operations', '50-review']) {
+    const sql = read('db', dir, 'accept-handoff.sql');
+    const take = params(join('db', dir, 'accept-handoff.params.json'));
+    lanes.push([dir, fill(sql, take({ gmail_message_id: firstStored }))]);
+  }
+  const failureSql = read('db', '90-errors', 'record-failure.sql');
+  const failureParams = params(join('db', '90-errors', 'record-failure.params.json'));
+  lanes.push(['90-errors', fill(failureSql, failureParams({
+    source: 'router_lane', workflow_name: '00 Intake & Router — Flooring', workflow_id: 'wf',
+    execution_id: '1', node_name: 'Save triage', message: 'a check constraint refused the write',
+    gmail_message_id: firstStored, payload: { error: { name: 'NodeOperationError' } },
+  }))]);
+
+  const laneScript = [];
+  lanes.forEach(([dir, sql], i) => laneScript.push(`\\warn LANE ${i}`, sql.replace(/;\s*$/, '') + ';'));
+  let laneOut = '';
+  try {
+    laneOut = execFileSync('sh', ['-c', 'psql "$0" -q -f - 2>&1', url],
+      { input: laneScript.join('\n') + '\n', encoding: 'utf8' });
+  } catch (e) { laneOut = String(e.stdout || '') + String(e.stderr || ''); }
+
+  let lane = null;
+  for (const line of laneOut.split('\n')) {
+    const marker = line.match(/^LANE (\d+)$/);
+    if (marker) { lane = Number(marker[1]); continue; }
+    const problem = line.match(/(?:ERROR|FATAL):\s+(.*)$/);
+    if (problem) failures.push({ stage: 'handing over to a lane', name: lanes[lane]?.[0] || '', error: problem[1] });
+  }
+
+  const handedOver = ask(`SELECT count(*) FROM messages WHERE gmail_message_id = '${firstStored}' AND handled_by IS NOT NULL`);
+  if (Number(handedOver) !== 1) {
+    failures.push({ stage: 'handing over to a lane', name: '',
+      error: 'no lane stamped handled_by — the handover updated nothing' });
+  }
+  if (Number(ask('SELECT count(*) FROM failures')) !== 1) {
+    failures.push({ stage: 'recording a failure', name: '', error: 'the error lane stored nothing' });
+  }
+} finally {
+  try {
+    execFileSync('psql', [url, '-q', '-c', 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;']);
+  } catch { /* the run already failed; leaving the schema is the lesser problem */ }
+}
+
+if (failures.length) {
+  console.error(`${failures.length} statement(s) the database would not accept:\n`);
+  for (const f of failures) console.error(`  [${f.stage}] ${f.name}\n      ${f.error}`);
+  process.exit(1);
+}
+
+console.log(`round trip passed: ${TRANSPORT.length} transport cases and ${cases.length} decisions ` +
+  `went through the real SQL, ${stored} rows stored and read back unchanged, ` +
+  'all six lanes and the error lane exercised.');
+console.log('the values go in as literals here; n8n binds them as query parameters, so driver-level ' +
+  'type conversion is not covered by this check.');

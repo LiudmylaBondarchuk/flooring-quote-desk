@@ -85,6 +85,8 @@ CREATE TABLE messages (
     extraction_schema_version text,
 
     category                  text        NOT NULL DEFAULT 'unknown',
+    matched_rule              text,
+    out_of_scope              text,
     route                     text        NOT NULL DEFAULT 'review',
     handling                  text        NOT NULL DEFAULT 'manual_review',
     gate_color                text,
@@ -235,11 +237,13 @@ COMMENT ON COLUMN messages.category IS
 COMMENT ON COLUMN messages.dropped_fields IS
     'Values the model produced that no words in the email supported.';
 COMMENT ON COLUMN messages.body_raw IS
-    'The email as it arrived. body holds the same text with the quoted history removed.';
+    'The text the email carried: its plain part, or the plain text recovered from its HTML. body holds the same text with the quoted history removed, body_html the markup it came in.';
 COMMENT ON COLUMN messages.area_sqft IS
     'Square feet the gate accepted. area_status says how it got there: stated, converted or derived.';
 COMMENT ON COLUMN services.priority IS
-    'Lower wins when an email matches more than one entry. "vinyl tile" is plank work, not tile work.';
+    'Order within one side of the catalogue. What the firm does is always checked before what it refuses, in code.';
+COMMENT ON COLUMN messages.matched_rule IS
+    'Which of the classification rules fired. The only record of why this email went where it went.';
 COMMENT ON COLUMN offers.total_low IS
     'A quote for this work is a range, not a number. final_amount holds what was actually agreed.';
 COMMENT ON COLUMN price_bands.min_charge IS

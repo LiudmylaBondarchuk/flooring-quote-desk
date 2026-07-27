@@ -1,5 +1,4 @@
 {
-  "is_flooring_inquiry": true,
   "intent": "new_quote",
   "material": "LVP",
   "area_sqft": 300,
