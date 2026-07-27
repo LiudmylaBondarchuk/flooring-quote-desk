@@ -1733,5 +1733,28 @@
     "expect": {
       "pricing_allowed": false
     }
+  },
+  {
+    "name": "a city nobody wrote cannot supply the zone when only the postcode was quoted",
+    "row": {
+      "zone_by_city": "core",
+      "zone_by_zip": null,
+      "source_text": "lvp, about 300 sq ft, 73301.",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "LVP",
+        "area_sqft": 300,
+        "city": "Round Rock",
+        "zip": "73301",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "about 300 sq ft",
+          "zip": "73301"
+        }
+      }
+    },
+    "expect": {
+      "geo_zone": null
+    }
   }
 ]

@@ -86,9 +86,8 @@ const asQuantity = (value, evidenceText) => {
   return { status: 'known', sqft: Math.round(raw), unit: 'sqft', note: null };
 };
 
-const asPlace = (row, located) => {
+const asPlace = (zone, located) => {
   if (!located) return { status: 'unknown', zone: null };
-  const zone = row.zone_by_zip || row.zone_by_city || null;
   if (!zone) return { status: 'unrecognised', zone: null };
   if (zone === 'out') return { status: 'out_of_area', zone };
   return { status: 'known', zone };
@@ -187,9 +186,12 @@ for (const item of $input.all()) {
   const areaOk = Number.isFinite(area) && area > 0;
   if (quantity.note) reasons.push(quantity.note);
 
-  const locationGrounded = grounded('city') || grounded('zip');
+  const cityGrounded = grounded('city');
+  const zipGrounded = grounded('zip');
+  const locationGrounded = cityGrounded || zipGrounded;
   if (!locationGrounded && (ex.city || ex.zip)) dropped.push('city');
-  const place = asPlace(row, locationGrounded);
+  const place = asPlace((zipGrounded ? row.zone_by_zip : null)
+    || (cityGrounded ? row.zone_by_city : null) || null, locationGrounded);
   const zone = place.zone;
 
   const patternRaw = norm(take('pattern', ex.pattern));

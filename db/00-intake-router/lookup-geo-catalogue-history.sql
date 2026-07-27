@@ -10,7 +10,7 @@ SELECT
   $11::boolean AS is_outbound,
   $12::boolean AS body_fully_quoted,
   $13::boolean AS needs_sender_extraction,
-  (SELECT zone FROM service_area WHERE zip = ($1::jsonb->>'zip') LIMIT 1) AS zone_by_zip,
+  (SELECT zone FROM service_area WHERE zip = split_part($1::jsonb->>'zip', '-', 1) LIMIT 1) AS zone_by_zip,
   (SELECT zone FROM service_area
     WHERE lower(city) = lower(btrim(regexp_replace(split_part($1::jsonb->>'city', ',', 1),
                                                    '[[:space:]]+(TX|TEXAS)$', '', 'i')))
