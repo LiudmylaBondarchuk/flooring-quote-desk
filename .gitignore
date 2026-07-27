@@ -5,11 +5,7 @@
 *.pem
 db.url
 secrets/
-docs/backlog.md
-docs/private/
 node_modules/
 .DS_Store
+docs/
 CLAUDE.md
-docs/tests-bundle.md
-docs/orders-spec.md
-docs/system-brief.md

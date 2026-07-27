@@ -43,7 +43,8 @@ CREATE TABLE offers (
 
     CONSTRAINT offers_status_known  CHECK (status IN ('draft', 'sent', 'accepted', 'declined', 'expired')),
     CONSTRAINT offers_outcome_known CHECK (outcome IS NULL OR outcome IN ('won', 'lost')),
-    CONSTRAINT offers_total_sane    CHECK (total_low IS NULL OR total_low >= 0),
+    CONSTRAINT offers_total_sane    CHECK ((total_low  IS NULL OR total_low  >= 0)
+                                        AND (total_high IS NULL OR total_high >= 0)),
     CONSTRAINT offers_total_ordered CHECK (total_high IS NULL OR total_low IS NULL OR total_high >= total_low)
 );
 
@@ -174,10 +175,11 @@ CREATE TABLE price_bands (
     rate_low     numeric(10, 2) NOT NULL,
     rate_high    numeric(10, 2) NOT NULL,
     wastage_pct  integer        NOT NULL DEFAULT 10,
-    min_charge   numeric(10, 2) NOT NULL,
+    min_charge   numeric(10, 2),
     notes        text,
 
     CONSTRAINT price_bands_component_known CHECK (component IN ('floor', 'stairs', 'trim')),
+    CONSTRAINT price_bands_floor_has_minimum CHECK (component <> 'floor' OR min_charge IS NOT NULL),
     CONSTRAINT price_bands_unit_known  CHECK (unit IN ('sqft', 'sqyd', 'each', 'job')),
     CONSTRAINT price_bands_range_sane  CHECK (rate_low > 0 AND rate_high >= rate_low),
     CONSTRAINT price_bands_wastage_pct CHECK (wastage_pct BETWEEN 0 AND 100)
@@ -240,6 +242,8 @@ COMMENT ON COLUMN services.priority IS
     'Lower wins when an email matches more than one entry. "vinyl tile" is plank work, not tile work.';
 COMMENT ON COLUMN offers.total_low IS
     'A quote for this work is a range, not a number. final_amount holds what was actually agreed.';
+COMMENT ON COLUMN price_bands.min_charge IS
+    'A minimum applies to a floor job. Stairs are charged per step and carry no minimum of their own.';
 COMMENT ON COLUMN price_bands.component IS
     'Floors are priced per square foot, stairs per step. The component decides which unit applies.';
 COMMENT ON COLUMN messages.pricing_allowed IS
