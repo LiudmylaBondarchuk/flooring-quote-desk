@@ -1,0 +1,391 @@
+[
+  {
+    "text": "how much would it cost to install lvp in 300 sq ft?",
+    "matches": [
+      "priceAsk",
+      "flooring"
+    ],
+    "never": [
+      "operations",
+      "complaintStrong"
+    ]
+  },
+  {
+    "text": "can you install lvp? we need it next tuesday. also what would it cost?",
+    "matches": [
+      "priceAsk",
+      "preSales"
+    ],
+    "never": [
+      "schedulingStrong",
+      "schedulingWeak"
+    ]
+  },
+  {
+    "text": "i would like a free estimate for the living room",
+    "matches": [
+      "priceAsk"
+    ],
+    "never": [
+      "operations"
+    ]
+  },
+  {
+    "text": "can you send me your price list for lvp?",
+    "matches": [
+      "preSales"
+    ],
+    "never": [
+      "operations",
+      "priceAsk"
+    ]
+  },
+  {
+    "text": "what is the lead time for a 300 sq ft living room?",
+    "matches": [
+      "preSales"
+    ],
+    "never": [
+      "operations"
+    ]
+  },
+  {
+    "text": "do you serve georgetown? do you install epoxy garage floors?",
+    "matches": [
+      "preSales"
+    ],
+    "never": [
+      "operations",
+      "complaintStrong"
+    ]
+  },
+  {
+    "text": "are you licensed and insured?",
+    "matches": [
+      "preSales"
+    ],
+    "never": [
+      "operations"
+    ]
+  },
+  {
+    "text": "my laminate is buckling and there are gaps by the door",
+    "matches": [
+      "complaintWeak"
+    ],
+    "never": [
+      "complaintStrong"
+    ]
+  },
+  {
+    "text": "the planks are lifting at the seams",
+    "matches": [
+      "complaintWeak"
+    ],
+    "never": [
+      "complaintStrong"
+    ]
+  },
+  {
+    "text": "i am not happy with the job, please redo it",
+    "matches": [
+      "complaintStrong"
+    ],
+    "never": []
+  },
+  {
+    "text": "the floor you installed six weeks ago is coming apart",
+    "matches": [
+      "complaintStrong",
+      "complaintWeak"
+    ],
+    "never": []
+  },
+  {
+    "text": "please send a w-9 form before we start",
+    "matches": [
+      "commercial"
+    ],
+    "never": [
+      "phishing"
+    ]
+  },
+  {
+    "text": "we are a property management company with 40 units",
+    "matches": [
+      "commercial"
+    ],
+    "never": [
+      "phishing",
+      "operations"
+    ]
+  },
+  {
+    "text": "our bank details have changed, wire the payment to the new account",
+    "matches": [
+      "phishing",
+      "money"
+    ],
+    "never": [
+      "preSales"
+    ]
+  },
+  {
+    "text": "please update the routing number on file",
+    "matches": [
+      "phishing"
+    ],
+    "never": [
+      "preSales"
+    ]
+  },
+  {
+    "text": "i sent the deposit by zelle, it should be paid in full",
+    "matches": [
+      "money"
+    ],
+    "never": [
+      "phishing"
+    ]
+  },
+  {
+    "text": "can you come by thursday instead? i need to reschedule the measure",
+    "matches": [
+      "schedulingStrong"
+    ],
+    "never": [
+      "preSales"
+    ]
+  },
+  {
+    "text": "are you available next week to give me a quote?",
+    "matches": [
+      "schedulingWeak"
+    ],
+    "never": [
+      "schedulingStrong"
+    ]
+  },
+  {
+    "text": "sounds good, go ahead, we are in",
+    "matches": [
+      "offerYes"
+    ],
+    "never": [
+      "offerNo"
+    ]
+  },
+  {
+    "text": "let’s book it",
+    "matches": [
+      "offerYes"
+    ],
+    "never": [
+      "offerNo"
+    ]
+  },
+  {
+    "text": "that is too expensive, can you do better?",
+    "matches": [
+      "offerNo"
+    ],
+    "never": [
+      "offerYes"
+    ]
+  },
+  {
+    "text": "i am looking for work as an installer, my resume is attached",
+    "matches": [
+      "operations"
+    ],
+    "never": [
+      "preSales",
+      "complaintStrong"
+    ]
+  },
+  {
+    "text": "we can rank your website and bring you more leads",
+    "matches": [
+      "operations"
+    ],
+    "never": [
+      "preSales"
+    ]
+  },
+  {
+    "text": "your purchase order shipped, delivery eta friday",
+    "matches": [
+      "operations"
+    ],
+    "never": [
+      "money"
+    ]
+  },
+  {
+    "text": "hi, how much to install lvp in my living room, about 320 sq ft? round rock, tx",
+    "matches": [
+      "flooring"
+    ],
+    "never": [
+      "operations",
+      "complaintStrong",
+      "phishing",
+      "schedulingStrong"
+    ]
+  },
+  {
+    "text": "spc planks, 400 sq ft, kyle tx",
+    "matches": [
+      "flooring"
+    ],
+    "never": [
+      "operations"
+    ]
+  },
+  {
+    "text": "need tile installed in the bathroom",
+    "matches": [],
+    "never": [
+      "flooring"
+    ]
+  },
+  {
+    "text": "hey, are we still on for lunch tomorrow?",
+    "matches": [],
+    "never": [
+      "flooring",
+      "preSales",
+      "operations",
+      "complaintStrong"
+    ]
+  },
+  {
+    "text": "i need about 32 m2 of lvp in austin",
+    "matches": [
+      "metricArea",
+      "flooring"
+    ],
+    "never": [
+      "operations"
+    ]
+  },
+  {
+    "text": "the living room is 30 square meters",
+    "matches": [
+      "metricArea"
+    ],
+    "never": [
+      "preSales"
+    ]
+  },
+  {
+    "text": "hi, about 300 sq ft of lvp in austin tx",
+    "matches": [
+      "flooring"
+    ],
+    "never": [
+      "metricArea"
+    ]
+  },
+  {
+    "text": "lvp 300 sq ft austin, plus the stairs",
+    "matches": [
+      "stairs",
+      "flooring"
+    ],
+    "never": [
+      "operations"
+    ]
+  },
+  {
+    "text": "do you remove the old carpet first?",
+    "matches": [
+      "scopeWords"
+    ],
+    "never": [
+      "complaintStrong"
+    ]
+  },
+  {
+    "text": "lvp on top of the existing tile",
+    "matches": [
+      "scopeWords"
+    ],
+    "never": [
+      "stairs"
+    ]
+  },
+  {
+    "text": "Looks good to me, I accept. When can you start?",
+    "matches": [
+      "offerYes",
+      "offerYesWeak"
+    ],
+    "never": [
+      "offerNo"
+    ]
+  },
+  {
+    "text": "that works for me, book me in",
+    "matches": [
+      "offerYesWeak",
+      "offerYes"
+    ],
+    "never": [
+      "offerNo"
+    ]
+  },
+  {
+    "text": "that is over my budget, more than I expected",
+    "matches": [
+      "offerNo"
+    ],
+    "never": [
+      "offerYes",
+      "offerYesWeak"
+    ]
+  },
+  {
+    "text": "I will deal with the old carpet myself",
+    "matches": [],
+    "never": [
+      "offerYes",
+      "offerYesWeak",
+      "offerNo"
+    ]
+  },
+  {
+    "text": "the old vinyl needs to come out",
+    "matches": [],
+    "never": [
+      "schedulingWeak",
+      "schedulingStrong"
+    ]
+  },
+  {
+    "text": "can you come out to measure next week",
+    "matches": [
+      "schedulingWeak"
+    ],
+    "never": [
+      "schedulingStrong"
+    ]
+  },
+  {
+    "text": "I will move it to the garage myself",
+    "matches": [],
+    "never": [
+      "schedulingWeak",
+      "schedulingStrong"
+    ]
+  },
+  {
+    "text": "can we move it to next Thursday",
+    "matches": [
+      "schedulingWeak"
+    ],
+    "never": [
+      "schedulingStrong"
+    ]
+  }
+]
