@@ -133,7 +133,7 @@ for (const item of $input.all()) {
   const src = norm(row.source_text);
   const reasons = [], missing = [], dropped = [];
 
-  const bodyEmpty = row.body_empty === true;
+  const nothingToRead = row.body_empty === true && src.length === 0;
   const fullyQuoted = row.body_fully_quoted === true;
   const isReturning = Number(row.prior_from_contact || 0) > 0 || Number(row.prior_in_thread || 0) > 0;
   const hadOffer = Number(row.prior_offers || 0) > 0;
@@ -232,7 +232,7 @@ for (const item of $input.all()) {
     category = 'ignore_auto';
     matchedRule = 'fraud_unknown_sender';
     reasons.push('phishing indicators from an unknown sender — do not act, do not reply');
-  } else if (bodyEmpty) {
+  } else if (nothingToRead) {
     category = 'unknown';
     matchedRule = 'nothing_readable';
     reasons.push(row.has_photo
@@ -342,7 +342,7 @@ for (const item of $input.all()) {
       assumptions.push('the price assumes a floating click-lock installation');
     }
 
-    const upper = floorLevel && !/ground|first|1st|main|slab/.test(floorLevel);
+    const upper = floorLevel && !/\b(ground|first|1st|main|slab)\b/.test(floorLevel);
     if (upper && !lift) {
       reasons.push(`upper floor (${floorLevel}), no lift stated — access surcharge`);
     }
@@ -416,6 +416,7 @@ for (const item of $input.all()) {
     reasons.push(`category "${category}" has no route — sent for manual review`);
   }
   if (handling === 'auto' && autoBlocked) handling = 'manual_review';
+  if (handling === 'manual_review' && color === null) color = 'yellow';
 
   out.push({ json: {
     gmail_message_id: row.gmail_message_id,

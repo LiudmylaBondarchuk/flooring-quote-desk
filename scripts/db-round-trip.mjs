@@ -26,7 +26,7 @@ const read = (...p) => readFileSync(join(root, ...p), 'utf8');
 
 const params = (path) => {
   const body = JSON.parse(read(path)).queryReplacement.replace(/^=\{\{\s*/, '').replace(/\s*\}\}$/, '');
-  return new Function('$json', `return ${body}`);
+  return new Function('$json', '$', `return ${body}`);
 };
 
 const literal = (v) => {
@@ -68,6 +68,9 @@ const logSql = read('db', '00-intake-router', 'log-inbound-dedupe.sql');
 const logParams = params(join('db', '00-intake-router', 'log-inbound-dedupe.params.json'));
 const triageSql = read('db', '00-intake-router', 'save-triage.sql');
 const triageParams = params(join('db', '00-intake-router', 'save-triage.params.json'));
+const lookupSql = read('db', '00-intake-router', 'lookup-geo-catalogue-history.sql');
+const lookupParams = params(join('db', '00-intake-router', 'lookup-geo-catalogue-history.params.json'));
+const fromPreparedNode = (prepared) => () => ({ item: { json: prepared } });
 
 const message = (over = {}) => ({
   id: 'transport',
@@ -138,6 +141,8 @@ try {
     const id = `gate-${i}`;
     const [inbound] = runNode(prepareSource, [message({ id, threadId: `t-${i}` })]);
     step('storing the email', name, fill(logSql, logParams(inbound.json)));
+    step('looking up geography, catalogue and history', name,
+      fill(lookupSql, lookupParams({ output: row.extracted || {} }, fromPreparedNode(inbound.json))));
     const [decided] = runNode(gateSource, [{ ...DEFAULTS, ...row, gmail_message_id: id }]);
     decisions.push({ id, name, json: decided.json });
     step('storing the decision', name, fill(triageSql, triageParams(decided.json)));
@@ -207,23 +212,33 @@ try {
     }
   });
 
-  const [firstStored] = TRANSPORT.map((_, i) => `transport-${i}`);
-  const lanes = [];
-  for (const dir of ['10-quote', '20-project', '30-support', '40-operations', '50-review']) {
-    const sql = read('db', dir, 'accept-handoff.sql');
-    const take = params(join('db', dir, 'accept-handoff.params.json'));
-    lanes.push([dir, fill(sql, take({ gmail_message_id: firstStored }))]);
-  }
-  const failureSql = read('db', '90-errors', 'record-failure.sql');
-  const failureParams = params(join('db', '90-errors', 'record-failure.params.json'));
-  lanes.push(['90-errors', fill(failureSql, failureParams({
-    source: 'router_lane', workflow_name: '00 Intake & Router — Flooring', workflow_id: 'wf',
-    execution_id: '1', node_name: 'Save triage', message: 'a check constraint refused the write',
-    gmail_message_id: firstStored, payload: { error: { name: 'NodeOperationError' } },
-  }))]);
+  const LANES = [['10-quote', 'awaiting_pricing'], ['20-project', 'awaiting_owner'],
+                 ['30-support', 'awaiting_owner'], ['40-operations', 'digest_pending'],
+                 ['50-review', 'awaiting_manual_review']];
 
   const laneScript = [];
-  lanes.forEach(([dir, sql], i) => laneScript.push(`\\warn LANE ${i}`, sql.replace(/;\s*$/, '') + ';'));
+  const laneLabels = [];
+  LANES.forEach(([dir], i) => {
+    const id = `lane-${i}`;
+    const [inbound] = runNode(prepareSource, [message({ id, threadId: `lane-t-${i}` })]);
+    laneLabels.push(dir);
+    laneScript.push(`\\warn LANE ${laneLabels.length - 1}`,
+      fill(logSql, logParams(inbound.json)).replace(/;\s*$/, '') + ';');
+    const take = params(join('db', dir, 'accept-handoff.params.json'));
+    laneLabels.push(dir);
+    laneScript.push(`\\warn LANE ${laneLabels.length - 1}`,
+      fill(read('db', dir, 'accept-handoff.sql'), take({ gmail_message_id: id })).replace(/;\s*$/, '') + ';');
+  });
+
+  const failureSql = read('db', '90-errors', 'record-failure.sql');
+  const failureParams = params(join('db', '90-errors', 'record-failure.params.json'));
+  laneLabels.push('90-errors');
+  laneScript.push(`\\warn LANE ${laneLabels.length - 1}`, fill(failureSql, failureParams({
+    source: 'router_lane', workflow_name: '00 Intake & Router — Flooring', workflow_id: 'wf',
+    execution_id: '1', node_name: 'Save triage', message: 'a check constraint refused the write',
+    gmail_message_id: 'lane-0', payload: { error: { name: 'NodeOperationError' } },
+  })).replace(/;\s*$/, '') + ';');
+
   let laneOut = '';
   try {
     laneOut = execFileSync('sh', ['-c', 'psql "$0" -q -f - 2>&1', url],
@@ -235,14 +250,22 @@ try {
     const marker = line.match(/^LANE (\d+)$/);
     if (marker) { lane = Number(marker[1]); continue; }
     const problem = line.match(/(?:ERROR|FATAL):\s+(.*)$/);
-    if (problem) failures.push({ stage: 'handing over to a lane', name: lanes[lane]?.[0] || '', error: problem[1] });
+    if (problem) failures.push({ stage: 'handing over to a lane', name: laneLabels[lane] || '', error: problem[1] });
   }
 
-  const handedOver = ask(`SELECT count(*) FROM messages WHERE gmail_message_id = '${firstStored}' AND handled_by IS NOT NULL`);
-  if (Number(handedOver) !== 1) {
-    failures.push({ stage: 'handing over to a lane', name: '',
-      error: 'no lane stamped handled_by — the handover updated nothing' });
-  }
+  const stamped = JSON.parse(ask(`SELECT coalesce(json_agg(json_build_object(
+      'id', gmail_message_id, 'by', handled_by, 'status', status)), '[]')
+    FROM messages WHERE gmail_message_id LIKE 'lane-%'`));
+  LANES.forEach(([dir, expected], i) => {
+    const row = stamped.find((r) => r.id === `lane-${i}`);
+    if (!row || !row.by) {
+      failures.push({ stage: 'handing over to a lane', name: dir, error: 'the handover updated no row' });
+    } else if (row.status !== expected) {
+      failures.push({ stage: 'handing over to a lane', name: dir,
+        error: `left the message in ${row.status}, the lane is supposed to set ${expected}` });
+    }
+  });
+
   if (Number(ask('SELECT count(*) FROM failures')) !== 1) {
     failures.push({ stage: 'recording a failure', name: '', error: 'the error lane stored nothing' });
   }

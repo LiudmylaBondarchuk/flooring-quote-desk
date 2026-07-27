@@ -89,7 +89,7 @@ CREATE TABLE messages (
     out_of_scope              text,
     route                     text        NOT NULL DEFAULT 'review',
     handling                  text        NOT NULL DEFAULT 'manual_review',
-    gate_color                text,
+    gate_color                text        DEFAULT 'yellow',
     gate_reasons              jsonb       NOT NULL DEFAULT '[]'::jsonb,
     missing_fields            jsonb       NOT NULL DEFAULT '[]'::jsonb,
     dropped_fields            jsonb       NOT NULL DEFAULT '[]'::jsonb,
@@ -146,6 +146,7 @@ CREATE TABLE messages (
     CONSTRAINT messages_pricing_needs_known_area CHECK (pricing_allowed = false OR area_status = 'known'),
     CONSTRAINT messages_auto_reply_is_safe CHECK (handling <> 'auto'
         OR (danger = false AND category IN ('pre_sales', 'quote_request'))),
+    CONSTRAINT messages_queued_work_has_a_colour CHECK (handling <> 'manual_review' OR gate_color IS NOT NULL),
     CONSTRAINT messages_handoff_is_stamped CHECK ((handled_by IS NULL) = (handoff_at IS NULL))
 );
 

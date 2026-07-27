@@ -141,3 +141,17 @@ for (const { name, row } of population) {
     }
   });
 }
+
+for (const { name, row } of population) {
+  test(`anything a human must open carries a colour — ${name}`, () => {
+    const r = runGate(row);
+    if (r.handling === 'manual_review') {
+      assert.ok(['green', 'yellow', 'red'].includes(r.gate_color),
+        `${r.category} waits for a human with gate_color ${JSON.stringify(r.gate_color)} — ` +
+        'it would sit in the queue with no light on it');
+    }
+    if (r.handling === 'none') {
+      assert.equal(r.gate_color, null, `${r.category} is never opened, so it must carry no colour`);
+    }
+  });
+}

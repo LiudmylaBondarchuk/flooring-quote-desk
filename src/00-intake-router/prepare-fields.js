@@ -112,6 +112,7 @@ return $input.all().map((item, i) => {
 
         subject,
         subject_normalized: cleanSubject(subject),
+        nothing_to_read: bodyEmpty && cleanSubject(subject).trim().length === 0,
         body_raw: bodySource,
         body_html: m.html || '',
         body_clean: bodyClean,
