@@ -1,0 +1,73 @@
+{
+  "name": "10 Quote — Flooring",
+  "nodes": [
+    {
+      "id": "sub-awaiting_pricing-trg",
+      "name": "Called by router",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        260,
+        300
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "sub-awaiting_pricing-note",
+      "name": "Purpose",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        220,
+        120
+      ],
+      "parameters": {
+        "width": 420,
+        "height": 120,
+        "content": "### 10 Quote — Flooring\npricing + draft + queue colour (next step)\n\nReceives every field the router produced (passthrough)."
+      }
+    },
+    {
+      "id": "sub-awaiting_pricing-pg",
+      "name": "Accept handoff",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        520,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE messages SET\n  status     = $2,\n  handled_by = $3,\n  handoff_at = now()\nWHERE gmail_message_id = $1\nRETURNING gmail_message_id, category, handling, status, handled_by;",
+        "options": {
+          "queryReplacement": "={{ [$json.gmail_message_id, 'awaiting_pricing', '10 Quote — Flooring'] }}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Called by router": {
+      "main": [
+        [
+          {
+            "node": "Accept handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "ASVUDhxc7e4KgBgq"
+  }
+}

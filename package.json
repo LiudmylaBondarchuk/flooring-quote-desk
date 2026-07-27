@@ -1,0 +1,20 @@
+{
+  "name": "flooring-quote-desk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Email intake engine for a US flooring contractor: the model extracts facts, deterministic code makes every decision",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test",
+    "extract": "node scripts/extract-code-nodes.js",
+    "check-drift": "node scripts/extract-code-nodes.js --check",
+    "deploy": "npm run test:logic && node --env-file=.env scripts/deploy.js && npm run extract && npm test",
+    "test:logic": "node --test tests/decision-gate.test.js tests/invariants.test.js tests/signal-dictionaries.test.js tests/lookup-contract.test.js tests/extraction-contract.test.js tests/storage-contract.test.js",
+    "scan": "gitleaks detect --no-git --redact --config .gitleaks.toml -v",
+    "db:check": "sh scripts/db-check.sh",
+    "db:check:live": "sh scripts/db-check.sh --live"
+  }
+}

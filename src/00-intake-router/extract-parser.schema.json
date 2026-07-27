@@ -1,0 +1,32 @@
+{
+  "is_flooring_inquiry": true,
+  "intent": "new_quote",
+  "material": "LVP",
+  "area_sqft": 300,
+  "rooms": "living room",
+  "floor_level": "ground",
+  "lift": null,
+  "pattern": "straight",
+  "subfloor_flag": false,
+  "old_floor_removal": null,
+  "city": "Round Rock",
+  "zip": null,
+  "urgency": null,
+  "evidence": {
+    "material": "install LVP",
+    "area_sqft": "about 300 sq ft",
+    "city": "Round Rock, TX",
+    "zip": null,
+    "floor_level": "Ground floor",
+    "pattern": null,
+    "subfloor_flag": null,
+    "old_floor_removal": null,
+    "existing_floor": "the old carpet",
+    "existing_floor_action": "please remove the old carpet",
+    "fixing_method": "click lock"
+  },
+  "is_commercial": false,
+  "existing_floor": "old carpet",
+  "existing_floor_action": "remove_first",
+  "fixing_method": "click_lock"
+}

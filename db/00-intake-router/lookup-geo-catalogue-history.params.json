@@ -1,0 +1,3 @@
+{
+  "queryReplacement": "={{ [JSON.stringify($json.output), $(\"Prepare fields\").item.json.gmail_message_id, $(\"Prepare fields\").item.json.body_empty, $(\"Prepare fields\").item.json.has_photo, ($(\"Prepare fields\").item.json.subject || \"\") + \" \" + ($(\"Prepare fields\").item.json.body_clean || \"\"), $(\"Prepare fields\").item.json.auto_submitted, $(\"Prepare fields\").item.json.precedence, $(\"Prepare fields\").item.json.list_unsubscribe, $(\"Prepare fields\").item.json.thread_id, $(\"Prepare fields\").item.json.contact_email, $(\"Prepare fields\").item.json.is_outbound, $(\"Prepare fields\").item.json.body_fully_quoted, $(\"Prepare fields\").item.json.needs_sender_extraction] }}"
+}
