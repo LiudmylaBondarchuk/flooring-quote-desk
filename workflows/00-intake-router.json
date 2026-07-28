@@ -691,7 +691,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH updated AS (\n  UPDATE messages SET\n    category        = 'unknown',\n    route           = 'review',\n    handling        = 'manual_review',\n    gate_color      = 'red',\n    pricing_allowed = false,\n    gate_reasons    = jsonb_build_array($2::text)\n  WHERE gmail_message_id = $1\n  RETURNING gmail_message_id\n)\nSELECT\n  $1::text                        AS gmail_message_id,\n  $2::text                        AS _error,\n  'Save triage'::text             AS _node,\n  (SELECT count(*) FROM updated)  AS rows_updated;",
+        "query": "WITH updated AS (\n  UPDATE messages SET\n    category        = 'unknown',\n    route           = 'review',\n    handling        = 'manual_review',\n    gate_color      = 'red',\n    pricing_allowed = false,\n    gate_reasons    = jsonb_build_array($2::text)\n  WHERE gmail_message_id = $1\n  RETURNING gmail_message_id\n)\nSELECT\n  $1::text                        AS gmail_message_id,\n  $2::text                        AS _error,\n  'Save triage'::text             AS _node,\n  (SELECT count(*) FROM updated)::int AS rows_updated;",
         "options": {
           "queryReplacement": "={{ [$('Decision gate').item.json.gmail_message_id, 'the decision could not be stored — ' + ($json.message || 'no reason given')] }}"
         }

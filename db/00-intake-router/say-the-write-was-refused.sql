@@ -13,4 +13,4 @@ SELECT
   $1::text                        AS gmail_message_id,
   $2::text                        AS _error,
   'Save triage'::text             AS _node,
-  (SELECT count(*) FROM updated)  AS rows_updated;
+  (SELECT count(*) FROM updated)::int AS rows_updated;
