@@ -7,7 +7,6 @@ import { dirname, join } from 'node:path';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const gateSource = readFileSync(join(root, 'src', '00-intake-router', 'decision-gate.js'), 'utf8');
 const schema = JSON.parse(readFileSync(join(root, 'src', '00-intake-router', 'extract-parser.schema.json'), 'utf8'));
-const prompt = readFileSync(join(root, 'src', '00-intake-router', 'ai-extract.prompt.md'), 'utf8');
 
 const schemaFields = new Set(Object.keys(schema.properties));
 const evidenceFields = new Set(Object.keys(schema.properties.evidence.properties));
@@ -34,22 +33,6 @@ test('every field the gate demands evidence for has an evidence slot in the sche
   assert.deepEqual(missing, [],
     `the gate requires evidence for ${missing.join(', ')}, but the schema gives the model ` +
     'nowhere to put it — the field would be dropped from every email');
-});
-
-test('the enums the gate whitelists are the ones the prompt names', () => {
-  const listed = (name) => {
-    const block = gateSource.match(new RegExp(`const ${name} = \\[([\\s\\S]*?)\\]`));
-    assert.ok(block, `${name} not found in the gate`);
-    return block[1].match(/'([a-z_]+)'/g).map((s) => s.replace(/'/g, ''));
-  };
-  for (const value of listed('FIXING_WHITELIST')) {
-    assert.ok(prompt.includes(value),
-      `the gate accepts fixing_method "${value}" but the prompt never tells the model about it`);
-  }
-  for (const value of listed('SCOPE_WHITELIST')) {
-    assert.ok(prompt.includes(value),
-      `the gate accepts existing_floor_action "${value}" but the prompt never names it`);
-  }
 });
 
 test('every field the model may leave out is declared nullable', () => {

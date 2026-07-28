@@ -15,7 +15,10 @@ const PATTERN_WHITELIST = ['straight', 'staggered', 'random', 'offset', 'brick',
   'diagonal', 'herringbone', 'chevron', 'basketweave'];
 const EXTRA_LABOUR_PATTERN = /herring|chevron|basketweave/;
 const EXTRA_WASTE_PATTERN = /diagonal/;
-const AREA_MIN = 20, AREA_MAX = 20000, AREA_LARGE_RESIDENTIAL = 6000;
+const COMPARABLE_AREA = ['known', 'converted', 'derived'];
+const AREA_MIN = 20;
+const AREA_MAX = 20000;
+const AREA_LARGE_RESIDENTIAL = 6000;
 
 const RE = {
 
@@ -212,10 +215,9 @@ for (const item of $input.all()) {
   const said = (re) => re.test(src);
 
   const priorSignatures = Array.isArray(row.prior_signatures) ? row.prior_signatures : [];
-  const comparableArea = ['known', 'converted', 'derived'];
-  const sameSignature = !!material && areaOk && comparableArea.includes(quantity.status)
+  const sameSignature = !!material && areaOk && COMPARABLE_AREA.includes(quantity.status)
     && priorSignatures.some((s) => s && s.m === material
-      && comparableArea.includes(s.st) && Number(s.a) === area);
+      && COMPARABLE_AREA.includes(s.st) && Number(s.a) === area);
 
 
   const danger = said(RE.phishing);

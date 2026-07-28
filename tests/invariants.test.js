@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 const here = dirname(fileURLToPath(import.meta.url));
 const gateSource = readFileSync(join(here, '..', 'src', '00-intake-router', 'decision-gate.js'), 'utf8');
 const fixtures = JSON.parse(readFileSync(join(here, 'fixtures', 'decision-gate.json'), 'utf8'));
+const valueLists = JSON.parse(readFileSync(join(here, '..', 'value-lists.json'), 'utf8')).lists;
 
 const DEFAULTS = {
   gmail_message_id: 'test',
@@ -35,8 +36,8 @@ const COMPLETE_LEAD = {
   },
 };
 
-const ROUTES = ['quote', 'project', 'support', 'operations', 'review', 'log'];
-const HANDLINGS = ['auto', 'manual_review', 'none'];
+const ROUTES = valueLists.route.values;
+const HANDLINGS = valueLists.handling.values;
 
 const population = [
   ...fixtures.map(({ name, row }) => ({ name, row })),

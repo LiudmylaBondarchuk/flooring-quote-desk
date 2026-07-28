@@ -1,0 +1,434 @@
+{
+  "note": [
+    "Every closed list of values in this system, written down once.",
+    "",
+    "Nothing generates from this file. Each copy stays written in the language that",
+    "owns it — a CHECK constraint in SQL, a literal in the Code node n8n executes,",
+    "the sentence the model is given — and tests/value-lists.test.js fails when any",
+    "copy stops agreeing with what is here.",
+    "",
+    "A list with no `sql` is one the database never stores. A list with no `gate` is",
+    "one no code decides on. Both happen, and both are stated rather than implied.",
+    "",
+    "Adding a value means editing this file first, then every copy it names."
+  ],
+  "lists": {
+    "category": {
+      "means": "what an email is. First match in the classification order wins.",
+      "produced_by_gate": "category",
+      "values": [
+        "quote_request",
+        "pre_sales",
+        "existing_project",
+        "scheduling",
+        "offer_response",
+        "billing",
+        "complaint",
+        "operations",
+        "ignore_auto",
+        "owner_reply",
+        "unknown"
+      ],
+      "sql": [
+        "messages.category"
+      ],
+      "gate": {
+        "const": "ROUTE_OF",
+        "part": "keys"
+      }
+    },
+    "matched_rule": {
+      "means": "which rung of the classification ladder fired. The only record of why this email went where it went.",
+      "produced_by_gate": "matched_rule",
+      "values": [
+        "owner_sent",
+        "automated_headers",
+        "fraud_unknown_sender",
+        "nothing_readable",
+        "complaint_signal",
+        "offer_response",
+        "money_known_contact",
+        "scheduling_signal",
+        "same_job_signature",
+        "thread_continuation",
+        "not_a_customer",
+        "capability_question",
+        "wants_a_price",
+        "unclassified"
+      ],
+      "sql": [
+        "messages.matched_rule"
+      ],
+      "assigned_in_gate": "matchedRule",
+      "why_not_a_const": [
+        "The fourteen values are literals spread down the classification ladder, one per rung,",
+        "and reading better there than gathered into a list far from the branch that uses them.",
+        "The verifier reads the assignments themselves, so the ladder is checked where it is",
+        "written rather than against a second copy that could drift from it."
+      ]
+    },
+    "route": {
+      "means": "which workflow takes the email.",
+      "produced_by_gate": "route",
+      "values": [
+        "quote",
+        "project",
+        "support",
+        "operations",
+        "review",
+        "log"
+      ],
+      "sql": [
+        "messages.route"
+      ],
+      "gate": {
+        "const": "ROUTE_OF",
+        "part": "values"
+      }
+    },
+    "handling": {
+      "means": "who acts on it.",
+      "produced_by_gate": "handling",
+      "values": [
+        "auto",
+        "manual_review",
+        "none"
+      ],
+      "sql": [
+        "messages.handling"
+      ],
+      "gate": {
+        "const": "HANDLING_OF",
+        "part": "values",
+        "relation": "subset",
+        "why": "manual_review is what every category not named in the map falls back to"
+      }
+    },
+    "gate_color": {
+      "means": "how ready a decision is for a human: green is one click, red is not.",
+      "produced_by_gate": "gate_color",
+      "values": [
+        "green",
+        "yellow",
+        "red"
+      ],
+      "sql": [
+        "messages.gate_color"
+      ]
+    },
+    "segment": {
+      "means": "who is writing. Commercial work is never answered automatically.",
+      "produced_by_gate": "segment",
+      "values": [
+        "residential",
+        "commercial"
+      ],
+      "sql": [
+        "messages.segment"
+      ]
+    },
+    "geo_zone": {
+      "means": "how far the address is. Out means outside the service area.",
+      "produced_by_gate": "geo_zone",
+      "values": [
+        "core",
+        "edge",
+        "out"
+      ],
+      "sql": [
+        "messages.geo_zone",
+        "service_area.zone"
+      ]
+    },
+    "message_status": {
+      "means": "where an email has got to.",
+      "not_produced_by_gate": "the SQL that hands a message to its lane sets this, not the gate",
+      "values": [
+        "new",
+        "triaged",
+        "closed",
+        "awaiting_pricing",
+        "awaiting_owner",
+        "awaiting_manual_review",
+        "digest_pending"
+      ],
+      "sql": [
+        "messages.status"
+      ]
+    },
+    "area_status": {
+      "means": "how the square footage got its number, or why it has none.",
+      "produced_by_gate": "area_status",
+      "values": [
+        "known",
+        "converted",
+        "derived",
+        "contradicted",
+        "not_an_area",
+        "unknown"
+      ],
+      "sql": [
+        "messages.area_status"
+      ]
+    },
+    "material_category": {
+      "means": "the five things the firm installs. Anything else is out of scope.",
+      "produced_by_gate": "material_category",
+      "values": [
+        "LVP",
+        "Laminate",
+        "Wood",
+        "Vinyl",
+        "Carpet"
+      ],
+      "sql": [
+        "messages.material_category"
+      ],
+      "gate": {
+        "const": "MATERIAL_MAP",
+        "part": "first"
+      }
+    },
+    "existing_floor_action": {
+      "means": "what happens to the old floor. Removal can add half the job again.",
+      "produced_by_gate": "existing_floor_action",
+      "values": [
+        "remove_first",
+        "over_existing"
+      ],
+      "sql": [
+        "messages.existing_floor_action"
+      ],
+      "gate": {
+        "const": "SCOPE_WHITELIST",
+        "part": "array"
+      },
+      "prompt": true
+    },
+    "fixing_method": {
+      "reachability_untested": {
+        "floating": "accepted and stored, but no branch of the gate depends on it — it is what the assumptions already state when no method is given",
+        "loose_lay": "accepted and stored; the gate takes no branch on it",
+        "peel_and_stick": "accepted and stored; the gate takes no branch on it"
+      },
+      "means": "how the new floor is fixed down. mortar_set and thinset are tile work, which the firm refuses.",
+      "produced_by_gate": "fixing_method",
+      "values": [
+        "click_lock",
+        "floating",
+        "glue_down",
+        "nail_down",
+        "staple_down",
+        "loose_lay",
+        "peel_and_stick",
+        "mortar_set",
+        "thinset"
+      ],
+      "sql": [
+        "messages.fixing_method"
+      ],
+      "gate": {
+        "const": "FIXING_WHITELIST",
+        "part": "array"
+      },
+      "prompt": true
+    },
+    "pattern": {
+      "reachability_untested": {
+        "straight": "accepted and stored; the gate takes no branch on it",
+        "staggered": "accepted and stored; the gate takes no branch on it",
+        "random": "accepted and stored; the gate takes no branch on it",
+        "offset": "accepted and stored; the gate takes no branch on it",
+        "brick": "accepted and stored; the gate takes no branch on it",
+        "chevron": "shares the extra-labour branch with herringbone, which a fixture reaches",
+        "basketweave": "shares the extra-labour branch with herringbone, which a fixture reaches"
+      },
+      "means": "how the planks are laid. Herringbone and chevron cost more labour, diagonal wastes more material.",
+      "produced_by_gate": "pattern",
+      "values": [
+        "straight",
+        "staggered",
+        "random",
+        "offset",
+        "brick",
+        "diagonal",
+        "herringbone",
+        "chevron",
+        "basketweave"
+      ],
+      "gate": {
+        "const": "PATTERN_WHITELIST",
+        "part": "array"
+      },
+      "why_no_sql": "the pattern is kept inside the extracted JSON, not in a column of its own"
+    },
+    "intent": {
+      "reachability_untested": {
+        "offer_response": "the gate branches on three intents only — complaint, scheduling and follow_up. This one is stored and never read, so no decision can demonstrate it"
+      },
+      "means": "the model's guess at what the sender wants. An input to classification, never the classification itself.",
+      "produced_by_gate": "intent",
+      "values": [
+        "new_quote",
+        "pre_sales_question",
+        "follow_up",
+        "offer_response",
+        "scheduling",
+        "billing",
+        "complaint",
+        "spam_or_other"
+      ],
+      "prompt": true,
+      "compared_in_gate": "intent",
+      "fixture_field": "extracted.intent",
+      "why_no_sql": [
+        "The database never constrains raw model output. Every other value the model supplies is",
+        "constrained only after the gate has accepted it — material_category, fixing_method and",
+        "existing_floor_action each pass an evidence check and a whitelist before reaching a column",
+        "that has a CHECK. intent does not: messages.intent holds the model answer lowercased and",
+        "nothing more. Constraining it would refuse the write and lose the email."
+      ]
+    },
+    "direction": {
+      "means": "which way the message travelled.",
+      "not_produced_by_gate": "prepare-fields sets this from the transport headers, before the gate runs",
+      "values": [
+        "inbound",
+        "outbound"
+      ],
+      "sql": [
+        "messages.direction"
+      ]
+    },
+    "sender": {
+      "means": "who wrote it. The owner's own mail must never be answered.",
+      "not_produced_by_gate": "prepare-fields sets this from the transport headers, before the gate runs",
+      "values": [
+        "client",
+        "owner"
+      ],
+      "sql": [
+        "messages.sender"
+      ]
+    },
+    "source": {
+      "means": "how it arrived. A platform lead often has no usable reply address.",
+      "not_produced_by_gate": "prepare-fields sets this from the transport headers, before the gate runs",
+      "values": [
+        "gmail_direct",
+        "owner_sent",
+        "platform"
+      ],
+      "sql": [
+        "messages.source"
+      ]
+    },
+    "job_status": {
+      "means": "where the work stands. booked, done and lost are closed; everything else is open.",
+      "values": [
+        "new",
+        "needs_info",
+        "quoted",
+        "negotiating",
+        "booked",
+        "done",
+        "lost",
+        "survey_needed"
+      ],
+      "sql": [
+        "jobs.status"
+      ]
+    },
+    "offer_status": {
+      "means": "where a quote stands.",
+      "values": [
+        "draft",
+        "sent",
+        "accepted",
+        "declined",
+        "expired"
+      ],
+      "sql": [
+        "offers.status"
+      ]
+    },
+    "offer_outcome": {
+      "means": "how it ended, once it ended.",
+      "values": [
+        "won",
+        "lost"
+      ],
+      "sql": [
+        "offers.outcome"
+      ]
+    },
+    "price_component": {
+      "means": "which part of a job a rate belongs to. Stairs are priced per step, not per square foot.",
+      "values": [
+        "floor",
+        "stairs",
+        "trim"
+      ],
+      "sql": [
+        "price_bands.component"
+      ]
+    },
+    "price_unit": {
+      "means": "what a rate is per.",
+      "values": [
+        "sqft",
+        "sqyd",
+        "each",
+        "job"
+      ],
+      "sql": [
+        "price_bands.unit"
+      ]
+    },
+    "place_status": {
+      "means": "how far the gate got with the address: whether it was given, recognised and inside the area.",
+      "produced_by_gate": "place_status",
+      "values": [
+        "known",
+        "unrecognised",
+        "out_of_area",
+        "unknown"
+      ],
+      "why_no_sql": "computed for the reasons the gate gives and not stored on its own"
+    },
+    "product_status": {
+      "means": "how far the gate got with the material: in the catalogue, refused, offered but unpriced, or absent.",
+      "produced_by_gate": "product_status",
+      "values": [
+        "known",
+        "offered_not_priced",
+        "out_of_scope",
+        "not_in_catalogue",
+        "unknown"
+      ],
+      "why_no_sql": "computed for the reasons the gate gives and not stored on its own"
+    },
+    "area_unit": {
+      "means": "what the accepted square footage was measured in before the gate converted it.",
+      "produced_by_gate": "area_unit",
+      "values": [
+        "sqft",
+        "m2"
+      ],
+      "why_no_sql": "the gate works it out and throws it away; nothing stores it yet"
+    },
+    "comparable_area": {
+      "means": "the area_status values solid enough to compare one job against another. A guess is not a signature.",
+      "values": [
+        "known",
+        "converted",
+        "derived"
+      ],
+      "gate": {
+        "const": "COMPARABLE_AREA",
+        "part": "array"
+      },
+      "why_no_sql": "a subset of area_status used only to decide whether two enquiries describe the same job"
+    }
+  }
+}
