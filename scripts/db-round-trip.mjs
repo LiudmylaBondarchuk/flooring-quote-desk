@@ -499,6 +499,28 @@ try {
         error: 'it was merged into a closed order, where the customer describing new work would rewrite the old job' });
     }
 
+    // The gate refuses a message by colouring it red. Its facts must not settle into the order,
+    // because the next message in the thread is judged on its own colour.
+    {
+      const refused = 'order-red';
+      run(['-c', fill(logSql, logParams(runNode(prepareSource,
+        [message({ id: refused, threadId: 'order-t' })])[0].json)).replace(/;\s*$/, '')]);
+      const absurd = JSON.stringify({ material_category: 'Wood', area_sqft: 200000, area_unit: 'sqft' });
+      ask(fill(orderSql('merge-the-facts'),
+        [refused, orderId, absurd, 'quote_request', 'quote', 'manual_review', 'red']));
+      const held = ask(`SELECT coalesce(area_sqft::text, 'null') FROM orders WHERE id = ${orderId}`).trim();
+      if (held === '200000.00') {
+        failures.push({ stage: 'keeping one job across several emails', name: 'an area the gate refused',
+          error: 'the order took 200000 sq ft from a message the gate coloured red. A later green '
+            + 'message in the same thread would be priced against a floor nobody has' });
+      }
+      const logged = Number(ask(`SELECT count(*) FROM order_events WHERE gmail_message_id = ${literal(refused)}`));
+      if (logged !== 0) {
+        failures.push({ stage: 'keeping one job across several emails', name: 'a refused message in the history',
+          error: `${logged} event(s) were written for a message the gate refused` });
+      }
+    }
+
     // Everything above runs one statement at a time, which is the arrangement the statement is
     // already safe in. This is the arrangement it is not: two connections deciding at once.
     const raced = 'race-t';

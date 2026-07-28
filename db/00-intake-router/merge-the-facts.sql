@@ -1,6 +1,17 @@
-WITH incoming AS (
+WITH trusted AS (
+  -- A red decision is the gate refusing this message, and a fact it refused must not become part
+  -- of what the conversation is believed to have said. An area of 200000 sq ft arrives red for
+  -- being outside the plausible range; without this it settles into the order anyway, and the
+  -- next message in the thread is judged on its own colour, so a green one would be priced
+  -- against a floor nobody has.
+  --
+  -- Everything below reads the facts through here, not from the argument. Guarding only the part
+  -- that writes the change log would leave the order updated with nothing recording it.
+  SELECT CASE WHEN $7::text IS DISTINCT FROM 'red' THEN $3::jsonb ELSE '{}'::jsonb END AS facts
+),
+incoming AS (
   SELECT key, value #>> '{}' AS text_value
-    FROM jsonb_each($3::jsonb)
+    FROM jsonb_each((SELECT facts FROM trusted))
    WHERE value <> 'null'::jsonb
      AND $2::int IS NOT NULL
 ),
@@ -19,14 +30,14 @@ changes AS (
 ),
 applied AS (
   UPDATE orders o SET
-    material_category     = coalesce($3::jsonb->>'material_category',     o.material_category),
-    area_sqft             = coalesce(($3::jsonb->>'area_sqft')::numeric,  o.area_sqft),
-    area_unit             = coalesce($3::jsonb->>'area_unit',             o.area_unit),
-    city                  = coalesce($3::jsonb->>'city',                  o.city),
-    zone                  = coalesce($3::jsonb->>'zone',                  o.zone),
-    existing_floor_action = coalesce($3::jsonb->>'existing_floor_action', o.existing_floor_action),
-    fixing_method         = coalesce($3::jsonb->>'fixing_method',         o.fixing_method),
-    old_floor_removal     = coalesce(($3::jsonb->>'old_floor_removal')::boolean, o.old_floor_removal),
+    material_category     = coalesce((SELECT facts FROM trusted)->>'material_category',     o.material_category),
+    area_sqft             = coalesce(((SELECT facts FROM trusted)->>'area_sqft')::numeric,  o.area_sqft),
+    area_unit             = coalesce((SELECT facts FROM trusted)->>'area_unit',             o.area_unit),
+    city                  = coalesce((SELECT facts FROM trusted)->>'city',                  o.city),
+    zone                  = coalesce((SELECT facts FROM trusted)->>'zone',                  o.zone),
+    existing_floor_action = coalesce((SELECT facts FROM trusted)->>'existing_floor_action', o.existing_floor_action),
+    fixing_method         = coalesce((SELECT facts FROM trusted)->>'fixing_method',         o.fixing_method),
+    old_floor_removal     = coalesce(((SELECT facts FROM trusted)->>'old_floor_removal')::boolean, o.old_floor_removal),
     updated_at            = now()
    WHERE o.id = $2::int
      -- reads before, so before is forced to run first. Without this the two are unordered and
