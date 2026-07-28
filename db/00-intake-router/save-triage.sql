@@ -24,6 +24,7 @@ UPDATE messages SET
   old_floor_removal         = $22,
   area_sqft                 = $18::numeric,
   area_status               = $23,
+  area_unit                 = $26,
   status                    = CASE WHEN $4 = 'none' THEN 'closed' ELSE 'triaged' END,
   prompt_version            = 'extract-v3',
   extraction_schema_version = 'v3',

@@ -5,6 +5,7 @@
     "intent",
     "material",
     "area_sqft",
+    "area_unit",
     "rooms",
     "floor_level",
     "lift",
@@ -33,6 +34,12 @@
     "area_sqft": {
       "type": [
         "number",
+        "null"
+      ]
+    },
+    "area_unit": {
+      "type": [
+        "string",
         "null"
       ]
     },
@@ -120,6 +127,7 @@
       "required": [
         "material",
         "area_sqft",
+        "area_unit",
         "city",
         "zip",
         "floor_level",
@@ -140,6 +148,12 @@
           ]
         },
         "area_sqft": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "area_unit": {
           "type": [
             "string",
             "null"

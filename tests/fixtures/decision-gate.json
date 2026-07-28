@@ -1331,12 +1331,12 @@
       }
     },
     "expect": {
-      "area_status": "known",
+      "area_status": "no_unit",
+      "area_sqft": null,
       "gate_color": "red",
-      "missing_fields": [
-        "area_sqft"
-      ]
-    }
+      "pricing_allowed": false
+    },
+    "why": "Only what the model copied counts. It quoted \"32\" with no unit; the m2 sits in the body it did not cite. Inferring the unit from uncited text is the guessing the grounding rule exists to forbid, so the number has no established unit and the customer is asked."
   },
   {
     "name": "a product resolves through the catalogue before any blacklist",
@@ -1909,6 +1909,134 @@
       "material_category": null,
       "gate_color": "red",
       "pricing_allowed": false
+    }
+  },
+  {
+    "name": "a number with nothing beside it is a question, not a default",
+    "why": "Grounding proves the words are in the email; it cannot prove a number means square feet. A number with no unit written beside it is the one case the system must ask about rather than assume, because assuming is what turns 32 into a tenfold underquote.",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp in the living room, 320, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 320,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "320",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "area_status": "no_unit",
+      "area_sqft": null,
+      "gate_color": "red",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "the unit the customer wrote is read, and the number converted",
+    "why": "When the email writes the unit out, the unit is a fact like any other and carries its own evidence. 32 m2 is 344 sq ft; storing 32 would price a tenth of the job.",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "i need about 32 m² of lvp in austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 32,
+        "area_unit": "sqm",
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "32",
+          "area_unit": "m²",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "area_status": "converted",
+      "area_sqft": 344,
+      "area_unit": "sqm"
+    }
+  },
+  {
+    "name": "carpet quoted in square yards is nine times what it says",
+    "why": "Carpet is sold by the square yard in the US and a square yard is nine square feet. Reading the unit rather than assuming it is the difference between 40 and 360.",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "carpet, 40 sq yd, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "carpet",
+        "area_sqft": 40,
+        "area_unit": "sqyd",
+        "city": "austin",
+        "evidence": {
+          "material": "carpet",
+          "area_sqft": "40",
+          "area_unit": "sq yd",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "area_status": "converted",
+      "area_sqft": 360,
+      "area_unit": "sqyd"
+    }
+  },
+  {
+    "name": "a mangled quote of the unit is asked about, not stored",
+    "why": "Asking the model to copy a unit verbatim invites non-ASCII: it answered m2 as a byte sequence carrying a NUL. Postgres refuses NUL in text, so anything the model produces must be stripped of control characters before it crosses into the database, and a unit whose quote cannot be verified is a question rather than a conversion.",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "i need about 32 m² of lvp in austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 32,
+        "area_unit": "sqm",
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "32",
+          "area_unit": "m\u0000\u0002",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "area_status": "no_unit",
+      "area_sqft": null,
+      "area_unit": null,
+      "gate_color": "red",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "a quote that spans a line break is still the customer’s own words",
+    "why": "Email wraps. A fragment the model copied across a line break is the same words the customer wrote, so it must ground. Deleting the newline instead of replacing it glues the words together and the gate accuses an honest quote of being invented — the worst way to be wrong, because a fabrication flag blocks the whole email.",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "need lvp 320 sq ft in round\nrock, tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 320,
+        "city": "round\nrock",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "320 sq ft",
+          "city": "round\nrock"
+        }
+      }
+    },
+    "expect": {
+      "dropped_fields": [],
+      "geo_zone": "core"
     }
   }
 ]

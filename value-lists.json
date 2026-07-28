@@ -165,6 +165,7 @@
         "derived",
         "contradicted",
         "not_an_area",
+        "no_unit",
         "unknown"
       ],
       "sql": [
@@ -416,13 +417,22 @@
       "why_no_sql": "computed for the reasons the gate gives and not stored on its own"
     },
     "area_unit": {
-      "means": "what the accepted square footage was measured in before the gate converted it.",
+      "means": "what the customer measured the area in, read from the words they wrote and never assumed.",
       "produced_by_gate": "area_unit",
       "values": [
         "sqft",
-        "m2"
+        "sqm",
+        "sqyd"
       ],
-      "why_no_sql": "the gate works it out and throws it away; nothing stores it yet"
+      "sql": [
+        "messages.area_unit"
+      ],
+      "gate": {
+        "const": "AREA_UNIT_WHITELIST",
+        "part": "array"
+      },
+      "prompt": true,
+      "fixture_field": "extracted.area_unit"
     },
     "comparable_area": {
       "means": "the area_status values solid enough to compare one job against another. A guess is not a signature.",

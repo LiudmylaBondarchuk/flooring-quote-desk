@@ -13,10 +13,10 @@ const FIXING_NEEDS_SUBFLOOR = /nail_down|staple_down/;
 const SLAB = /\bslab\b|concrete/;
 const PATTERN_WHITELIST = ['straight', 'staggered', 'random', 'offset', 'brick',
   'diagonal', 'herringbone', 'chevron', 'basketweave'];
-const EXTRA_LABOUR_PATTERN = /herring|chevron|basketweave/;
-const EXTRA_WASTE_PATTERN = /diagonal/;
 const INTENT_WHITELIST = ['new_quote', 'pre_sales_question', 'follow_up', 'offer_response',
   'scheduling', 'billing', 'complaint', 'spam_or_other'];
+const EXTRA_LABOUR_PATTERN = /herring|chevron|basketweave/;
+const EXTRA_WASTE_PATTERN = /diagonal/;
 const COMPARABLE_AREA = ['known', 'converted', 'derived'];
 const AREA_MIN = 20;
 const AREA_MAX = 20000;
@@ -47,12 +47,20 @@ const RE = {
 };
 
 const SQFT_PER_SQM = 10.7639;
+const AREA_UNITS = {
+  sqft: { factor: 1, spoken: 'sq ft' },
+  sqm: { factor: SQFT_PER_SQM, spoken: 'm²' },
+  sqyd: { factor: 9, spoken: 'sq yd' },
+};
+const AREA_UNIT_WHITELIST = Object.keys(AREA_UNITS);
+const SQFT_QUOTED = /sq ?\.? ?ft|square feet|\bsf\b/i;
+const METRIC_QUOTED = /\bm2\b|m²|sq ?m\b|square met|metr/i;
 const DIMENSIONS = /(\d+(?:[.,]\d+)?)\s*(?:x|×|by)\s*(\d+(?:[.,]\d+)?)/i;
 const COUNT_NOT_AREA = /\b(rooms?|bedrooms?|bathrooms?|units?|pieces?|boxes?)\b/i;
 
 const num = (v) => Number(String(v ?? '').replace(/,(?=\d{3}\b)/g, '').replace(',', '.'));
 
-const asQuantity = (value, evidenceText) => {
+const asQuantity = (value, evidenceText, unit) => {
   const ev = String(evidenceText ?? '');
   const raw = num(value);
   if (!Number.isFinite(raw) || raw <= 0) return { status: 'unknown', sqft: null, unit: null, note: null };
@@ -65,7 +73,7 @@ const asQuantity = (value, evidenceText) => {
       && stated.some((n) => Math.abs(n * SQFT_PER_SQM - raw) <= 2);
     if (alreadyConverted) {
       const rounded = Math.round(raw);
-      return { status: 'converted', sqft: rounded, unit: 'm2',
+      return { status: 'converted', sqft: rounded, unit: 'sqm',
         note: `${stated[0]} m² had already been converted to ${rounded} sq ft before the gate saw it` };
     }
     return { status: 'contradicted', sqft: null, unit: null,
@@ -84,11 +92,19 @@ const asQuantity = (value, evidenceText) => {
   if (COUNT_NOT_AREA.test(ev) && !stated.length) {
     return { status: 'not_an_area', sqft: null, unit: null, note: `"${ev}" counts things, it is not an area` };
   }
-  if (/\bm2\b|m²|sq ?m\b|square met|metr/i.test(ev)) {
-    const converted = Math.round(raw * SQFT_PER_SQM);
-    return { status: 'converted', sqft: converted, unit: 'm2', note: `${raw} m² converted to ${converted} sq ft` };
+  if (unit && unit !== 'sqft') {
+    const converted = Math.round(raw * AREA_UNITS[unit].factor);
+    return { status: 'converted', sqft: converted, unit,
+      note: `${raw} ${AREA_UNITS[unit].spoken} converted to ${converted} sq ft` };
   }
-  return { status: 'known', sqft: Math.round(raw), unit: 'sqft', note: null };
+  if (unit === 'sqft') return { status: 'known', sqft: Math.round(raw), unit, note: null };
+  if (METRIC_QUOTED.test(ev)) {
+    const converted = Math.round(raw * SQFT_PER_SQM);
+    return { status: 'converted', sqft: converted, unit: 'sqm', note: `${raw} m² converted to ${converted} sq ft` };
+  }
+  if (SQFT_QUOTED.test(ev)) return { status: 'known', sqft: Math.round(raw), unit: 'sqft', note: null };
+  return { status: 'no_unit', sqft: null, unit: null,
+    note: `"${ev}" is a number with no unit beside it — ask whether it is square feet or metres` };
 };
 
 const asPlace = (zone, located) => {
@@ -106,6 +122,9 @@ const asProduct = (rawMaterial, cats, matchCatalogue, offered, declined) => {
   if (category) return { status: 'not_in_catalogue', category: null, label: category };
   return { status: 'unknown', category: null };
 };
+
+const noControls = (v) => JSON.parse(JSON.stringify(v ?? null,
+  (k, x) => (typeof x === 'string' ? x.replace(/[\u0000-\u001f]/g, ' ') : x)));
 
 const norm = (s) => String(s ?? '')
   .replace(/[\u2018\u2019\u02BC]/g, "'")
@@ -131,7 +150,7 @@ const out = [];
 
 for (const item of $input.all()) {
   const row = item.json;
-  const ex = row.extracted || {};
+  const ex = noControls(row.extracted || {});
   const ev = ex.evidence || {};
   const cats = row.categories || [];
   const src = norm(row.source_text);
@@ -186,7 +205,9 @@ for (const item of $input.all()) {
   }
   const declined = product.status === 'out_of_scope' ? declinedRaw : null;
 
-  const quantity = asQuantity(take('area_sqft', ex.area_sqft), ev.area_sqft);
+  const areaUnitRaw = norm(take('area_unit', ex.area_unit));
+  const areaUnit = AREA_UNIT_WHITELIST.includes(areaUnitRaw) ? areaUnitRaw : null;
+  const quantity = asQuantity(take('area_sqft', ex.area_sqft), ev.area_sqft, areaUnit);
   const area = quantity.sqft;
   const areaOk = Number.isFinite(area) && area > 0;
   if (quantity.note) reasons.push(quantity.note);

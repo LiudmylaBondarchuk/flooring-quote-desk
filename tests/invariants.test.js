@@ -52,6 +52,25 @@ test('no text the gate produces is an empty string', () => {
     'contact_email and matched every sender with no address to every other one. Absent is null');
 });
 
+test('nothing the gate outputs carries a control character', () => {
+  const dirty = [];
+  for (const { name, row } of fixtures) {
+    const walk = (label, value) => {
+      if (typeof value === 'string') {
+        if ([...value].some((c) => c.charCodeAt(0) < 0x20)) dirty.push(`${label} on "${name}"`);
+        return;
+      }
+      if (value && typeof value === 'object') {
+        for (const [k, v] of Object.entries(value)) walk(`${label}.${k}`, v);
+      }
+    };
+    walk('decision', runGate(row));
+  }
+  assert.deepEqual(dirty, [],
+    `${dirty.join(', ')} — Postgres refuses a NUL byte in text, so one control character ` +
+    'anywhere in the model output kills the write and takes the rest of the batch with it');
+});
+
 const population = [
   ...fixtures.map(({ name, row }) => ({ name, row })),
   { name: 'complete lead, nothing wrong', row: COMPLETE_LEAD },
