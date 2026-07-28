@@ -112,7 +112,8 @@ test('both sides were parsed before anything is compared', () => {
 
 const ENTRY_KEYS = ['means', 'values', 'sql', 'gate', 'prompt', 'produced_by_gate',
   'not_produced_by_gate', 'assigned_in_gate', 'compared_in_gate', 'fixture_field',
-  'reachability_untested', 'why_no_sql', 'why_not_a_const', 'why_constrained_now'];
+  'reachability_untested', 'why_no_sql', 'why_not_a_const', 'why_constrained_now',
+  'why_no_fixture_field'];
 const GATE_KEYS = ['const', 'part', 'relation', 'why'];
 const PARTS = ['array', 'keys', 'values', 'first'];
 
