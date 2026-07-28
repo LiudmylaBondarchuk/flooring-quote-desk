@@ -1,0 +1,3 @@
+{
+  "queryReplacement": "={{ [$('Decision gate').item.json.gmail_message_id, 'the decision could not be stored — ' + ($json.message || 'no reason given')] }}"
+}

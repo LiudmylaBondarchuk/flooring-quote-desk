@@ -108,6 +108,7 @@ const cases = JSON.parse(read('tests', 'fixtures', 'decision-gate.json'));
 const failures = [];
 const decisions = [];
 let stored = '0';
+let refusedCount = 0;
 
 try {
   run(['-v', 'ON_ERROR_STOP=1', '-f', join(root, 'db', 'schema.sql'),
@@ -266,8 +267,116 @@ try {
     }
   });
 
-  if (Number(ask('SELECT count(*) FROM failures')) !== 1) {
-    failures.push({ stage: 'recording a failure', name: '', error: 'the error lane stored nothing' });
+  const refusedSql = read('db', '00-intake-router', 'say-the-write-was-refused.sql');
+  const refusedParams = params(join('db', '00-intake-router', 'say-the-write-was-refused.params.json'));
+
+  const awkward = [
+    ['a decision that was green and priceable', (d) => d.pricing_allowed === true],
+    ['a decision nobody was meant to open', (d) => d.handling === 'none'],
+    ['a decision flagged as fraud', (d) => d.danger === true],
+    ['a decision with fields the gate left empty', (d) => d.material_category === null],
+  ];
+
+  const refusedScript = [];
+  const refusedLabels = [];
+  const refusedTargets = [];
+  for (const [name, pick] of awkward) {
+    const target = decisions.find(({ json }) => pick(json));
+    if (!target) {
+      failures.push({ stage: 'refusing a write', name,
+        error: 'no fixture reaches this state, so the fallback is untested against it' });
+      continue;
+    }
+    refusedTargets.push({ name, id: target.id });
+    refusedLabels.push(name);
+    const errorItem = { message: 'violates check constraint "messages_handling_known"' };
+    const values = refusedParams(errorItem, () => ({ item: { json: { gmail_message_id: target.id } } }));
+    refusedScript.push(`\\warn REFUSED ${refusedLabels.length - 1}`,
+      fill(refusedSql, values).replace(/;\s*$/, '') + ';');
+  }
+
+  let refusedOut = '';
+  try {
+    refusedOut = execFileSync('sh', ['-c', 'psql "$0" -q -f - 2>&1', url],
+      { input: refusedScript.join('\n') + '\n', encoding: 'utf8' });
+  } catch (e) { refusedOut = String(e.stdout || '') + String(e.stderr || ''); }
+
+  let refused = null;
+  for (const line of refusedOut.split('\n')) {
+    const marker = line.match(/^REFUSED (\d+)$/);
+    if (marker) { refused = Number(marker[1]); continue; }
+    const problem = line.match(/(?:ERROR|FATAL):\s+(.*)$/);
+    if (problem) {
+      failures.push({ stage: 'refusing a write', name: refusedLabels[refused] || '',
+        error: `the fallback was itself refused: ${problem[1]}` });
+    }
+  }
+
+  const afterRefusal = new Map(JSON.parse(ask(`SELECT coalesce(json_agg(json_build_object(
+      'id', gmail_message_id, 'category', category, 'route', route, 'handling', handling,
+      'colour', gate_color, 'priceable', pricing_allowed, 'reasons', gate_reasons)), '[]')
+    FROM messages WHERE gmail_message_id IN (${refusedTargets.map((r) => literal(r.id)).join(', ') || "''"})`))
+    .map((r) => [r.id, r]));
+
+  refusedCount = refusedTargets.length;
+
+  for (const { name, id } of refusedTargets) {
+    const row = afterRefusal.get(id);
+    if (!row) {
+      failures.push({ stage: 'refusing a write', name, error: 'the fallback updated no row at all' });
+      continue;
+    }
+    const meant = { category: 'unknown', route: 'review', handling: 'manual_review',
+      colour: 'red', priceable: false };
+    for (const [column, value] of Object.entries(meant)) {
+      if (String(row[column]) !== String(value)) {
+        failures.push({ stage: 'refusing a write', name,
+          error: `${column} is ${JSON.stringify(row[column])}, a refused write must leave it ${JSON.stringify(value)}` });
+      }
+    }
+    const reason = (row.reasons || [])[0] || '';
+    if (!/could not be stored/.test(reason) || !/check constraint/.test(reason)) {
+      failures.push({ stage: 'refusing a write', name,
+        error: `the row says ${JSON.stringify(reason)} — it must name the constraint that rejected the write` });
+    }
+  }
+
+  if (refusedTargets.length) {
+    const probe = refusedTargets[0];
+    const reason = 'violates check constraint "messages_handling_known"';
+    const probeSql = fill(refusedSql, refusedParams({ message: reason },
+      () => ({ item: { json: { gmail_message_id: probe.id } } }))).replace(/;\s*$/, '');
+    const returned = JSON.parse(ask(
+      `WITH refused AS (${probeSql}) SELECT coalesce(json_agg(refused), '[]')::text FROM refused`));
+
+    if (!returned.length) {
+      failures.push({ stage: 'attributing the failure', name: probe.name,
+        error: 'the fallback returned no row, so the error lane is handed nothing to attribute' });
+    } else {
+      const normalise = read('src', '90-errors', 'normalise-failure.js');
+      const [normalised] = runNode(normalise, returned);
+      run(['-c', fill(failureSql, failureParams(normalised.json))]);
+
+      const attributed = JSON.parse(ask(`SELECT coalesce(json_agg(json_build_object(
+          'id', gmail_message_id, 'message', message, 'node', node_name)), '[]')
+        FROM failures WHERE gmail_message_id = ${literal(probe.id)}`));
+      if (!attributed.length) {
+        failures.push({ stage: 'attributing the failure', name: probe.name,
+          error: 'the failure was recorded against no email — nobody can tell which one was refused' });
+      } else if (!/check constraint/.test(attributed[0].message)) {
+        failures.push({ stage: 'attributing the failure', name: probe.name,
+          error: `the failure says ${JSON.stringify(attributed[0].message)} rather than naming the constraint` });
+      } else if (!attributed[0].node) {
+        failures.push({ stage: 'attributing the failure', name: probe.name,
+          error: 'the failure names no node — the error lane takes input from eight places ' +
+                 'and cannot say which of them died' });
+      }
+    }
+  }
+
+  if (Number(ask('SELECT count(*) FROM failures')) !== 2) {
+    failures.push({ stage: 'recording a failure', name: '',
+      error: `the error lane holds ${ask('SELECT count(*) FROM failures')} rows, two were written` });
   }
 } finally {
   try {
@@ -283,6 +392,6 @@ if (failures.length) {
 
 console.log(`round trip passed: ${TRANSPORT.length} transport cases and ${cases.length} decisions ` +
   `went through the real SQL, ${stored} rows stored and read back unchanged, ` +
-  'all six lanes and the error lane exercised.');
+  `all six lanes and the error lane exercised, and a refused write survived ${refusedCount} awkward states.`);
 console.log('the values go in as literals here; n8n binds them as query parameters, so driver-level ' +
   'type conversion is not covered by this check.');
