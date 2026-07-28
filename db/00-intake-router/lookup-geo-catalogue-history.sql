@@ -15,7 +15,7 @@ SELECT
     WHERE lower(city) = lower(btrim(regexp_replace(split_part($1::jsonb->>'city', ',', 1),
                                                    '[[:space:]]+(TX|TEXAS)$', '', 'i')))
     LIMIT 1) AS zone_by_city,
-  (SELECT json_agg(DISTINCT category) FROM price_bands) AS categories,
+  (SELECT json_agg(DISTINCT category) FROM price_bands WHERE active) AS categories,
   (SELECT json_agg(json_build_object('label', s.label, 'we_do', s.we_do,
                                      'match_words', s.match_words, 'answer', s.answer))
      FROM (SELECT * FROM services ORDER BY priority, id) s) AS services,
