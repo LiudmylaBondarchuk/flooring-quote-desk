@@ -505,19 +505,29 @@ try {
       const refused = 'order-red';
       run(['-c', fill(logSql, logParams(runNode(prepareSource,
         [message({ id: refused, threadId: 'order-t' })])[0].json)).replace(/;\s*$/, '')]);
-      const absurd = JSON.stringify({ material_category: 'Wood', area_sqft: 200000, area_unit: 'sqft' });
+      // what the gate stands behind when it has just called the area implausible: the material
+      // survives, the number does not. The message still carries 200000 for a person to read.
+      const settled = JSON.stringify({ material_category: 'Wood', area_sqft: null, area_unit: null });
       ask(fill(orderSql('merge-the-facts'),
-        [refused, orderId, absurd, 'quote_request', 'quote', 'manual_review', 'red']));
+        [refused, orderId, settled, 'quote_request', 'quote', 'manual_review', 'red']));
       const held = ask(`SELECT coalesce(area_sqft::text, 'null') FROM orders WHERE id = ${orderId}`).trim();
       if (held === '200000.00') {
         failures.push({ stage: 'keeping one job across several emails', name: 'an area the gate refused',
           error: 'the order took 200000 sq ft from a message the gate coloured red. A later green '
             + 'message in the same thread would be priced against a floor nobody has' });
       }
-      const logged = Number(ask(`SELECT count(*) FROM order_events WHERE gmail_message_id = ${literal(refused)}`));
-      if (logged !== 0) {
-        failures.push({ stage: 'keeping one job across several emails', name: 'a refused message in the history',
-          error: `${logged} event(s) were written for a message the gate refused` });
+      const area = Number(ask(`SELECT count(*) FROM order_events WHERE gmail_message_id = ${literal(refused)}`
+        + " AND field = 'area_sqft'"));
+      if (area !== 0) {
+        failures.push({ stage: 'keeping one job across several emails', name: 'a refused area in the history',
+          error: 'the change log records an area the gate had already called impossible' });
+      }
+      const material = ask(`SELECT coalesce(material_category, 'none') FROM orders WHERE id = ${orderId}`).trim();
+      if (material === 'none') {
+        failures.push({ stage: 'keeping one job across several emails', name: 'a fact on a refused message',
+          error: 'the material the gate did stand behind was thrown away with the number it did not. '
+            + 'An email saying "laminate, size to follow" is red for being incomplete, and losing '
+            + 'its material is how a customer gets asked twice for what they already said' });
       }
     }
 

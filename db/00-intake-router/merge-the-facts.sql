@@ -1,13 +1,17 @@
 WITH trusted AS (
-  -- A red decision is the gate refusing this message, and a fact it refused must not become part
-  -- of what the conversation is believed to have said. An area of 200000 sq ft arrives red for
-  -- being outside the plausible range; without this it settles into the order anyway, and the
-  -- next message in the thread is judged on its own colour, so a green one would be priced
-  -- against a floor nobody has.
+  -- $3 is what the gate said it stands behind, not everything it reported. An area it called
+  -- implausible is absent from it while still being visible on the message for a person to read.
   --
-  -- Everything below reads the facts through here, not from the argument. Guarding only the part
-  -- that writes the change log would leave the order updated with nothing recording it.
-  SELECT CASE WHEN $7::text IS DISTINCT FROM 'red' THEN $3::jsonb ELSE '{}'::jsonb END AS facts
+  -- This used to guard on gate_color instead, and that was wrong in both directions on the same
+  -- day: red covers a refused message and an incomplete one alike, so an ordinary "laminate,
+  -- size to follow" contributed nothing, while an absurd area mid-conversation was only yellow
+  -- and went straight in. Colour answers where an email goes. Whether a number can be a floor is
+  -- a fact about the number.
+  --
+  -- Everything below reads the facts through here, not from the argument, so the part that
+  -- updates the order and the part that writes the change log cannot disagree about what was
+  -- believed.
+  SELECT $3::jsonb AS facts
 ),
 incoming AS (
   SELECT key, value #>> '{}' AS text_value
