@@ -41,6 +41,8 @@ jobs:
         run: npm run db:round-trip
       - name: a price list copies into the catalogue without half-applying
         run: npm run catalogue:round-trip
+      - name: a conversation that runs for days keeps one order and one set of facts
+        run: npm run conversation:round-trip
 
   scan:
     runs-on: ubuntu-latest

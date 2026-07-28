@@ -357,9 +357,6 @@ for (const item of $input.all()) {
     if (!areaOk) missing.push('area_sqft');
     if (!zone) missing.push('location');
 
-    if (areaOk && (area < AREA_MIN || area > AREA_MAX)) {
-      reasons.push(`area ${area} sq ft is outside the plausible range ${AREA_MIN}-${AREA_MAX}`);
-    }
     if (zone === 'out') reasons.push('outside the service area (Austin + 30 mi)');
     if (subfloor) reasons.push('subfloor/moisture flag — site survey needed');
     if (pattern && EXTRA_LABOUR_PATTERN.test(pattern)) {
@@ -475,6 +472,36 @@ for (const item of $input.all()) {
   if (handling === 'auto' && autoBlocked) handling = 'manual_review';
   if (handling === 'manual_review' && color === null) color = 'yellow';
 
+  // Whether a number can be a floor is a fact about the number, not about the kind of email it
+  // arrived in. This lived inside the branch for a first enquiry, so the same 200000 sq ft was
+  // red on a new thread and yellow on a reply in the same thread — and everything downstream
+  // that trusts the colour let it through the second time.
+  const areaUsable = areaOk && area >= AREA_MIN && area <= AREA_MAX;
+  if (areaOk && !areaUsable) {
+    reasons.push(`area ${area} sq ft is outside the plausible range ${AREA_MIN}-${AREA_MAX}`);
+    color = 'red';
+  }
+
+  // What the gate will stand behind, as one object, separate from what it reports for a person to
+  // read. Colour answers where an email goes and who looks at it; whether a single number can be
+  // a floor is a fact about the number. Guarding the merge on colour conflated the two and cost a
+  // hole in each direction on the same day: an absurd area slipping in mid-conversation, and an
+  // ordinary "laminate, size to follow" contributing nothing because incomplete is also red.
+  //
+  // The merge reads this and nothing else, so there is one place that decides what is believed —
+  // rather than nine fields gathered by an expression in a workflow, where a value the gate had
+  // already refused could be picked up again.
+  const settled = {
+    material_category: material,
+    area_sqft: areaUsable ? area : null,
+    area_unit: areaUsable ? quantity.unit : null,
+    city,
+    zone,
+    existing_floor_action: scope,
+    fixing_method: fixing,
+    old_floor_removal: removal,
+  };
+
   out.push({ json: {
     gmail_message_id: row.gmail_message_id,
     extracted: ex,
@@ -489,6 +516,7 @@ for (const item of $input.all()) {
     intent: INTENT_WHITELIST.includes(intent) ? intent : null,
     material_category: material,
     area_sqft: areaOk ? area : null,
+    settled,
     area_status: quantity.status,
     area_comparable: COMPARABLE_AREA.includes(quantity.status),
     area_unit: quantity.unit,
