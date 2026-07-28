@@ -341,13 +341,20 @@ try {
     }
   }
 
+  const runFallback = (sql) => {
+    const line = ask(sql.replace(/;\s*$/, '')).trim();
+    if (!line) return null;
+    const [gmail_message_id, _error, _node, rows] = line.split('|');
+    return { gmail_message_id, _error, _node, rows_updated: Number(rows) };
+  };
+
   if (refusedTargets.length) {
     const probe = refusedTargets[0];
     const reason = 'violates check constraint "messages_handling_known"';
     const probeSql = fill(refusedSql, refusedParams({ message: reason },
       () => ({ item: { json: { gmail_message_id: probe.id } } }))).replace(/;\s*$/, '');
-    const returned = JSON.parse(ask(
-      `WITH refused AS (${probeSql}) SELECT coalesce(json_agg(refused), '[]')::text FROM refused`));
+    const row = runFallback(probeSql);
+    const returned = row ? [row] : [];
 
     if (!returned.length) {
       failures.push({ stage: 'attributing the failure', name: probe.name,
