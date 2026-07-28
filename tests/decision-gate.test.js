@@ -30,7 +30,7 @@ const runGate = (row) => {
   return new Function('$input', gateSource)({ all: () => items })[0].json;
 };
 
-const FIXTURES_WITHOUT_A_STATED_INTENT = 76;
+const FIXTURES_WITHOUT_A_STATED_INTENT = 74;
 
 test('a fixture says what it was meant to prove, not only what the gate does', () => {
   const unstated = cases.filter((c) => !c.why);

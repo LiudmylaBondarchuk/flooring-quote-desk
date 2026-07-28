@@ -22,6 +22,12 @@ anything not from a customer about flooring).
 "existing_floor_action" is what happens to the OLD floor: exactly "remove_first" or "over_existing".
 "fixing_method" is how the NEW floor is fixed down: exactly one of click_lock, floating, glue_down,
 nail_down, staple_down, loose_lay, peel_and_stick, mortar_set, thinset.
+"area_unit" is what the number in "area_sqft" was measured in, and it is read, never assumed:
+exactly "sqft", "sqm" or "sqyd", and only when the email writes the unit out beside the number.
+Its evidence is the unit as the email spells it — "sq ft", "m2", "square metres". A number with
+no unit written next to it means "area_unit": null and evidence null; do not guess from the
+country, the size or anything else. Put the number the email gives into "area_sqft" without
+converting it — conversion is not your job.
 "existing_floor" is what is on the floor now, in the customer's own words.
 These are three different things and must not be mixed. All are null when the email does not say.
 

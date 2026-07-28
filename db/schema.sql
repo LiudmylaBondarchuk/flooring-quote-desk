@@ -106,6 +106,7 @@ CREATE TABLE messages (
     material_category         text,
     area_sqft                 numeric(10, 2),
     area_status               text,
+    area_unit                 text,
     existing_floor_action     text,
     old_floor_removal         boolean,
     fixing_method             text,
@@ -144,7 +145,9 @@ CREATE TABLE messages (
     CONSTRAINT messages_material_known CHECK (material_category IS NULL
         OR material_category IN ('LVP', 'Laminate', 'Wood', 'Vinyl', 'Carpet')),
     CONSTRAINT messages_area_status_known CHECK (area_status IS NULL OR area_status IN (
-        'known', 'converted', 'derived', 'contradicted', 'not_an_area', 'unknown')),
+        'known', 'converted', 'derived', 'contradicted', 'not_an_area', 'no_unit', 'unknown')),
+    CONSTRAINT messages_area_unit_known CHECK (area_unit IS NULL
+        OR area_unit IN ('sqft', 'sqm', 'sqyd')),
     CONSTRAINT messages_floor_action_known CHECK (existing_floor_action IS NULL
         OR existing_floor_action IN ('remove_first', 'over_existing')),
     CONSTRAINT messages_fixing_known CHECK (fixing_method IS NULL OR fixing_method IN (
@@ -254,6 +257,8 @@ COMMENT ON COLUMN messages.dropped_fields IS
     'Values the model produced that no words in the email supported.';
 COMMENT ON COLUMN messages.body_raw IS
     'The text the email carried: its plain part, or the plain text recovered from its HTML. body holds the same text with the quoted history removed, body_html the markup it came in.';
+COMMENT ON COLUMN messages.area_unit IS
+    'The unit the gate accepted for the area, read from the words the customer wrote and never assumed. Null means no unit was accepted — area_status says whether that was a number without one, a number that contradicted itself, or no number at all.';
 COMMENT ON COLUMN messages.area_sqft IS
     'Square feet the gate accepted, when it accepted one. area_status says how the number got there, and its own constraint says what that can be.';
 COMMENT ON COLUMN services.priority IS
