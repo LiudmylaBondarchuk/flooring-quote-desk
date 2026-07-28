@@ -137,7 +137,8 @@
       ],
       "sql": [
         "messages.geo_zone",
-        "service_area.zone"
+        "service_area.zone",
+        "orders.zone"
       ]
     },
     "message_status": {
@@ -183,7 +184,8 @@
         "Carpet"
       ],
       "sql": [
-        "messages.material_category"
+        "messages.material_category",
+        "orders.material_category"
       ],
       "gate": {
         "const": "MATERIAL_MAP",
@@ -198,7 +200,8 @@
         "over_existing"
       ],
       "sql": [
-        "messages.existing_floor_action"
+        "messages.existing_floor_action",
+        "orders.existing_floor_action"
       ],
       "gate": {
         "const": "SCOPE_WHITELIST",
@@ -226,7 +229,8 @@
         "thinset"
       ],
       "sql": [
-        "messages.fixing_method"
+        "messages.fixing_method",
+        "orders.fixing_method"
       ],
       "gate": {
         "const": "FIXING_WHITELIST",
@@ -331,8 +335,9 @@
         "messages.source"
       ]
     },
-    "job_status": {
+    "order_state": {
       "means": "where the work stands. booked, done and lost are closed; everything else is open.",
+      "not_produced_by_gate": "the order layer moves it, and the owner moves the last two",
       "values": [
         "new",
         "needs_info",
@@ -344,7 +349,22 @@
         "survey_needed"
       ],
       "sql": [
-        "jobs.status"
+        "orders.state"
+      ]
+    },
+    "order_event_kind": {
+      "means": "why a line was written in an order's history: it was created, a fact merged, a fact corrected, its state moved, or a draft ratified.",
+      "not_produced_by_gate": "written by the order layer, not by the decision gate",
+      "values": [
+        "created",
+        "merged",
+        "corrected",
+        "state_change",
+        "approved",
+        "rejected"
+      ],
+      "sql": [
+        "order_events.kind"
       ]
     },
     "offer_status": {
@@ -425,7 +445,8 @@
         "sqyd"
       ],
       "sql": [
-        "messages.area_unit"
+        "messages.area_unit",
+        "orders.area_unit"
       ],
       "gate": {
         "const": "AREA_UNIT_WHITELIST",

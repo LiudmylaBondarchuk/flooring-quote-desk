@@ -13,25 +13,70 @@ CREATE TABLE contacts (
 
 CREATE UNIQUE INDEX contacts_email_unique ON contacts (lower(email));
 
-CREATE TABLE jobs (
-    id          integer     GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    contact_id  integer     REFERENCES contacts (id) ON DELETE CASCADE,
-    address     text,
-    zip         text,
-    signature   text,
-    status      text        NOT NULL DEFAULT 'new',
-    created_at  timestamptz NOT NULL DEFAULT now(),
+CREATE TABLE orders (
+    id                    integer        GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    contact_email         text,
+    thread_id             text,
+    state                 text           NOT NULL DEFAULT 'new',
 
-    CONSTRAINT jobs_status_known CHECK (status IN (
+    material_category     text,
+    area_sqft             numeric(10, 2),
+    area_unit             text,
+    city                  text,
+    zone                  text,
+    existing_floor_action text,
+    fixing_method         text,
+    old_floor_removal     boolean,
+    flags                 jsonb          NOT NULL DEFAULT '{}'::jsonb,
+
+    confirmed_at          timestamptz,
+    closed_at             timestamptz,
+    created_at            timestamptz    NOT NULL DEFAULT now(),
+    updated_at            timestamptz    NOT NULL DEFAULT now(),
+
+    CONSTRAINT orders_state_known CHECK (state IN (
         'new', 'needs_info', 'quoted', 'negotiating',
-        'booked', 'done', 'lost', 'survey_needed'))
+        'booked', 'done', 'lost', 'survey_needed')),
+    CONSTRAINT orders_material_known CHECK (material_category IS NULL
+        OR material_category IN ('LVP', 'Laminate', 'Wood', 'Vinyl', 'Carpet')),
+    CONSTRAINT orders_area_unit_known CHECK (area_unit IS NULL
+        OR area_unit IN ('sqft', 'sqm', 'sqyd')),
+    CONSTRAINT orders_zone_known CHECK (zone IS NULL OR zone IN ('core', 'edge', 'out')),
+    CONSTRAINT orders_floor_action_known CHECK (existing_floor_action IS NULL
+        OR existing_floor_action IN ('remove_first', 'over_existing')),
+    CONSTRAINT orders_fixing_known CHECK (fixing_method IS NULL OR fixing_method IN (
+        'click_lock', 'floating', 'glue_down', 'nail_down', 'staple_down',
+        'loose_lay', 'peel_and_stick', 'mortar_set', 'thinset')),
+    CONSTRAINT orders_area_sane CHECK (area_sqft IS NULL
+        OR (area_sqft > 0 AND area_sqft < 1000000)),
+    CONSTRAINT orders_closed_is_stamped CHECK (
+        (state IN ('booked', 'done', 'lost')) = (closed_at IS NOT NULL))
 );
 
-CREATE UNIQUE INDEX jobs_contact_signature_unique ON jobs (contact_id, signature);
+CREATE INDEX orders_thread_idx  ON orders (thread_id);
+CREATE UNIQUE INDEX orders_one_open_per_thread ON orders (thread_id)
+    WHERE state NOT IN ('booked', 'done', 'lost');
+CREATE INDEX orders_contact_idx ON orders (lower(contact_email), created_at DESC);
+
+CREATE TABLE order_events (
+    id                integer     GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    order_id          integer     NOT NULL REFERENCES orders (id) ON DELETE CASCADE,
+    gmail_message_id  text,
+    kind              text        NOT NULL,
+    field             text,
+    old_value         text,
+    new_value         text,
+    created_at        timestamptz NOT NULL DEFAULT now(),
+
+    CONSTRAINT order_events_kind_known CHECK (kind IN (
+        'created', 'merged', 'corrected', 'state_change', 'approved', 'rejected'))
+);
+
+CREATE INDEX order_events_order_idx ON order_events (order_id, created_at);
 
 CREATE TABLE offers (
     id              integer     GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    job_id          integer     REFERENCES jobs (id) ON DELETE CASCADE,
+    order_id        integer     REFERENCES orders (id) ON DELETE CASCADE,
     subtotal_low    numeric(10, 2),
     subtotal_high   numeric(10, 2),
     total_low       numeric(10, 2),
@@ -54,7 +99,7 @@ CREATE TABLE offers (
 CREATE TABLE messages (
     id                        integer     GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     contact_id                integer     REFERENCES contacts (id) ON DELETE SET NULL,
-    job_id                    integer     REFERENCES jobs (id)     ON DELETE SET NULL,
+    order_id                  integer     REFERENCES orders (id)   ON DELETE SET NULL,
     offer_id                  integer     REFERENCES offers (id)   ON DELETE SET NULL,
 
     gmail_message_id          text        NOT NULL UNIQUE,
@@ -205,6 +250,7 @@ CREATE TABLE price_bands (
 );
 
 CREATE UNIQUE INDEX price_bands_product_unique ON price_bands (category, component, coalesce(product, ''));
+
 
 CREATE TABLE pricing_rules (
     id        integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

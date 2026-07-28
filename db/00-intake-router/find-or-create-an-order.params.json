@@ -1,0 +1,3 @@
+{
+  "queryReplacement": "={{ [$('Decision gate').item.json.gmail_message_id, $('Prepare fields').item.json.thread_id, $('Prepare fields').item.json.contact_email, ['quote_request','existing_project','scheduling','offer_response','billing'].includes($('Decision gate').item.json.category)] }}"
+}

@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -403,9 +404,131 @@ try {
     }
   }
 
-  if (Number(ask('SELECT count(*) FROM failures')) !== 2) {
+  {
+    const orderSql = (n) => read('db', '00-intake-router', `${n}.sql`).replace(/;\s*$/, '');
+    const attach = (id, thread, touches) =>
+      ask(fill(orderSql('find-or-create-an-order'),
+        [id, thread, 'sue@example.com', touches])).trim().split('|');
+    const merge = (id, orderId, facts) =>
+      ask(fill(orderSql('merge-the-facts'),
+        [id, orderId, JSON.stringify(facts), 'quote_request', 'quote', 'manual_review', 'yellow']))
+        .trim().split('|');
+    const events = (orderId) => ask(
+      `SELECT string_agg(kind || ':' || coalesce(field, ''), ' ' ORDER BY id) FROM order_events WHERE order_id = ${orderId}`).trim();
+
+    for (const [id, thread] of [['order-1', 'order-t'], ['order-2', 'order-t'], ['order-3', 'order-t'], ['order-4', 'order-other']]) {
+      run(['-c', fill(logSql, logParams(runNode(prepareSource,
+        [message({ id, threadId: thread })])[0].json)).replace(/;\s*$/, '')]);
+    }
+
+    const asked = attach('order-1', 'order-t', 'false');
+    const askedMerge = merge('order-1', null,
+      { material_category: 'LVP', area_sqft: 320, zone: 'core' });
+    if (askedMerge.length < 5 || askedMerge[0] !== 'order-1') {
+      failures.push({ stage: 'keeping one job across several emails', name: 'facts on an email that is not a job',
+        error: 'the merge gave no answer at all, so the email never reaches its lane' });
+    }
+    if (Number(ask("SELECT count(*) FROM order_events")) !== 0) {
+      failures.push({ stage: 'keeping one job across several emails', name: 'history for a job that does not exist',
+        error: 'an event was written against no order' });
+    }
+    if (asked[1] !== '') {
+      failures.push({ stage: 'keeping one job across several emails', name: 'a question that describes no work',
+        error: 'an order was opened for an email that asked whether the firm does floors at all' });
+    }
+
+    const first = attach('order-2', 'order-t', 'true');
+    if (first[2] !== 't' || !first[1]) {
+      failures.push({ stage: 'keeping one job across several emails', name: 'the first email with facts in it',
+        error: `no order was opened: ${first.join('|')}` });
+    }
+    const orderId = first[1];
+    const countOrders = () => Number(ask("SELECT count(*) FROM orders WHERE thread_id = 'order-t'"));
+    if (countOrders() !== 1) {
+      failures.push({ stage: 'keeping one job across several emails', name: 'one thread, one job',
+        error: `${countOrders()} orders exist for one conversation` });
+    }
+
+    const empty = merge('order-2', orderId, {});
+    const nothingKnown = empty[empty.length - 1];
+    for (const field of ['material', 'area_sqft', 'location']) {
+      if (!nothingKnown.includes(field)) {
+        failures.push({ stage: 'keeping one job across several emails', name: 'a job nobody has described yet',
+          error: `${field} is not named as missing on an order that holds nothing: ${nothingKnown}` });
+      }
+    }
+
+    const afterFirst = merge('order-2', orderId, { material_category: 'LVP' });
+    const missingFirst = afterFirst[afterFirst.length - 1];
+    if (!missingFirst.includes('area_sqft') || !missingFirst.includes('location')) {
+      failures.push({ stage: 'keeping one job across several emails', name: 'what is still missing after one email',
+        error: `the order says ${missingFirst} is missing, which is not what one material leaves open` });
+    }
+
+    const second = attach('order-3', 'order-t', 'true');
+    if (second[1] !== orderId || second[3] !== 't') {
+      failures.push({ stage: 'keeping one job across several emails', name: 'the second email in the same thread',
+        error: `it opened order ${second[1]} instead of joining ${orderId} — the customer would be asked everything again` });
+    }
+    const afterSecond = merge('order-3', orderId,
+      { area_sqft: 320, area_unit: 'sqft', city: 'austin', zone: 'core' });
+    if (countOrders() !== 1) {
+      failures.push({ stage: 'keeping one job across several emails', name: 'still one job after the second email',
+        error: `${countOrders()} orders exist for one conversation — the extra ones hold half a job each` });
+    }
+    if (afterSecond[afterSecond.length - 1] !== '{}') {
+      failures.push({ stage: 'keeping one job across several emails', name: 'what is still missing after two',
+        error: `the order still wants ${afterSecond[afterSecond.length - 1]} after being told material, area and place` });
+    }
+
+    const corrected = merge('order-3', orderId, { area_sqft: 400 });
+    if (Number(corrected[corrected.length - 2]) !== 1) {
+      failures.push({ stage: 'keeping one job across several emails', name: 'actually it is 400, not 300',
+        error: 'changing a value the order already held was not written down as a correction' });
+    }
+    const history = events(orderId);
+    if (!history.startsWith('created:') || !history.includes('corrected:area_sqft')) {
+      failures.push({ stage: 'keeping one job across several emails', name: 'the history of the order',
+        error: `it reads "${history}" — an order must start with its making and name what changed` });
+    }
+
+    run(['-c', `UPDATE orders SET state = 'booked', closed_at = now() WHERE id = ${orderId}`]);
+    const afterClosed = attach('order-4', 'order-t', 'true');
+    if (afterClosed[1] === orderId) {
+      failures.push({ stage: 'keeping one job across several emails', name: 'an email after the work was booked',
+        error: 'it was merged into a closed order, where the customer describing new work would rewrite the old job' });
+    }
+
+    // Everything above runs one statement at a time, which is the arrangement the statement is
+    // already safe in. This is the arrangement it is not: two connections deciding at once.
+    const raced = 'race-t';
+    const bothAtOnce = ['a', 'b'].map((tag, i) => {
+      const file = join(tmpdir(), `flooring-race-${tag}.sql`);
+      writeFileSync(file, `SELECT pg_sleep(0.4);\n${fill(orderSql('find-or-create-an-order'),
+        [`race-${tag}`, raced, 'race@example.com', 'true'])};\n`);
+      return { file, code: join(tmpdir(), `flooring-race-${i}.code`) };
+    });
+    execFileSync('sh', ['-c', bothAtOnce
+      .map(({ file, code }) => `( psql "${url}" -q -v ON_ERROR_STOP=1 -f ${file} >/dev/null 2>&1; echo $? > ${code} ) &`)
+      .join(' ') + ' wait']);
+    const codes = bothAtOnce.map(({ code }) => readFileSync(code, 'utf8').trim());
+    const opened = Number(ask(`SELECT count(*) FROM orders WHERE thread_id = ${literal(raced)}`));
+
+    if (opened !== 1) {
+      failures.push({ stage: 'two emails arriving at the same instant', name: 'one thread, two connections',
+        error: `the thread holds ${opened} orders. Two messages of one conversation each opened their own, `
+          + `and the facts of it are now split between them (exit codes ${codes.join(' and ')})` });
+    }
+    if (codes.every((c) => c === '0')) {
+      console.log('  note: the two connections did not actually collide this run — '
+        + 'one committed before the other looked, so the index was never asked to decide');
+    }
+  }
+
+  const written = 2;
+  if (Number(ask('SELECT count(*) FROM failures')) !== written) {
     failures.push({ stage: 'recording a failure', name: '',
-      error: `the error lane holds ${ask('SELECT count(*) FROM failures')} rows, two were written` });
+      error: `the error lane holds ${ask('SELECT count(*) FROM failures')} rows, ${written} were written` });
   }
 } finally {
   try {
