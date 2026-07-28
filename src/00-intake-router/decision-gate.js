@@ -495,6 +495,7 @@ for (const item of $input.all()) {
     material_category: material,
     area_sqft: areaUsable ? area : null,
     area_unit: areaUsable ? quantity.unit : null,
+    area_status: areaUsable ? quantity.status : null,
     city,
     zone,
     existing_floor_action: scope,

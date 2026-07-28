@@ -20,6 +20,8 @@ already_said AS (
        FILTER (WHERE settled ->> 'area_sqft' IS NOT NULL))[1]         AS area_sqft,
     (array_agg(settled ->> 'area_unit' ORDER BY created_at DESC)
        FILTER (WHERE settled ->> 'area_unit' IS NOT NULL))[1]         AS area_unit,
+    (array_agg(settled ->> 'area_status' ORDER BY created_at DESC)
+       FILTER (WHERE settled ->> 'area_status' IS NOT NULL))[1]       AS area_status,
     (array_agg(settled ->> 'city' ORDER BY created_at DESC)
        FILTER (WHERE settled ->> 'city' IS NOT NULL))[1]              AS city,
     (array_agg(settled ->> 'zone' ORDER BY created_at DESC)
@@ -36,9 +38,9 @@ already_said AS (
      AND gmail_message_id <> $1
 ),
 made AS (
-  INSERT INTO orders (contact_email, thread_id, material_category, area_sqft, area_unit,
+  INSERT INTO orders (contact_email, thread_id, material_category, area_sqft, area_unit, area_status,
                       city, zone, existing_floor_action, fixing_method, old_floor_removal)
-  SELECT $3, $2, t.material_category, t.area_sqft::numeric, t.area_unit,
+  SELECT $3, $2, t.material_category, t.area_sqft::numeric, t.area_unit, t.area_status,
          t.city, t.zone, t.existing_floor_action, t.fixing_method, t.old_floor_removal::boolean
     FROM already_said t
    WHERE NOT EXISTS (SELECT 1 FROM open_in_thread)

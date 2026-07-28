@@ -51,6 +51,117 @@
           "queryReplacement": "={{ [$json.gmail_message_id, 'awaiting_pricing', '10 Quote — Flooring'] }}"
         }
       }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Everything the arithmetic needs, in one row, assembled where the facts actually live.\n--\n-- The three fields that decide whether a price may be quoted at all come from the message being\n-- handled: whether pricing is allowed, what colour the gate gave it, and whether the enquiry is\n-- residential. They belong to this email and to no other.\n--\n-- Everything the price is computed from comes from the order, because that is what the\n-- conversation has accumulated. The email that named the material may be three weeks and four\n-- messages behind the one that finally gave the area.\n--\n-- Only active price bands. A band switched off in the spreadsheet is a product the firm no longer\n-- offers, and quoting it because it is still in the table is how a customer is sold something\n-- that cannot be delivered.\n\nSELECT\n  m.gmail_message_id,\n  m.pricing_allowed,\n  m.gate_color,\n  m.segment,\n  o.id                                  AS order_id,\n  o.material_category,\n  o.area_sqft,\n  o.area_status,\n  o.area_status IS NOT NULL             AS area_comparable,\n  coalesce(o.old_floor_removal, false)  AS old_floor_removal,\n  coalesce((SELECT json_agg(json_build_object(\n              'category',    b.category,\n              'product',     b.product,\n              'unit',        b.unit,\n              'rate_low',    b.rate_low,\n              'rate_high',   b.rate_high,\n              'wastage_pct', b.wastage_pct,\n              'min_charge',  b.min_charge) ORDER BY b.id)\n              FROM price_bands b\n             WHERE b.active\n               AND b.category = o.material_category), '[]'::json) AS bands,\n  coalesce((SELECT json_object_agg(r.rule_key,\n              json_build_object('val_low', r.val_low, 'val_high', r.val_high))\n              FROM pricing_rules r), '{}'::json)                  AS rules\n  FROM messages m\n  LEFT JOIN orders o ON o.id = m.order_id\n WHERE m.gmail_message_id = $1;",
+        "options": {
+          "queryReplacement": "={{ [$json.gmail_message_id] }}"
+        }
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000001",
+      "name": "Gather what a price needs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        760,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const PRICING_VERSION = 'quote-v1';\nconst CURRENCY = 'USD';\nconst PRICED_UNIT = 'sqft';\nconst RATE_BASIS = 'rates are this firm\\'s own price list as it stood when the quote was made, and the rates used are written into this breakdown';\n\nconst LINE_KINDS = { floor: 'floor', removal: 'removal', minimum: 'minimum' };\n\nconst REFUSALS = [\n  ['pricing_not_allowed', (f) => f.row.pricing_allowed !== true],\n  ['not_green',           (f) => f.row.gate_color !== 'green'],\n  ['commercial',          (f) => f.row.segment === 'commercial'],\n  ['no_material',         (f) => f.material === null],\n  ['no_price_band',       (f) => f.material !== null && f.bands.length === 0],\n  ['no_area',             (f) => f.area === null],\n  ['area_not_usable',     (f) => f.row.area_comparable !== true],\n  ['no_removal_rate',     (f) => f.removal && f.removalRate === null],\n];\n\n// Math.round(n * 100) reads the half-cent off a binary float, and 10.075 * 100 is 1007.4999...,\n// so the cent goes down when it should go up. Rounding through the decimal exponent asks\n// JavaScript for the shortest decimal that is this float, and rounds that instead.\nconst money = (n) => Number(`${Math.round(Number(`${n}e2`))}e-2`);\n\nconst num = (v) => {\n  if (v === null || v === undefined || v === '') return null;\n  const n = Number(v);\n  return Number.isFinite(n) ? n : null;\n};\n\nconst positive = (v) => {\n  const n = num(v);\n  return n !== null && n > 0 ? n : null;\n};\n\nconst asBand = (b) => {\n  if (!b || typeof b !== 'object') return null;\n  if (String(b.unit) !== PRICED_UNIT) return null;\n  const low = positive(b.rate_low);\n  const high = positive(b.rate_high);\n  const wastage = num(b.wastage_pct);\n  const minCharge = b.min_charge === null || b.min_charge === undefined ? 0 : num(b.min_charge);\n  if (low === null || high === null || high < low) return null;\n  if (wastage === null || wastage < 0 || wastage > 100) return null;\n  if (minCharge === null || minCharge < 0) return null;\n  const label = b.product === null || b.product === undefined || b.product === ''\n    ? String(b.category ?? '') : String(b.product);\n  return { label, low, high, wastage, minCharge };\n};\n\nconst asRate = (r) => {\n  if (!r || typeof r !== 'object') return null;\n  const low = positive(r.val_low);\n  const high = positive(r.val_high);\n  if (low === null || high === null || high < low) return null;\n  return { low, high };\n};\n\nconst priceOne = (row) => {\n  const material = row.material_category === null || row.material_category === undefined\n    || row.material_category === '' ? null : String(row.material_category);\n  const area = positive(row.area_sqft);\n  const bands = (Array.isArray(row.bands) ? row.bands : []).map(asBand).filter((b) => b !== null);\n  const removal = row.old_floor_removal === true;\n  const rules = row.rules && typeof row.rules === 'object' ? row.rules : {};\n  const removalRate = removal ? asRate(rules.old_floor_removal) : null;\n\n  const facts = { row, material, area, bands, removal, removalRate };\n  const refusals = REFUSALS.filter(([, applies]) => applies(facts)).map(([code]) => code);\n\n  const stamped = {\n    gmail_message_id: row.gmail_message_id === undefined ? null : row.gmail_message_id,\n    pricing_version: PRICING_VERSION,\n    currency: CURRENCY,\n  };\n\n  if (refusals.length) {\n    return {\n      ...stamped,\n      priceable: false,\n      refusals,\n      subtotal_low: null,\n      subtotal_high: null,\n      total_low: null,\n      total_high: null,\n      breakdown: null,\n    };\n  }\n\n  const removalLow = removalRate ? money(area * removalRate.low) : 0;\n  const removalHigh = removalRate ? money(area * removalRate.high) : 0;\n  const removalLines = removalRate ? [{\n    kind: LINE_KINDS.removal,\n    label: 'old floor removal and disposal',\n    source: 'pricing_rules.old_floor_removal',\n    unit: PRICED_UNIT,\n    quantity: money(area),\n    rate_low: removalRate.low,\n    rate_high: removalRate.high,\n    low: removalLow,\n    high: removalHigh,\n  }] : [];\n\n  const floorLines = [];\n  const minimumLines = [];\n  const priced = bands.map((b) => {\n    // square feet rounded to cents is not a unit of anything. Rounding it here and then\n    // multiplying by a rate loses precision before the only place it means money.\n    const quantity = area * (1 + b.wastage / 100);\n    const floorLow = money(quantity * b.low);\n    const floorHigh = money(quantity * b.high);\n    floorLines.push({\n      kind: LINE_KINDS.floor,\n      label: b.label,\n      source: 'price_bands',\n      unit: PRICED_UNIT,\n      quantity: money(quantity),\n      wastage_pct: b.wastage,\n      rate_low: b.low,\n      rate_high: b.high,\n      low: floorLow,\n      high: floorHigh,\n    });\n\n    const subLow = money(floorLow + removalLow);\n    const subHigh = money(floorHigh + removalHigh);\n    const totLow = money(Math.max(subLow, b.minCharge));\n    const totHigh = money(Math.max(subHigh, b.minCharge));\n    if (totLow > subLow || totHigh > subHigh) {\n      minimumLines.push({\n        kind: LINE_KINDS.minimum,\n        label: b.label,\n        source: 'price_bands.min_charge',\n        amount: b.minCharge,\n        applied_to_low: totLow > subLow,\n        applied_to_high: totHigh > subHigh,\n      });\n    }\n    return { subLow, subHigh, totLow, totHigh };\n  });\n\n  return {\n    ...stamped,\n    priceable: true,\n    refusals: [],\n    subtotal_low: money(Math.min(...priced.map((p) => p.subLow))),\n    subtotal_high: money(Math.max(...priced.map((p) => p.subHigh))),\n    total_low: money(Math.min(...priced.map((p) => p.totLow))),\n    total_high: money(Math.max(...priced.map((p) => p.totHigh))),\n    breakdown: {\n      basis: RATE_BASIS,\n      material_category: material,\n      area_sqft: money(area),\n      area_status: row.area_status,\n      old_floor_removal: removal,\n      lines: [...floorLines, ...removalLines, ...minimumLines],\n    },\n  };\n};\n\nreturn $input.all().map((item, i) => ({\n  json: priceOne(item.json || {}),\n  pairedItem: { item: i },\n}));\n"
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000002",
+      "name": "Compute quote",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "priceable",
+              "leftValue": "={{ $json.priceable }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000003",
+      "name": "Is there a price?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- A computed price that is not written down is a price nobody can be held to. This is where it\n-- becomes a record: the range, the parts it is made of, and the version of the arithmetic that\n-- produced it, so a quote given today can still be explained after the price list has moved.\n--\n-- One statement, so an offer cannot exist without the order having moved, and the order cannot\n-- read as quoted with no offer behind it.\n--\n-- The order's previous state is read before it changes and written into the event, because\n-- \"quoted\" is only half the story — a first quote and a re-quote after the customer changed the\n-- room are different things, and the difference is what it was before.\n--\n-- Nothing here closes anything. The offer is a draft: it exists, it has not been sent, and no\n-- part of this decides whether it should be.\n\nWITH before AS (\n  SELECT id, state FROM orders WHERE id = $2::int FOR UPDATE\n),\nmade AS (\n  INSERT INTO offers (order_id, subtotal_low, subtotal_high, total_low, total_high,\n                      breakdown, pricing_version, status)\n  SELECT b.id, $3::numeric, $4::numeric, $5::numeric, $6::numeric, $7::jsonb, $8::text, 'draft'\n    FROM before b\n   WHERE b.state NOT IN ('booked', 'done', 'lost')\n  RETURNING id, order_id\n),\nmoved AS (\n  UPDATE orders o SET state = 'quoted', updated_at = now()\n   WHERE o.id = (SELECT order_id FROM made)\n     AND (SELECT state FROM before) IS DISTINCT FROM 'quoted'\n  RETURNING o.id\n),\nnoted AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT id, $1, 'state_change', 'state', (SELECT state FROM before), 'quoted' FROM moved\n  RETURNING 1\n),\nlinked AS (\n  UPDATE messages SET offer_id = (SELECT id FROM made)\n   WHERE gmail_message_id = $1 AND (SELECT count(*) FROM made) = 1\n  RETURNING 1\n)\nSELECT\n  $1::text                                     AS gmail_message_id,\n  (SELECT id FROM made)                        AS offer_id,\n  (SELECT order_id FROM made)                  AS order_id,\n  (SELECT state FROM before)                   AS state_before,\n  (SELECT count(*) FROM moved)::int = 1        AS order_moved,\n  (SELECT count(*) FROM noted)::int = 1        AS change_recorded,\n  (SELECT count(*) FROM linked)::int = 1       AS message_linked;",
+        "options": {
+          "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('Gather what a price needs').item.json.order_id, $json.subtotal_low, $json.subtotal_high, $json.total_low, $json.total_high, JSON.stringify($json.breakdown), $json.pricing_version] }}"
+        }
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000004",
+      "name": "Write the offer",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1480,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "width": 560,
+        "height": 200,
+        "content": "### Nothing is sent from here\n\nA price is computed and written down as a draft. Whether it goes to the customer, and whether\nanyone signs it off first, is not decided in this lane and no node here can reach a customer.\n\nThe three fields that decide whether a price may be quoted come from the message being handled.\nEverything the price is made of comes from the order, because the email that named the material\nmay be weeks behind the one that gave the area."
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000005",
+      "name": "What this lane does not do",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        760,
+        520
+      ]
     }
   ],
   "connections": {
@@ -63,6 +174,56 @@
             "index": 0
           }
         ]
+      ]
+    },
+    "Accept handoff": {
+      "main": [
+        [
+          {
+            "node": "Gather what a price needs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gather what a price needs": {
+      "main": [
+        [
+          {
+            "node": "Compute quote",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute quote": {
+      "main": [
+        [
+          {
+            "node": "Is there a price?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is there a price?": {
+      "main": [
+        [
+          {
+            "node": "Write the offer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Write the offer": {
+      "main": [
+        []
       ]
     }
   },

@@ -37,6 +37,7 @@ applied AS (
     material_category     = coalesce((SELECT facts FROM trusted)->>'material_category',     o.material_category),
     area_sqft             = coalesce(((SELECT facts FROM trusted)->>'area_sqft')::numeric,  o.area_sqft),
     area_unit             = coalesce((SELECT facts FROM trusted)->>'area_unit',             o.area_unit),
+    area_status           = coalesce((SELECT facts FROM trusted)->>'area_status',           o.area_status),
     city                  = coalesce((SELECT facts FROM trusted)->>'city',                  o.city),
     zone                  = coalesce((SELECT facts FROM trusted)->>'zone',                  o.zone),
     existing_floor_action = coalesce((SELECT facts FROM trusted)->>'existing_floor_action', o.existing_floor_action),
