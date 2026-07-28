@@ -384,6 +384,51 @@
       "sql": [
         "price_bands.unit"
       ]
+    },
+    "place_status": {
+      "means": "how far the gate got with the address: whether it was given, recognised and inside the area.",
+      "produced_by_gate": "place_status",
+      "values": [
+        "known",
+        "unrecognised",
+        "out_of_area",
+        "unknown"
+      ],
+      "why_no_sql": "computed for the reasons the gate gives and not stored on its own"
+    },
+    "product_status": {
+      "means": "how far the gate got with the material: in the catalogue, refused, offered but unpriced, or absent.",
+      "produced_by_gate": "product_status",
+      "values": [
+        "known",
+        "offered_not_priced",
+        "out_of_scope",
+        "not_in_catalogue",
+        "unknown"
+      ],
+      "why_no_sql": "computed for the reasons the gate gives and not stored on its own"
+    },
+    "area_unit": {
+      "means": "what the accepted square footage was measured in before the gate converted it.",
+      "produced_by_gate": "area_unit",
+      "values": [
+        "sqft",
+        "m2"
+      ],
+      "why_no_sql": "the gate works it out and throws it away; nothing stores it yet"
+    },
+    "comparable_area": {
+      "means": "the area_status values solid enough to compare one job against another. A guess is not a signature.",
+      "values": [
+        "known",
+        "converted",
+        "derived"
+      ],
+      "gate": {
+        "const": "COMPARABLE_AREA",
+        "part": "array"
+      },
+      "why_no_sql": "a subset of area_status used only to decide whether two enquiries describe the same job"
     }
   }
 }

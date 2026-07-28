@@ -1881,5 +1881,34 @@
       "pattern": "diagonal",
       "gate_color": "yellow"
     }
+  },
+  {
+    "name": "a material the price book does not carry cannot be quoted",
+    "why": "The catalogue in the database is what the firm can actually price, not what the gate can recognise. A word it knows but the price book has no band for is a job for a human to answer, and saying so is the difference between a considered refusal and a silent one.",
+    "row": {
+      "zone_by_city": "core",
+      "categories": [
+        "LVP",
+        "Laminate"
+      ],
+      "source_text": "carpet in the bedroom, 200 sq ft, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "carpet",
+        "area_sqft": 200,
+        "city": "austin",
+        "evidence": {
+          "material": "carpet",
+          "area_sqft": "200 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "product_status": "not_in_catalogue",
+      "material_category": null,
+      "gate_color": "red",
+      "pricing_allowed": false
+    }
   }
 ]

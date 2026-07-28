@@ -145,7 +145,7 @@ for (const [name, list] of named) {
     assert.ok(list.means, `${name} does not say what it means`);
     assert.ok(list.values.length > 0, `${name} is empty`);
     assert.equal(new Set(list.values).size, list.values.length, `${name} lists a value twice`);
-    assert.ok(list.sql || list.gate || list.prompt,
+    assert.ok(list.sql || list.gate || list.prompt || list.produced_by_gate,
       `${name} names no copy at all — a list nothing reads is not a list, it is a note`);
   });
 }
@@ -271,6 +271,11 @@ for (const [name, list] of named.filter(([, l]) => l.produced_by_gate)) {
       assert.ok(typeof why === 'string' && why.length > 10,
         `${name} excuses "${value}" from reachability without saying why`);
     }
+
+    const undeclared = [...reached].filter((v) => !list.values.includes(v));
+    assert.deepEqual(undeclared, [],
+      `the gate produced ${name} = ${undeclared.join(', ')}, which value-lists.json does not list — ` +
+      'a value nobody wrote down is one no constraint and no reader knows about');
 
     const unreached = list.values.filter((v) => !reached.has(v) && !(v in excused));
     assert.deepEqual(unreached, [],
