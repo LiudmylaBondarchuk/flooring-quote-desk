@@ -24,7 +24,8 @@ SELECT
   (SELECT count(*) FROM messages m
     WHERE lower(m.contact_email) = lower($10::text) AND m.gmail_message_id <> $2::text) AS prior_from_contact,
   (SELECT count(*) FROM messages m
-    WHERE lower(m.contact_email) = lower($10::text) AND m.offer_id IS NOT NULL) AS prior_offers,
+    WHERE lower(m.contact_email) = lower($10::text) AND m.gmail_message_id <> $2::text
+      AND m.offer_id IS NOT NULL) AS prior_offers,
   -- validated history only: material_category / area_sqft are what the gate accepted,
   -- never raw model output, so a hallucination cannot suppress a future quote
   (SELECT json_agg(json_build_object('m', m.material_category, 'a', m.area_sqft, 'st', m.area_status))
