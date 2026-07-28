@@ -195,6 +195,38 @@ console.log('\na row no reader should ever have passed on, sent to the statement
   check('and the whole batch failed with it, leaving the catalogue untouched', bands(), before);
 }
 
+console.log('\nthe two halves together: a sheet exactly as the tool delivers it');
+{
+  const reader = read('src', '70-catalogue', 'read-the-sheet.js');
+  const readSheet = (rows) => new Function('$input', '$', reader)(
+    { all: () => rows.map((json) => ({ json })) },
+    () => ({ first: () => ({ json: { accepts } }) }),
+  )[0].json;
+
+  // strings, a currency sign, a thousands separator, a capitalised heading and the row numbers
+  // the Google Sheets node adds - none of which the statement would accept on its own
+  const raw = [
+    { row_number: 2, Category: ' lvp ', component: 'FLOOR', product: 'Luxury vinyl plank / tile',
+      unit: 'SqFt', 'Rate Low': '$5.25', rate_high: '9.00', wastage_pct: '10', min_charge: '1,400', notes: '' },
+    { row_number: 3, Category: 'Wood', component: 'stairs', product: 'Stair nosing',
+      unit: 'each', 'Rate Low': '45', rate_high: '80', wastage_pct: '0', min_charge: '', notes: 'per step' },
+  ];
+  const verdict = readSheet(raw);
+  check('the reader accepts a sheet written the way people write one', verdict.sane, true);
+  const out = verdict.sane ? apply(verdict.rows) : { added: 'not applied' };
+  check('and what it hands over is what the statement takes', [out.added, out.changed], [0, 1]);
+  check('the money written with a sign and a comma arrived as a number',
+    bands().find((b) => b.band.startsWith('LVP')).rate_low, 5.25);
+
+  const broken = readSheet([...raw, { row_number: 4, Category: 'Bamboo', component: 'floor',
+    product: 'Plank', unit: 'sqft', 'Rate Low': '5', rate_high: '9', wastage_pct: '10', min_charge: '400' }]);
+  const beforeRefusal = bands();
+  check('a material the firm does not install stops the whole sheet', broken.sane, false);
+  check('and the refusal names the row a person can look at',
+    broken.refusals.some((r) => r.startsWith('row 4:') && r.includes('Bamboo')), true);
+  check('nothing reached the catalogue', bands(), beforeRefusal);
+}
+
 console.log(`\n${failed === 0 ? 'all checks passed' : `${failed} check(s) FAILED`}`);
 
 // leave the database as it was found, so this can run before or after any other harness

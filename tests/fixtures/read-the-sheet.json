@@ -1,0 +1,668 @@
+[
+  {
+    "name": "a sheet with nothing wrong in it",
+    "sheet": [
+      {
+        "category": "LVP",
+        "component": "floor",
+        "product": "Luxury vinyl plank / tile",
+        "unit": "sqft",
+        "rate_low": "4.50",
+        "rate_high": "9.00",
+        "wastage_pct": "10",
+        "min_charge": "400",
+        "notes": "US avg ~6.50"
+      },
+      {
+        "category": "Wood",
+        "component": "stairs",
+        "product": "Stair nosing",
+        "unit": "each",
+        "rate_low": "45",
+        "rate_high": "80",
+        "wastage_pct": "0",
+        "min_charge": "",
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": true,
+      "rows_accepted": 2
+    },
+    "expect_rows": [
+      {
+        "category": "LVP",
+        "component": "floor",
+        "product": "Luxury vinyl plank / tile",
+        "unit": "sqft",
+        "rate_low": 4.5,
+        "rate_high": 9,
+        "wastage_pct": 10,
+        "min_charge": 400,
+        "notes": "US avg ~6.50",
+        "sheet_row": 2
+      },
+      {
+        "category": "Wood",
+        "component": "stairs",
+        "product": "Stair nosing",
+        "unit": "each",
+        "rate_low": 45,
+        "rate_high": 80,
+        "wastage_pct": 0,
+        "min_charge": null,
+        "notes": null,
+        "sheet_row": 3
+      }
+    ]
+  },
+  {
+    "name": "the read came back with no rows at all",
+    "sheet": [],
+    "expect": {
+      "sane": false,
+      "rows_accepted": 0
+    },
+    "refusal_says": [
+      "no rows at all"
+    ]
+  },
+  {
+    "name": "every row in the sheet is blank",
+    "sheet": [
+      {
+        "category": "",
+        "component": "",
+        "product": "",
+        "unit": "",
+        "rate_low": "",
+        "rate_high": "",
+        "wastage_pct": "",
+        "min_charge": "",
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": false,
+      "rows_accepted": 0
+    },
+    "refusal_says": [
+      "blank"
+    ]
+  },
+  {
+    "name": "a column the copy depends on is not in the sheet",
+    "sheet": [
+      {
+        "category": "LVP",
+        "component": "floor",
+        "product": "Plank",
+        "unit": "sqft",
+        "rate_low": "4.50",
+        "wastage_pct": "10",
+        "min_charge": "400",
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": false,
+      "rows_accepted": 0
+    },
+    "refusal_says": [
+      "rate_high"
+    ]
+  },
+  {
+    "name": "headings written the way a person writes them",
+    "sheet": [
+      {
+        "Category": "LVP",
+        " Component ": "floor",
+        "Product": "Plank",
+        "UNIT": "sqft",
+        "Rate Low": "4.50",
+        "rate-high": "9.00",
+        "Wastage_Pct": "10",
+        "Min Charge": "400",
+        "Notes": ""
+      }
+    ],
+    "expect": {
+      "sane": true,
+      "rows_accepted": 1
+    }
+  },
+  {
+    "name": "the category is written in the customer's own spelling",
+    "sheet": [
+      {
+        "category": " lvp ",
+        "component": "FLOOR",
+        "product": "Plank",
+        "unit": "SqFt",
+        "rate_low": "4.50",
+        "rate_high": "9.00",
+        "wastage_pct": "10",
+        "min_charge": "400",
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": true,
+      "rows_accepted": 1
+    },
+    "expect_rows": [
+      {
+        "category": "LVP",
+        "component": "floor",
+        "product": "Plank",
+        "unit": "sqft",
+        "rate_low": 4.5,
+        "rate_high": 9,
+        "wastage_pct": 10,
+        "min_charge": 400,
+        "notes": null,
+        "sheet_row": 2
+      }
+    ]
+  },
+  {
+    "name": "a material the firm does not install",
+    "sheet": [
+      {
+        "category": "Bamboo",
+        "component": "floor",
+        "product": "Bamboo plank",
+        "unit": "sqft",
+        "rate_low": "5",
+        "rate_high": "9",
+        "wastage_pct": "10",
+        "min_charge": "400",
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": false,
+      "rows_accepted": 0
+    },
+    "refusal_says": [
+      "row 2",
+      "Bamboo",
+      "LVP"
+    ]
+  },
+  {
+    "name": "a unit nobody prices by",
+    "sheet": [
+      {
+        "category": "LVP",
+        "component": "floor",
+        "product": "Plank",
+        "unit": "sqfeet",
+        "rate_low": "5",
+        "rate_high": "9",
+        "wastage_pct": "10",
+        "min_charge": "400",
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": false,
+      "rows_accepted": 0
+    },
+    "refusal_says": [
+      "row 2",
+      "sqfeet",
+      "sqyd"
+    ]
+  },
+  {
+    "name": "money written the way money gets written",
+    "sheet": [
+      {
+        "category": "Wood",
+        "component": "floor",
+        "product": "Engineered",
+        "unit": "sqft",
+        "rate_low": "$7.00",
+        "rate_high": "$14.00",
+        "wastage_pct": "10",
+        "min_charge": "1,450",
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": true,
+      "rows_accepted": 1
+    },
+    "expect_rows": [
+      {
+        "category": "Wood",
+        "component": "floor",
+        "product": "Engineered",
+        "unit": "sqft",
+        "rate_low": 7,
+        "rate_high": 14,
+        "wastage_pct": 10,
+        "min_charge": 1450,
+        "notes": null,
+        "sheet_row": 2
+      }
+    ]
+  },
+  {
+    "name": "a rate that is not a number",
+    "sheet": [
+      {
+        "category": "LVP",
+        "component": "floor",
+        "product": "Plank",
+        "unit": "sqft",
+        "rate_low": "ask me",
+        "rate_high": "9",
+        "wastage_pct": "10",
+        "min_charge": "400",
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": false,
+      "rows_accepted": 0
+    },
+    "refusal_says": [
+      "row 2",
+      "ask me",
+      "not a number"
+    ]
+  },
+  {
+    "name": "a comma where a decimal point was meant",
+    "sheet": [
+      {
+        "category": "LVP",
+        "component": "floor",
+        "product": "Plank",
+        "unit": "sqft",
+        "rate_low": "4,50",
+        "rate_high": "9",
+        "wastage_pct": "10",
+        "min_charge": "400",
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": false,
+      "rows_accepted": 0
+    },
+    "refusal_says": [
+      "row 2",
+      "4,50"
+    ]
+  },
+  {
+    "name": "the top of the band is below the bottom",
+    "sheet": [
+      {
+        "category": "LVP",
+        "component": "floor",
+        "product": "Plank",
+        "unit": "sqft",
+        "rate_low": "9",
+        "rate_high": "4",
+        "wastage_pct": "10",
+        "min_charge": "400",
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": false,
+      "rows_accepted": 0
+    },
+    "refusal_says": [
+      "row 2",
+      "below rate_low"
+    ]
+  },
+  {
+    "name": "a free floor",
+    "sheet": [
+      {
+        "category": "LVP",
+        "component": "floor",
+        "product": "Plank",
+        "unit": "sqft",
+        "rate_low": "0",
+        "rate_high": "9",
+        "wastage_pct": "10",
+        "min_charge": "400",
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": false,
+      "rows_accepted": 0
+    },
+    "refusal_says": [
+      "row 2",
+      "above zero"
+    ]
+  },
+  {
+    "name": "wastage given as a fraction of a percent",
+    "sheet": [
+      {
+        "category": "LVP",
+        "component": "floor",
+        "product": "Plank",
+        "unit": "sqft",
+        "rate_low": "4",
+        "rate_high": "9",
+        "wastage_pct": "10.5",
+        "min_charge": "400",
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": false,
+      "rows_accepted": 0
+    },
+    "refusal_says": [
+      "row 2",
+      "whole number"
+    ]
+  },
+  {
+    "name": "wastage of more than the whole floor",
+    "sheet": [
+      {
+        "category": "LVP",
+        "component": "floor",
+        "product": "Plank",
+        "unit": "sqft",
+        "rate_low": "4",
+        "rate_high": "9",
+        "wastage_pct": "150",
+        "min_charge": "400",
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": false,
+      "rows_accepted": 0
+    },
+    "refusal_says": [
+      "row 2",
+      "between 0 and 100"
+    ]
+  },
+  {
+    "name": "a floor rate with no minimum",
+    "sheet": [
+      {
+        "category": "LVP",
+        "component": "floor",
+        "product": "Plank",
+        "unit": "sqft",
+        "rate_low": "4",
+        "rate_high": "9",
+        "wastage_pct": "10",
+        "min_charge": "",
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": false,
+      "rows_accepted": 0
+    },
+    "refusal_says": [
+      "row 2",
+      "min_charge"
+    ]
+  },
+  {
+    "name": "a minimum below zero",
+    "sheet": [
+      {
+        "category": "LVP",
+        "component": "floor",
+        "product": "Plank",
+        "unit": "sqft",
+        "rate_low": "4",
+        "rate_high": "9",
+        "wastage_pct": "10",
+        "min_charge": "-50",
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": false,
+      "rows_accepted": 0
+    },
+    "refusal_says": [
+      "row 2",
+      "below zero"
+    ]
+  },
+  {
+    "name": "the same band entered twice in different capitals",
+    "sheet": [
+      {
+        "category": "LVP",
+        "component": "floor",
+        "product": "Plank",
+        "unit": "sqft",
+        "rate_low": "4",
+        "rate_high": "9",
+        "wastage_pct": "10",
+        "min_charge": "400",
+        "notes": ""
+      },
+      {
+        "category": "lvp",
+        "component": "Floor",
+        "product": " PLANK ",
+        "unit": "sqft",
+        "rate_low": "5",
+        "rate_high": "8",
+        "wastage_pct": "10",
+        "min_charge": "400",
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": false,
+      "rows_accepted": 0
+    },
+    "refusal_says": [
+      "row 3",
+      "row 2"
+    ]
+  },
+  {
+    "name": "one bad row stops the whole sheet",
+    "sheet": [
+      {
+        "category": "LVP",
+        "component": "floor",
+        "product": "Plank",
+        "unit": "sqft",
+        "rate_low": "4",
+        "rate_high": "9",
+        "wastage_pct": "10",
+        "min_charge": "400",
+        "notes": ""
+      },
+      {
+        "category": "Concrete",
+        "component": "floor",
+        "product": "Slab",
+        "unit": "sqft",
+        "rate_low": "4",
+        "rate_high": "9",
+        "wastage_pct": "10",
+        "min_charge": "400",
+        "notes": ""
+      },
+      {
+        "category": "Carpet",
+        "component": "floor",
+        "product": "Carpet + pad",
+        "unit": "sqft",
+        "rate_low": "2",
+        "rate_high": "5",
+        "wastage_pct": "10",
+        "min_charge": "300",
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": false,
+      "rows_accepted": 0
+    },
+    "refusal_says": [
+      "row 3",
+      "Concrete"
+    ]
+  },
+  {
+    "name": "the blank rows under the last one are not rows",
+    "sheet": [
+      {
+        "category": "Carpet",
+        "component": "floor",
+        "product": "Carpet + pad",
+        "unit": "sqft",
+        "rate_low": "2",
+        "rate_high": "5",
+        "wastage_pct": "10",
+        "min_charge": "300",
+        "notes": ""
+      },
+      {
+        "category": "",
+        "component": "",
+        "product": "",
+        "unit": "",
+        "rate_low": "",
+        "rate_high": "",
+        "wastage_pct": "",
+        "min_charge": "",
+        "notes": ""
+      },
+      {
+        "category": "",
+        "component": "",
+        "product": "",
+        "unit": "",
+        "rate_low": "",
+        "rate_high": "",
+        "wastage_pct": "",
+        "min_charge": "",
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": true,
+      "rows_accepted": 1
+    }
+  },
+  {
+    "name": "a column the owner keeps for herself is left alone",
+    "sheet": [
+      {
+        "category": "Carpet",
+        "component": "floor",
+        "product": "Carpet + pad",
+        "unit": "sqft",
+        "rate_low": "2",
+        "rate_high": "5",
+        "wastage_pct": "10",
+        "min_charge": "300",
+        "notes": "",
+        "supplier": "Austin Carpet Co",
+        "last checked": "June"
+      }
+    ],
+    "expect": {
+      "sane": true,
+      "rows_accepted": 1,
+      "ignored_columns": [
+        "last_checked",
+        "supplier"
+      ]
+    }
+  },
+  {
+    "name": "the sheet tool says which row each one really is",
+    "sheet": [
+      {
+        "row_number": 14,
+        "category": "LVP",
+        "component": "floor",
+        "product": "Plank",
+        "unit": "sqft",
+        "rate_low": "4.50",
+        "rate_high": "9.00",
+        "wastage_pct": 10,
+        "min_charge": 400,
+        "notes": ""
+      },
+      {
+        "row_number": 15,
+        "category": "Granite",
+        "component": "floor",
+        "product": "Slab",
+        "unit": "sqft",
+        "rate_low": "4.50",
+        "rate_high": "9.00",
+        "wastage_pct": 10,
+        "min_charge": 400,
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": false,
+      "rows_accepted": 0
+    },
+    "refusal_says": [
+      "row 15",
+      "Granite"
+    ]
+  },
+  {
+    "name": "numbers the sheet tool has already turned into numbers",
+    "sheet": [
+      {
+        "row_number": 2,
+        "category": "Carpet",
+        "component": "floor",
+        "product": "Carpet + pad",
+        "unit": "sqft",
+        "rate_low": "2.00",
+        "rate_high": "5.00",
+        "wastage_pct": 10,
+        "min_charge": 300,
+        "notes": ""
+      }
+    ],
+    "expect": {
+      "sane": true,
+      "rows_accepted": 1,
+      "ignored_columns": []
+    },
+    "expect_rows": [
+      {
+        "category": "Carpet",
+        "component": "floor",
+        "product": "Carpet + pad",
+        "unit": "sqft",
+        "rate_low": 2,
+        "rate_high": 5,
+        "wastage_pct": 10,
+        "min_charge": 300,
+        "notes": null,
+        "sheet_row": 2
+      }
+    ]
+  }
+]
