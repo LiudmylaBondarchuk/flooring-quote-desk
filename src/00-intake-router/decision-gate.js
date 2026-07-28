@@ -15,7 +15,9 @@ const PATTERN_WHITELIST = ['straight', 'staggered', 'random', 'offset', 'brick',
   'diagonal', 'herringbone', 'chevron', 'basketweave'];
 const EXTRA_LABOUR_PATTERN = /herring|chevron|basketweave/;
 const EXTRA_WASTE_PATTERN = /diagonal/;
-const AREA_MIN = 20, AREA_MAX = 20000, AREA_LARGE_RESIDENTIAL = 6000;
+const AREA_MIN = 20;
+const AREA_MAX = 20000;
+const AREA_LARGE_RESIDENTIAL = 6000;
 
 const RE = {
 

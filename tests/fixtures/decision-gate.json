@@ -1506,7 +1506,7 @@
       "prior_offers": 1,
       "source_text": "Your work looks good. Now I need LVP in the guest room, 240 sq ft, Austin TX, over the existing vinyl, glue down.",
       "extracted": {
-        "intent": "quote_request",
+        "intent": "new_quote",
         "material": "lvp",
         "area_sqft": 240,
         "city": "Austin TX",
@@ -1614,7 +1614,7 @@
       "prior_offers": 0,
       "source_text": "I will move it to the garage myself before you arrive. LVP, 300 sq ft, Austin TX, over the existing vinyl, glue down, no stairs.",
       "extracted": {
-        "intent": "quote_request",
+        "intent": "new_quote",
         "material": "lvp",
         "area_sqft": 300,
         "city": "Austin TX",
@@ -1755,6 +1755,131 @@
     },
     "expect": {
       "geo_zone": null
+    }
+  },
+  {
+    "name": "a lead from the edge of the service area carries a travel fee",
+    "why": "The firm serves Austin and about thirty miles around it, split into core, edge and out. An edge job is one it will take, but the travel is not in the per-square-foot formula, so a price cannot leave without a person adding it.",
+    "row": {
+      "zone_by_city": "edge",
+      "source_text": "lvp, 300 sq ft, georgetown tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "georgetown",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "300 sq ft",
+          "city": "georgetown"
+        }
+      }
+    },
+    "expect": {
+      "geo_zone": "edge",
+      "gate_color": "yellow",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "sheet vinyl is its own material, not a plank",
+    "why": "Sheet vinyl is one of the five materials the firm installs and has its own band in the price book. A complete lead in the core zone leaves nothing to ask about, which is the one shape that may be answered automatically.",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "sheet vinyl in the laundry room, 120 sq ft, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "sheet vinyl",
+        "area_sqft": 120,
+        "city": "austin",
+        "evidence": {
+          "material": "sheet vinyl",
+          "area_sqft": "120 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "material_category": "Vinyl",
+      "gate_color": "green",
+      "pricing_allowed": true
+    }
+  },
+  {
+    "name": "mortar-set is tile work and is not in the price book",
+    "why": "Mortar-set is how tile goes down and the firm does not do tile, but the material asked for is one it does. That contradiction is for a person to resolve — not a job to refuse outright, and not one to price.",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp 300 sq ft austin tx, mortar set",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "austin",
+        "fixing_method": "mortar_set",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "300 sq ft",
+          "city": "austin",
+          "fixing_method": "mortar set"
+        }
+      }
+    },
+    "expect": {
+      "fixing_method": "mortar_set",
+      "gate_color": "yellow",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "staple-down over a slab needs a plywood subfloor first",
+    "why": "Staple-down needs something to staple into. Over a concrete slab that means laying a plywood subfloor first, a different job at a different price, and no email can say whether it is needed.",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "engineered wood staple down over the concrete slab, 400 sq ft, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "engineered wood",
+        "area_sqft": 400,
+        "city": "austin",
+        "fixing_method": "staple_down",
+        "evidence": {
+          "material": "engineered wood",
+          "area_sqft": "400 sq ft",
+          "city": "austin",
+          "fixing_method": "staple down"
+        }
+      }
+    },
+    "expect": {
+      "fixing_method": "staple_down",
+      "material_category": "Wood",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "a diagonal layout wastes more material than a straight one",
+    "why": "A diagonal layout cuts more material off at every wall, so the same area costs more than the straight version at the standard rate. The formula does not know that, so the price may not go out on its own.",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp laid diagonal, 300 sq ft, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "austin",
+        "pattern": "diagonal",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "300 sq ft",
+          "city": "austin",
+          "pattern": "diagonal"
+        }
+      }
+    },
+    "expect": {
+      "pattern": "diagonal",
+      "gate_color": "yellow"
     }
   }
 ]

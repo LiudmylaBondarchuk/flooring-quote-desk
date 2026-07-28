@@ -1,3 +1,6 @@
+-- Every closed list constrained below is written down once in /value-lists.json,
+-- together with the copies of it that live in the gate and in the prompt.
+
 BEGIN;
 
 CREATE TABLE contacts (
@@ -120,6 +123,11 @@ CREATE TABLE messages (
     CONSTRAINT messages_category_known CHECK (category IN (
         'quote_request', 'pre_sales', 'existing_project', 'scheduling', 'offer_response',
         'billing', 'complaint', 'operations', 'ignore_auto', 'owner_reply', 'unknown')),
+    CONSTRAINT messages_matched_rule_known CHECK (matched_rule IS NULL OR matched_rule IN (
+        'owner_sent', 'automated_headers', 'fraud_unknown_sender', 'nothing_readable',
+        'complaint_signal', 'offer_response', 'money_known_contact', 'scheduling_signal',
+        'same_job_signature', 'thread_continuation', 'not_a_customer', 'capability_question',
+        'wants_a_price', 'unclassified')),
     CONSTRAINT messages_route_known    CHECK (route IN (
         'quote', 'project', 'support', 'operations', 'review', 'log')),
     CONSTRAINT messages_handling_known CHECK (handling IN ('auto', 'manual_review', 'none')),
@@ -244,7 +252,7 @@ COMMENT ON COLUMN messages.dropped_fields IS
 COMMENT ON COLUMN messages.body_raw IS
     'The text the email carried: its plain part, or the plain text recovered from its HTML. body holds the same text with the quoted history removed, body_html the markup it came in.';
 COMMENT ON COLUMN messages.area_sqft IS
-    'Square feet the gate accepted. area_status says how it got there: stated, converted or derived.';
+    'Square feet the gate accepted, when it accepted one. area_status says how the number got there, and its own constraint says what that can be.';
 COMMENT ON COLUMN services.priority IS
     'Order within one side of the catalogue. What the firm does is always checked before what it refuses, in code.';
 COMMENT ON COLUMN messages.matched_rule IS

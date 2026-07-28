@@ -30,6 +30,21 @@ const runGate = (row) => {
   return new Function('$input', gateSource)({ all: () => items })[0].json;
 };
 
+const FIXTURES_WITHOUT_A_STATED_INTENT = 76;
+
+test('a fixture says what it was meant to prove, not only what the gate does', () => {
+  const unstated = cases.filter((c) => !c.why);
+  assert.ok(unstated.length <= FIXTURES_WITHOUT_A_STATED_INTENT,
+    `${unstated.length} fixtures carry no "why", and the allowance is ${FIXTURES_WITHOUT_A_STATED_INTENT}. ` +
+    'A new fixture states the decision it expects, and why the business rule demands it, ' +
+    'before the gate is ever run against it. An expect copied from a run proves only that ' +
+    'today equals today, and pins any bug in that branch in place. ' +
+    `Most recent without one: ${unstated.slice(-3).map((c) => c.name).join(' | ')}`);
+  assert.equal(unstated.length, FIXTURES_WITHOUT_A_STATED_INTENT,
+    `only ${unstated.length} fixtures still lack a "why" — lower FIXTURES_WITHOUT_A_STATED_INTENT ` +
+    'to that number so the debt cannot quietly grow back');
+});
+
 for (const { name, row, expect } of cases) {
   test(name, () => {
     const actual = runGate(row);
