@@ -21,7 +21,7 @@ for (const table of schema.matchAll(/CREATE TABLE (\w+) \(([\s\S]*?)\n\);/g)) {
 }
 
 const DEFAULT_SOURCE = 'src/00-intake-router/decision-gate.js';
-const SOURCE_FILES = [DEFAULT_SOURCE];
+const SOURCE_FILES = [DEFAULT_SOURCE, 'src/10-quote/compute-quote.js'];
 
 const captureConstants = (source) => {
   const declared = [...source.matchAll(/^const ([a-zA-Z_$][\w$]*) = /gm)].map((m) => m[1]);
@@ -114,7 +114,7 @@ const ENTRY_KEYS = ['means', 'values', 'sql', 'gate', 'prompt', 'produced_by_gat
   'not_produced_by_gate', 'assigned_in_gate', 'compared_in_gate', 'fixture_field',
   'reachability_untested', 'why_no_sql', 'why_not_a_const', 'why_constrained_now',
   'why_no_fixture_field'];
-const GATE_KEYS = ['const', 'part', 'relation', 'why'];
+const GATE_KEYS = ['const', 'part', 'relation', 'why', 'source'];
 const PARTS = ['array', 'keys', 'values', 'first'];
 
 for (const [name, list] of named) {

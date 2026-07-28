@@ -490,6 +490,7 @@ for (const item of $input.all()) {
     material_category: material,
     area_sqft: areaOk ? area : null,
     area_status: quantity.status,
+    area_comparable: COMPARABLE_AREA.includes(quantity.status),
     area_unit: quantity.unit,
     place_status: place.status,
     product_status: product.status,

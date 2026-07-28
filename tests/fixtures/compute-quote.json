@@ -1,0 +1,671 @@
+[
+  {
+    "name": "LVP, 300 sq ft, the old floor comes out",
+    "why": "330 sq ft of material is bought to lay 300 (10% wastage) at 4.50-9.00, so 1485-2970. Removal is charged on the 300 actually torn out at 1.50-3.50, so 450-1050. Wastage belongs to the material and never to the removal. The 400 minimum cannot bite on a job this size.",
+    "row": {
+      "gmail_message_id": "m-lvp-300",
+      "pricing_allowed": true,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "LVP",
+      "area_sqft": "300.00",
+      "area_status": "known",
+      "old_floor_removal": true,
+      "bands": [
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "4.50",
+          "rate_high": "9.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
+      ],
+      "rules": {
+        "old_floor_removal": {
+          "val_low": "1.50",
+          "val_high": "3.50"
+        }
+      },
+      "area_comparable": true
+    },
+    "expect": {
+      "priceable": true,
+      "refusals": [],
+      "subtotal_low": 1935,
+      "subtotal_high": 4020,
+      "total_low": 1935,
+      "total_high": 4020,
+      "pricing_version": "quote-v1",
+      "currency": "USD"
+    }
+  },
+  {
+    "name": "the same job with the driver handing over numbers instead of strings",
+    "why": "Postgres returns numeric as text, and the same job must price identically whichever form arrives. If the two disagree, the quote depends on the driver rather than on the price book.",
+    "row": {
+      "gmail_message_id": "m-lvp-300-numeric",
+      "pricing_allowed": true,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "LVP",
+      "area_sqft": 300,
+      "area_status": "known",
+      "old_floor_removal": true,
+      "bands": [
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": 4.5,
+          "rate_high": 9,
+          "wastage_pct": 10,
+          "min_charge": 400
+        }
+      ],
+      "rules": {
+        "old_floor_removal": {
+          "val_low": 1.5,
+          "val_high": 3.5
+        }
+      },
+      "area_comparable": true
+    },
+    "expect": {
+      "priceable": true,
+      "refusals": [],
+      "subtotal_low": 1935,
+      "subtotal_high": 4020,
+      "total_low": 1935,
+      "total_high": 4020
+    }
+  },
+  {
+    "name": "carpet, 40 sq ft, the minimum charge is the whole quote",
+    "why": "44 sq ft of carpet at 2.00-5.00 is 88-220, below the 300 minimum, so both ends are raised to 300. The subtotal keeps the honest 88-220 and the minimum is what the customer pays; a tiny job still costs a visit.",
+    "row": {
+      "gmail_message_id": "m-carpet-40",
+      "pricing_allowed": true,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "Carpet",
+      "area_sqft": "40.00",
+      "area_status": "known",
+      "old_floor_removal": false,
+      "bands": [
+        {
+          "category": "Carpet",
+          "product": "Carpet + pad",
+          "unit": "sqft",
+          "rate_low": "2.00",
+          "rate_high": "5.00",
+          "wastage_pct": 10,
+          "min_charge": "300.00"
+        }
+      ],
+      "rules": {
+        "old_floor_removal": {
+          "val_low": "1.50",
+          "val_high": "3.50"
+        }
+      },
+      "area_comparable": true
+    },
+    "expect": {
+      "priceable": true,
+      "refusals": [],
+      "subtotal_low": 88,
+      "subtotal_high": 220,
+      "total_low": 300,
+      "total_high": 300
+    }
+  },
+  {
+    "name": "carpet, 100 sq ft, the minimum lifts only the low end",
+    "why": "110 sq ft at 2.00-5.00 is 220-550, which straddles the 300 minimum. Only the low end is raised. Raising both would invent a floor under a price the band already justifies and quietly widen every small quote.",
+    "row": {
+      "gmail_message_id": "m-carpet-100",
+      "pricing_allowed": true,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "Carpet",
+      "area_sqft": "100.00",
+      "area_status": "known",
+      "old_floor_removal": false,
+      "bands": [
+        {
+          "category": "Carpet",
+          "product": "Carpet + pad",
+          "unit": "sqft",
+          "rate_low": "2.00",
+          "rate_high": "5.00",
+          "wastage_pct": 10,
+          "min_charge": "300.00"
+        }
+      ],
+      "rules": {
+        "old_floor_removal": {
+          "val_low": "1.50",
+          "val_high": "3.50"
+        }
+      },
+      "area_comparable": true
+    },
+    "expect": {
+      "priceable": true,
+      "refusals": [],
+      "subtotal_low": 220,
+      "subtotal_high": 550,
+      "total_low": 300,
+      "total_high": 550
+    }
+  },
+  {
+    "name": "laminate, 500 sq ft, one material and two products",
+    "why": "The firm sells a standard laminate and a water-resistant one, and the email said only laminate. 550 sq ft at 4.00-8.00 is 2200-4400 and at 6.00-10.00 is 3300-5500, so the quote spans 2200-5500 rather than silently picking one product and hiding the other.",
+    "row": {
+      "gmail_message_id": "m-laminate-500",
+      "pricing_allowed": true,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "Laminate",
+      "area_sqft": "500.00",
+      "area_status": "known",
+      "old_floor_removal": false,
+      "bands": [
+        {
+          "category": "Laminate",
+          "product": "Laminate standard",
+          "unit": "sqft",
+          "rate_low": "4.00",
+          "rate_high": "8.00",
+          "wastage_pct": 10,
+          "min_charge": "350.00"
+        },
+        {
+          "category": "Laminate",
+          "product": "Laminate premium (water-resistant)",
+          "unit": "sqft",
+          "rate_low": "6.00",
+          "rate_high": "10.00",
+          "wastage_pct": 10,
+          "min_charge": "350.00"
+        }
+      ],
+      "rules": {
+        "old_floor_removal": {
+          "val_low": "1.50",
+          "val_high": "3.50"
+        }
+      },
+      "area_comparable": true
+    },
+    "expect": {
+      "priceable": true,
+      "refusals": [],
+      "subtotal_low": 2200,
+      "subtotal_high": 5500,
+      "total_low": 2200,
+      "total_high": 5500
+    }
+  },
+  {
+    "name": "sheet vinyl, 200 sq ft, fifteen per cent wastage and removal",
+    "why": "Sheet vinyl wastes 15%, not the usual 10%, so laying 200 sq ft needs 230 bought: 460-1150 at 2.00-5.00. Removal is 200 at 1.50-3.50, so 300-700, on the area actually there. The wastage is a property of the band, never a constant.",
+    "row": {
+      "gmail_message_id": "m-vinyl-200",
+      "pricing_allowed": true,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "Vinyl",
+      "area_sqft": "200.00",
+      "area_status": "known",
+      "old_floor_removal": true,
+      "bands": [
+        {
+          "category": "Vinyl",
+          "product": "Sheet vinyl",
+          "unit": "sqft",
+          "rate_low": "2.00",
+          "rate_high": "5.00",
+          "wastage_pct": 15,
+          "min_charge": "250.00"
+        }
+      ],
+      "rules": {
+        "old_floor_removal": {
+          "val_low": "1.50",
+          "val_high": "3.50"
+        }
+      },
+      "area_comparable": true
+    },
+    "expect": {
+      "priceable": true,
+      "refusals": [],
+      "subtotal_low": 760,
+      "subtotal_high": 1850,
+      "total_low": 760,
+      "total_high": 1850
+    }
+  },
+  {
+    "name": "engineered wood, 250 sq ft, the old floor stays",
+    "why": "old_floor_removal is false, not null: the email said the floor stays. 275 sq ft at 7.00-14.00 is 1925-3850, with no removal line and no removal rate needed. False and null must not behave the same, because null means nobody said.",
+    "row": {
+      "gmail_message_id": "m-wood-250",
+      "pricing_allowed": true,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "Wood",
+      "area_sqft": "250.00",
+      "area_status": "known",
+      "old_floor_removal": false,
+      "bands": [
+        {
+          "category": "Wood",
+          "product": "Engineered wood",
+          "unit": "sqft",
+          "rate_low": "7.00",
+          "rate_high": "14.00",
+          "wastage_pct": 10,
+          "min_charge": "450.00"
+        }
+      ],
+      "rules": {},
+      "area_comparable": true
+    },
+    "expect": {
+      "priceable": true,
+      "refusals": [],
+      "subtotal_low": 1925,
+      "subtotal_high": 3850,
+      "total_low": 1925,
+      "total_high": 3850
+    }
+  },
+  {
+    "name": "the gate did not clear this message for pricing",
+    "why": "pricing_allowed is the router's whole decision about whether a price may go in front of this customer, and it is the lane's first condition. Nothing else about this message is wrong and it is still not priced.",
+    "row": {
+      "gmail_message_id": "m-not-allowed",
+      "pricing_allowed": false,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "LVP",
+      "area_sqft": "300.00",
+      "area_status": "known",
+      "old_floor_removal": false,
+      "bands": [
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "4.50",
+          "rate_high": "9.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
+      ],
+      "rules": {},
+      "area_comparable": true
+    },
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "pricing_not_allowed"
+      ]
+    }
+  },
+  {
+    "name": "a message the gate left yellow",
+    "why": "Two independent reasons apply and both are reported. A refusal naming only the first would hide the colour from whoever opens the queue, and the point of the list is that it says everything that is wrong at once.",
+    "row": {
+      "gmail_message_id": "m-yellow",
+      "pricing_allowed": false,
+      "gate_color": "yellow",
+      "segment": "residential",
+      "material_category": "LVP",
+      "area_sqft": "300.00",
+      "area_status": "known",
+      "old_floor_removal": false,
+      "bands": [
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "4.50",
+          "rate_high": "9.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
+      ],
+      "rules": {},
+      "area_comparable": true
+    },
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "pricing_not_allowed",
+        "not_green"
+      ]
+    }
+  },
+  {
+    "name": "commercial work",
+    "why": "Commercial work is a different price book. The gate already blocks it, and the lane refuses again on the segment stored on the message rather than trusting the flag that came with it.",
+    "row": {
+      "gmail_message_id": "m-commercial",
+      "pricing_allowed": false,
+      "gate_color": "yellow",
+      "segment": "commercial",
+      "material_category": "LVP",
+      "area_sqft": "300.00",
+      "area_status": "known",
+      "old_floor_removal": false,
+      "bands": [
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "4.50",
+          "rate_high": "9.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
+      ],
+      "rules": {},
+      "area_comparable": true
+    },
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "pricing_not_allowed",
+        "not_green",
+        "commercial"
+      ]
+    }
+  },
+  {
+    "name": "nobody said what material",
+    "why": "With no material there is nothing to look a band up for, so no_price_band is not claimed as well. One cause produces one reason; two reasons for one fact would rank the wrong thing first in the queue.",
+    "row": {
+      "gmail_message_id": "m-no-material",
+      "pricing_allowed": false,
+      "gate_color": "yellow",
+      "segment": "residential",
+      "material_category": null,
+      "area_sqft": "300.00",
+      "area_status": "known",
+      "old_floor_removal": false,
+      "bands": [],
+      "rules": {},
+      "area_comparable": true
+    },
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "pricing_not_allowed",
+        "not_green",
+        "no_material"
+      ]
+    }
+  },
+  {
+    "name": "a material the price book no longer carries",
+    "why": "The gate cleared this message and the band row is gone. The lane refuses on its own, on missing data rather than on a flag, which is the whole reason there are two gates: one blocks what it cannot express, the other refuses what it cannot compute.",
+    "row": {
+      "gmail_message_id": "m-band-deleted",
+      "pricing_allowed": true,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "LVP",
+      "area_sqft": "300.00",
+      "area_status": "known",
+      "old_floor_removal": false,
+      "bands": [],
+      "rules": {},
+      "area_comparable": true
+    },
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "no_price_band"
+      ]
+    }
+  },
+  {
+    "name": "a rate the per-square-foot formula cannot express",
+    "why": "A rate charged per item is not something this formula can multiply by an area. The band is dropped and the message refuses for want of a usable one — the same refusal every future component priced by any other unit will get, without this lane knowing what such a component is.",
+    "row": {
+      "gmail_message_id": "m-unit-each",
+      "pricing_allowed": true,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "Wood",
+      "area_sqft": "300.00",
+      "area_status": "known",
+      "old_floor_removal": false,
+      "bands": [
+        {
+          "category": "Wood",
+          "product": null,
+          "unit": "each",
+          "rate_low": "40.00",
+          "rate_high": "80.00",
+          "wastage_pct": 0,
+          "min_charge": null
+        }
+      ],
+      "rules": {},
+      "area_comparable": true
+    },
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "no_price_band"
+      ]
+    }
+  },
+  {
+    "name": "a band whose range is upside down",
+    "why": "A band with the high end below the low end cannot produce an ordered quote, so it is dropped rather than repaired. Silently swapping the ends would hide a broken row in the price book behind a plausible number.",
+    "row": {
+      "gmail_message_id": "m-band-reversed",
+      "pricing_allowed": true,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "LVP",
+      "area_sqft": "300.00",
+      "area_status": "known",
+      "old_floor_removal": false,
+      "bands": [
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "9.00",
+          "rate_high": "4.50",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
+      ],
+      "rules": {},
+      "area_comparable": true
+    },
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "no_price_band"
+      ]
+    }
+  },
+  {
+    "name": "no area at all",
+    "why": "No number and no status to explain its absence. Both refusals apply and both are named: one says there is nothing to multiply, the other says nobody established what the number would have meant.",
+    "row": {
+      "gmail_message_id": "m-no-area",
+      "pricing_allowed": false,
+      "gate_color": "yellow",
+      "segment": "residential",
+      "material_category": "LVP",
+      "area_sqft": null,
+      "area_status": "unknown",
+      "old_floor_removal": false,
+      "bands": [
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "4.50",
+          "rate_high": "9.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
+      ],
+      "rules": {},
+      "area_comparable": false
+    },
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "pricing_not_allowed",
+        "not_green",
+        "no_area",
+        "area_not_usable"
+      ]
+    }
+  },
+  {
+    "name": "an area the gate had to convert",
+    "why": "A converted area is a number the gate derived, not one the customer wrote. Grounding proves the words were in the email and says nothing about the unit, which is how 32 square metres would have been priced as 32 square feet. Only a known area is priced.",
+    "row": {
+      "gmail_message_id": "m-area-converted",
+      "pricing_allowed": false,
+      "gate_color": "yellow",
+      "segment": "residential",
+      "material_category": "LVP",
+      "area_sqft": "344.44",
+      "area_status": "converted",
+      "old_floor_removal": false,
+      "bands": [
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "4.50",
+          "rate_high": "9.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
+      ],
+      "rules": {},
+      "area_comparable": true
+    },
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "pricing_not_allowed",
+        "not_green"
+      ]
+    }
+  },
+  {
+    "name": "removal is wanted and its rate is missing",
+    "why": "Removal can add half the job again. Pricing the floor and silently dropping the removal would produce a number a third too low that looks entirely reasonable, which is worse than refusing.",
+    "row": {
+      "gmail_message_id": "m-no-removal-rate",
+      "pricing_allowed": true,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "LVP",
+      "area_sqft": "300.00",
+      "area_status": "known",
+      "old_floor_removal": true,
+      "bands": [
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "4.50",
+          "rate_high": "9.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
+      ],
+      "rules": {},
+      "area_comparable": true
+    },
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "no_removal_rate"
+      ]
+    }
+  },
+  {
+    "name": "a boolean that arrived as text",
+    "why": "The check is strict on purpose. If a driver ever hands the flag over as text, every message refuses and somebody notices within the hour; a loose check would price everything the gate refused and nobody would notice at all.",
+    "row": {
+      "gmail_message_id": "m-flag-as-text",
+      "pricing_allowed": "true",
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "LVP",
+      "area_sqft": "300.00",
+      "area_status": "known",
+      "old_floor_removal": false,
+      "bands": [
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "4.50",
+          "rate_high": "9.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
+      ],
+      "rules": {},
+      "area_comparable": true
+    },
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "pricing_not_allowed"
+      ]
+    }
+  },
+  {
+    "name": "an area given in square metres is priced",
+    "row": {
+      "gmail_message_id": "converted-priced",
+      "pricing_allowed": true,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "LVP",
+      "area_sqft": 344.44,
+      "area_status": "converted",
+      "area_comparable": true,
+      "old_floor_removal": false,
+      "bands": [
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": 4.5,
+          "rate_high": 9,
+          "wastage_pct": 10,
+          "min_charge": 400
+        }
+      ],
+      "rules": {}
+    },
+    "expect": {
+      "priceable": true,
+      "refusals": []
+    },
+    "why": "The whole point of reading the unit the customer wrote is that the job can then be priced. A converted area reaching the lane and being refused would make that work pointless."
+  }
+]

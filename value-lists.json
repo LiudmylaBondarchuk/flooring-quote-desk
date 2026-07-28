@@ -414,6 +414,39 @@
         "price_bands.unit"
       ]
     },
+    "offer_refusal": {
+      "means": "why a price was not put in front of a customer. Every one is a state the quote lane refuses to guess its way out of.",
+      "values": [
+        "pricing_not_allowed",
+        "not_green",
+        "commercial",
+        "no_material",
+        "no_price_band",
+        "no_area",
+        "area_not_usable",
+        "no_removal_rate"
+      ],
+      "gate": {
+        "const": "REFUSALS",
+        "part": "first",
+        "source": "src/10-quote/compute-quote.js"
+      },
+      "why_no_sql": "a refusal is carried on the item to the owner, never stored — the message keeps its own gate_reasons"
+    },
+    "breakdown_kind": {
+      "means": "what one line of a quote is for. A customer reading a total is owed the parts it is made of.",
+      "values": [
+        "floor",
+        "removal",
+        "minimum"
+      ],
+      "gate": {
+        "const": "LINE_KINDS",
+        "part": "values",
+        "source": "src/10-quote/compute-quote.js"
+      },
+      "why_no_sql": "the breakdown is written into offers.breakdown as jsonb, which no column constraint can whitelist"
+    },
     "price_band_event_kind": {
       "means": "what a price-list sync did to one row. A row never leaves the table, so leaving the spreadsheet is an event like any other.",
       "values": [
