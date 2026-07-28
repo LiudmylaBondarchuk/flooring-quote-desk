@@ -1,0 +1,1760 @@
+[
+  {
+    "name": "complete residential lead goes green",
+    "row": {
+      "source_text": "lvp quote hi, how much to install lvp in my living room, about 320 sq ft? round rock, tx. ground floor.",
+      "zone_by_city": "core",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "LVP",
+        "area_sqft": 320,
+        "city": "Round Rock, TX",
+        "evidence": {
+          "material": "install lvp",
+          "area_sqft": "about 320 sq ft",
+          "city": "round rock, tx"
+        }
+      }
+    },
+    "expect": {
+      "category": "quote_request",
+      "route": "quote",
+      "gate_color": "green",
+      "pricing_allowed": true
+    }
+  },
+  {
+    "name": "nothing usable in the email asks for the missing fields",
+    "row": {
+      "source_text": "new floors how much for new floors in my house?",
+      "extracted": {
+        "intent": "new_quote",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "quote_request",
+      "gate_color": "red",
+      "missing_fields": [
+        "material",
+        "area_sqft",
+        "location"
+      ]
+    }
+  },
+  {
+    "name": "outside the service area is refused, not priced",
+    "row": {
+      "source_text": "need laminate installed, 500 sq ft, in dallas tx.",
+      "zone_by_city": "out",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "laminate",
+        "area_sqft": 500,
+        "city": "Dallas",
+        "evidence": {
+          "material": "laminate",
+          "area_sqft": "500 sq ft",
+          "city": "dallas"
+        }
+      }
+    },
+    "expect": {
+      "category": "quote_request",
+      "gate_color": "red",
+      "geo_zone": "out"
+    }
+  },
+  {
+    "name": "a fabricated inquiry inside catalogue and service area is still rejected",
+    "row": {
+      "source_text": "hi, can you help me with my floors? thanks",
+      "zone_by_city": "core",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "LVP",
+        "area_sqft": 300,
+        "city": "Austin",
+        "evidence": {
+          "material": "LVP",
+          "area_sqft": "300 sq ft",
+          "city": "Austin"
+        }
+      }
+    },
+    "expect": {
+      "gate_color": "red",
+      "pricing_allowed": false,
+      "dropped_fields": [
+        "material",
+        "area_sqft",
+        "city"
+      ]
+    }
+  },
+  {
+    "name": "evidence split across a line break still counts",
+    "row": {
+      "source_text": "need lvp 320 sq ft round\nrock, tx",
+      "zone_by_city": "core",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 320,
+        "city": "Round Rock",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "320 sq ft",
+          "city": "Round Rock"
+        }
+      }
+    },
+    "expect": {
+      "gate_color": "green",
+      "dropped_fields": []
+    }
+  },
+  {
+    "name": "a laying pattern outside the whitelist is ignored, not treated as fabrication",
+    "row": {
+      "source_text": "lvp 300 sq ft in austin, round rock area",
+      "zone_by_city": "core",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "austin",
+        "pattern": "round",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "300 sq ft",
+          "city": "austin",
+          "pattern": "round"
+        }
+      }
+    },
+    "expect": {
+      "pattern": null,
+      "dropped_fields": []
+    }
+  },
+  {
+    "name": "herringbone is a real pattern and costs extra labour",
+    "row": {
+      "source_text": "engineered wood, herringbone, 620 sq ft, cedar park tx",
+      "zone_by_city": "core",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "engineered wood",
+        "area_sqft": 620,
+        "city": "cedar park",
+        "pattern": "herringbone",
+        "evidence": {
+          "material": "engineered wood",
+          "area_sqft": "620 sq ft",
+          "city": "cedar park",
+          "pattern": "herringbone"
+        }
+      }
+    },
+    "expect": {
+      "gate_color": "yellow",
+      "pattern": "herringbone",
+      "material_category": "Wood"
+    }
+  },
+  {
+    "name": "an implausible area cannot slip through as a large job",
+    "row": {
+      "source_text": "oak floors 200000 sq ft austin",
+      "zone_by_city": "core",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "oak",
+        "area_sqft": 200000,
+        "city": "austin",
+        "evidence": {
+          "material": "oak",
+          "area_sqft": "200000 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "gate_color": "red",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "complaint never reaches pricing",
+    "row": {
+      "source_text": "the floor you installed is lifting at the seams. i am not happy.",
+      "extracted": {
+        "intent": "complaint",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "complaint",
+      "route": "support",
+      "gate_color": "red"
+    }
+  },
+  {
+    "name": "acceptance is urgent and goes to the project lane",
+    "row": {
+      "prior_from_contact": 3,
+      "prior_offers": 1,
+      "source_text": "sounds good, go ahead. we are in.",
+      "extracted": {
+        "intent": "follow_up",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "offer_response",
+      "route": "project",
+      "gate_color": "red"
+    }
+  },
+  {
+    "name": "price pushback is negotiation, not a new quote",
+    "row": {
+      "prior_from_contact": 2,
+      "prior_offers": 1,
+      "source_text": "that is too expensive, can you do better?",
+      "extracted": {
+        "intent": "follow_up",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "offer_response",
+      "route": "project"
+    }
+  },
+  {
+    "name": "money from a known contact is billing",
+    "row": {
+      "prior_from_contact": 4,
+      "source_text": "i just sent the deposit by zelle, please confirm.",
+      "extracted": {
+        "intent": "follow_up",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "billing",
+      "route": "project"
+    }
+  },
+  {
+    "name": "changed payment details are flagged even when the sender is known",
+    "row": {
+      "prior_from_contact": 3,
+      "source_text": "our bank details have changed, please wire the payment to the new account",
+      "extracted": {
+        "intent": "billing",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "billing",
+      "danger": true,
+      "gate_color": "red",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "a fake invoice from an unknown sender is dropped, not queued",
+    "row": {
+      "source_text": "please find attached invoice #55321 for immediate payment",
+      "extracted": {
+        "intent": "spam_or_other",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "ignore_auto",
+      "handling": "none",
+      "danger": true
+    }
+  },
+  {
+    "name": "auto-reply headers win over the body",
+    "row": {
+      "auto_submitted": "auto-replied",
+      "source_text": "i am out of office until monday",
+      "extracted": {
+        "intent": "spam_or_other",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "ignore_auto",
+      "handling": "none"
+    }
+  },
+  {
+    "name": "the owner's own outgoing mail is never a lead",
+    "row": {
+      "is_outbound": true,
+      "source_text": "hi mike, your lvp quote for 320 sq ft comes to about 2100 dollars",
+      "extracted": {
+        "intent": "new_quote",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "owner_reply",
+      "route": "log",
+      "handling": "none"
+    }
+  },
+  {
+    "name": "a photo with no text is a lead for a human, not spam",
+    "row": {
+      "body_empty": true,
+      "has_photo": true,
+      "source_text": "my kitchen",
+      "extracted": {
+        "is_flooring_inquiry": false,
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "unknown",
+      "route": "review",
+      "handling": "manual_review"
+    }
+  },
+  {
+    "name": "a customer asking for a price list is a lead, not a supplier",
+    "row": {
+      "source_text": "can you send me your price list for lvp?",
+      "extracted": {
+        "intent": "pre_sales_question",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "pre_sales",
+      "route": "quote",
+      "handling": "auto"
+    }
+  },
+  {
+    "name": "a W-9 request is business paperwork, not fraud",
+    "row": {
+      "source_text": "please send a w-9 form before we start, we are a property management company",
+      "extracted": {
+        "intent": "new_quote",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "danger": false,
+      "segment": "commercial",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "an installer looking for work is not a customer",
+    "row": {
+      "source_text": "hello, i am looking for work as an installer, my resume is attached",
+      "extracted": {
+        "intent": "spam_or_other",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "operations",
+      "route": "operations",
+      "handling": "none"
+    }
+  },
+  {
+    "name": "availability from a stranger is a new lead, not a reschedule",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "are you available next week to give me a quote? carpet, 300 sq ft, austin",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "carpet",
+        "area_sqft": 300,
+        "city": "austin",
+        "evidence": {
+          "material": "carpet",
+          "area_sqft": "300 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "category": "quote_request",
+      "gate_color": "green"
+    }
+  },
+  {
+    "name": "availability from a known contact is a reschedule",
+    "row": {
+      "prior_from_contact": 2,
+      "source_text": "can you come by thursday?",
+      "extracted": {
+        "intent": "follow_up",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "scheduling",
+      "route": "project"
+    }
+  },
+  {
+    "name": "the same job asked twice does not get a second quote",
+    "row": {
+      "prior_from_contact": 1,
+      "prior_signatures": [
+        {
+          "m": "LVP",
+          "a": 300,
+          "st": "known"
+        }
+      ],
+      "zone_by_city": "core",
+      "source_text": "lvp 300 sq ft austin",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "300 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "category": "existing_project",
+      "route": "project",
+      "same_signature": true
+    }
+  },
+  {
+    "name": "a different area is a different job",
+    "row": {
+      "prior_from_contact": 1,
+      "prior_signatures": [
+        {
+          "m": "LVP",
+          "a": 300
+        }
+      ],
+      "zone_by_city": "core",
+      "source_text": "lvp 450 sq ft austin",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 450,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "450 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "category": "quote_request",
+      "same_signature": false,
+      "gate_color": "green"
+    }
+  },
+  {
+    "name": "an email that is only quoted history can never be green",
+    "row": {
+      "body_fully_quoted": true,
+      "zone_by_city": "core",
+      "source_text": "lvp 300 sq ft austin",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "300 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "gate_color": "red",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "a platform lead without the customer address is held back",
+    "row": {
+      "needs_sender_extraction": true,
+      "zone_by_city": "core",
+      "source_text": "new lead: lvp 300 sq ft austin",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "300 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "gate_color": "yellow",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "an ungrounded is_flooring_inquiry cannot open the revenue lane",
+    "row": {
+      "source_text": "hey, are we still on for lunch tomorrow?",
+      "extracted": {
+        "is_flooring_inquiry": true,
+        "intent": "new_quote",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "unknown",
+      "route": "review"
+    }
+  },
+  {
+    "name": "a managed property is commercial and never auto",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "i manage a 40-unit apartment complex, need carpet in 12 units, about 9000 sq ft, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "carpet",
+        "area_sqft": 9000,
+        "city": "austin",
+        "evidence": {
+          "material": "carpet",
+          "area_sqft": "9000 sq ft",
+          "city": "austin tx"
+        }
+      }
+    },
+    "expect": {
+      "segment": "commercial",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "a commercial lead is never shown as ready to send",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "i manage a property management company, need lvp in 300 sq ft, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "300 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "segment": "commercial",
+      "gate_color": "yellow",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "the model calling it scheduling does not move it without a date word",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "i need lvp installed, about 300 sq ft, in austin tx",
+      "extracted": {
+        "intent": "scheduling",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "300 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "category": "quote_request",
+      "route": "quote",
+      "gate_color": "green"
+    }
+  },
+  {
+    "name": "the model calling it a complaint needs a signal or a history",
+    "row": {
+      "source_text": "i need new floors in my house",
+      "extracted": {
+        "intent": "complaint",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "quote_request",
+      "route": "quote"
+    }
+  },
+  {
+    "name": "an area given in metric units is converted, not thrown away",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "hi, i need about 32 m² of lvp in austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 32,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "32 m²",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "gate_color": "yellow",
+      "pricing_allowed": false,
+      "area_sqft": 344,
+      "area_status": "converted",
+      "missing_fields": []
+    }
+  },
+  {
+    "name": "square meters spelled out are converted too",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp, 30 square meters, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 30,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "30 square meters",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "gate_color": "yellow",
+      "pricing_allowed": false,
+      "area_status": "converted"
+    }
+  },
+  {
+    "name": "a returning customer with a new job still gets a quote",
+    "row": {
+      "prior_from_contact": 3,
+      "zone_by_city": "core",
+      "source_text": "now i need lvp in the living room too, about 500 sq ft, austin tx",
+      "extracted": {
+        "intent": "follow_up",
+        "material": "lvp",
+        "area_sqft": 500,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "500 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "category": "quote_request",
+      "route": "quote"
+    }
+  },
+  {
+    "name": "evidence must match a whole word, not part of a longer number",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "we need lvp in the living room, 112 sq ft, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 12,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "12",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "dropped_fields": [
+        "area_sqft"
+      ],
+      "gate_color": "red",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "evidence with surrounding words still matches",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp, about 300 sq ft, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "about 300 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "dropped_fields": [],
+      "gate_color": "green",
+      "pricing_allowed": true
+    }
+  },
+  {
+    "name": "metric units are caught even when the model quotes only the number",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "hi, i need about 32 m² of lvp in austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 32,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "32",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "gate_color": "red",
+      "pricing_allowed": false,
+      "missing_fields": [
+        "area_sqft"
+      ]
+    }
+  },
+  {
+    "name": "a new job inside an existing thread is quoted, not filed as follow-up",
+    "row": {
+      "prior_from_contact": 3,
+      "prior_in_thread": 2,
+      "zone_by_city": "core",
+      "source_text": "and now the living room too, lvp, 500 sq ft, austin tx",
+      "extracted": {
+        "intent": "follow_up",
+        "material": "lvp",
+        "area_sqft": 500,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "500 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "category": "quote_request",
+      "route": "quote",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "a chase inside a thread with no new data stays a follow-up",
+    "row": {
+      "prior_from_contact": 3,
+      "prior_in_thread": 2,
+      "source_text": "did you get my message?",
+      "extracted": {
+        "intent": "follow_up",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "existing_project",
+      "route": "project"
+    }
+  },
+  {
+    "name": "a quote with nothing said about scope states its own limits",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "hi, i need lvp, about 300 sq ft, in austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "300 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "gate_color": "green",
+      "pricing_allowed": true
+    }
+  },
+  {
+    "name": "stairs cannot be priced by the square foot",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp, 300 sq ft, austin tx, plus the stairs",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "300 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "gate_color": "yellow",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "the customer raising removal without saying what stops the quote",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp 300 sq ft austin, do you remove the old carpet?",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "300 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "gate_color": "yellow",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "laying over the existing floor is a different job, not a cheaper one",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp on top of the existing tile, 300 sq ft, austin",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "300 sq ft",
+          "city": "austin",
+          "existing_floor_action": "on top of the existing tile"
+        },
+        "existing_floor_action": "over_existing"
+      }
+    },
+    "expect": {
+      "existing_floor_action": "over_existing",
+      "gate_color": "yellow",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "material, fixing and layout are three separate things",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp click lock herringbone, 300 sq ft, austin",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "300 sq ft",
+          "city": "austin",
+          "fixing_method": "click lock",
+          "pattern": "herringbone"
+        },
+        "fixing_method": "click_lock",
+        "pattern": "herringbone"
+      }
+    },
+    "expect": {
+      "material_category": "LVP",
+      "fixing_method": "click_lock",
+      "pattern": "herringbone"
+    }
+  },
+  {
+    "name": "nail-down over a slab needs a subfloor first",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "hardwood nail down over the concrete slab, 300 sq ft, austin",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "hardwood",
+        "area_sqft": 300,
+        "city": "austin",
+        "evidence": {
+          "material": "hardwood",
+          "area_sqft": "300 sq ft",
+          "city": "austin",
+          "fixing_method": "nail down"
+        },
+        "fixing_method": "nail_down"
+      }
+    },
+    "expect": {
+      "fixing_method": "nail_down",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "mortar work is not in this price book",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp 300 sq ft austin, thinset over the slab",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "300 sq ft",
+          "city": "austin",
+          "fixing_method": "thinset"
+        },
+        "fixing_method": "thinset"
+      }
+    },
+    "expect": {
+      "fixing_method": "thinset",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "a service the firm does not offer is refused with the firm's own words",
+    "row": {
+      "zone_by_city": "core",
+      "services": [
+        {
+          "label": "tile and stone",
+          "we_do": false,
+          "match_words": "tile|porcelain|ceramic|mosaic|thinset|mortar|grout",
+          "answer": "We do not install tile or stone — happy to recommend a tile setter."
+        },
+        {
+          "label": "epoxy and garage coatings",
+          "we_do": false,
+          "match_words": "epoxy|garage coating",
+          "answer": "We do not do epoxy or garage coatings."
+        }
+      ],
+      "source_text": "i need porcelain tile in the bathroom, 120 sq ft, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "area_sqft": 120,
+        "city": "austin",
+        "evidence": {
+          "area_sqft": "120 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "out_of_scope": "tile and stone",
+      "gate_color": "red",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "a capability question about something we do not do can still be answered",
+    "row": {
+      "services": [
+        {
+          "label": "tile and stone",
+          "we_do": false,
+          "match_words": "tile|porcelain|ceramic|mosaic|thinset|mortar|grout",
+          "answer": "We do not install tile or stone — happy to recommend a tile setter."
+        },
+        {
+          "label": "epoxy and garage coatings",
+          "we_do": false,
+          "match_words": "epoxy|garage coating",
+          "answer": "We do not do epoxy or garage coatings."
+        }
+      ],
+      "source_text": "do you install epoxy garage floors?",
+      "extracted": {
+        "intent": "pre_sales_question",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "pre_sales",
+      "out_of_scope": "epoxy and garage coatings",
+      "handling": "auto"
+    }
+  },
+  {
+    "name": "the services table does not touch work the firm does do",
+    "row": {
+      "zone_by_city": "core",
+      "services": [
+        {
+          "label": "tile and stone",
+          "we_do": false,
+          "match_words": "tile|porcelain|ceramic|mosaic|thinset|mortar|grout",
+          "answer": "We do not install tile or stone — happy to recommend a tile setter."
+        },
+        {
+          "label": "epoxy and garage coatings",
+          "we_do": false,
+          "match_words": "epoxy|garage coating",
+          "answer": "We do not do epoxy or garage coatings."
+        }
+      ],
+      "source_text": "lvp, 300 sq ft, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "300 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "out_of_scope": null,
+      "gate_color": "green",
+      "pricing_allowed": true
+    }
+  },
+  {
+    "name": "vinyl tile is a product we sell, not the tile we refuse",
+    "row": {
+      "zone_by_city": "core",
+      "services": [
+        {
+          "label": "luxury vinyl plank",
+          "we_do": true,
+          "match_words": "lvp|lvt|luxury vinyl|vinyl plank|vinyl tile|spc|wpc|rigid core",
+          "answer": "Yes, LVP and rigid core are what we install most."
+        },
+        {
+          "label": "carpet",
+          "we_do": true,
+          "match_words": "carpet|carpet tile",
+          "answer": "Yes, we install carpet and pad."
+        },
+        {
+          "label": "tile and stone",
+          "we_do": false,
+          "match_words": "tile|porcelain|ceramic|mosaic|thinset|mortar|grout",
+          "answer": "We do not install tile or stone — happy to recommend a tile setter."
+        },
+        {
+          "label": "epoxy and garage coatings",
+          "we_do": false,
+          "match_words": "epoxy|garage coating",
+          "answer": "We do not do epoxy or garage coatings."
+        }
+      ],
+      "source_text": "i need vinyl tile, 300 sq ft, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "vinyl tile",
+        "area_sqft": 300,
+        "city": "austin",
+        "evidence": {
+          "material": "vinyl tile",
+          "area_sqft": "300 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "material_category": "LVP",
+      "out_of_scope": null,
+      "gate_color": "green"
+    }
+  },
+  {
+    "name": "asking about vinyl tile is not answered with a refusal",
+    "row": {
+      "services": [
+        {
+          "label": "luxury vinyl plank",
+          "we_do": true,
+          "match_words": "lvp|lvt|luxury vinyl|vinyl plank|vinyl tile|spc|wpc|rigid core",
+          "answer": "Yes, LVP and rigid core are what we install most."
+        },
+        {
+          "label": "carpet",
+          "we_do": true,
+          "match_words": "carpet|carpet tile",
+          "answer": "Yes, we install carpet and pad."
+        },
+        {
+          "label": "tile and stone",
+          "we_do": false,
+          "match_words": "tile|porcelain|ceramic|mosaic|thinset|mortar|grout",
+          "answer": "We do not install tile or stone — happy to recommend a tile setter."
+        },
+        {
+          "label": "epoxy and garage coatings",
+          "we_do": false,
+          "match_words": "epoxy|garage coating",
+          "answer": "We do not do epoxy or garage coatings."
+        }
+      ],
+      "source_text": "do you install vinyl tile?",
+      "extracted": {
+        "intent": "pre_sales_question",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "pre_sales",
+      "out_of_scope": null,
+      "handling": "auto"
+    }
+  },
+  {
+    "name": "carpet tile is carpet",
+    "row": {
+      "zone_by_city": "core",
+      "services": [
+        {
+          "label": "luxury vinyl plank",
+          "we_do": true,
+          "match_words": "lvp|lvt|luxury vinyl|vinyl plank|vinyl tile|spc|wpc|rigid core",
+          "answer": "Yes, LVP and rigid core are what we install most."
+        },
+        {
+          "label": "carpet",
+          "we_do": true,
+          "match_words": "carpet|carpet tile",
+          "answer": "Yes, we install carpet and pad."
+        },
+        {
+          "label": "tile and stone",
+          "we_do": false,
+          "match_words": "tile|porcelain|ceramic|mosaic|thinset|mortar|grout",
+          "answer": "We do not install tile or stone — happy to recommend a tile setter."
+        },
+        {
+          "label": "epoxy and garage coatings",
+          "we_do": false,
+          "match_words": "epoxy|garage coating",
+          "answer": "We do not do epoxy or garage coatings."
+        }
+      ],
+      "source_text": "carpet tile in the office, 400 sq ft, austin",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "carpet tile",
+        "area_sqft": 400,
+        "city": "austin",
+        "evidence": {
+          "material": "carpet tile",
+          "area_sqft": "400 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "material_category": "Carpet",
+      "out_of_scope": null
+    }
+  },
+  {
+    "name": "a broken pattern in the services table skips that rule, it does not stop the run",
+    "row": {
+      "zone_by_city": "core",
+      "services": [
+        {
+          "label": "broken rule",
+          "we_do": false,
+          "match_words": "tile[",
+          "answer": "x"
+        },
+        {
+          "label": "tile and stone",
+          "we_do": false,
+          "match_words": "tile|porcelain|ceramic|mosaic|thinset|mortar|grout",
+          "answer": "We do not install tile or stone — happy to recommend a tile setter."
+        },
+        {
+          "label": "epoxy and garage coatings",
+          "we_do": false,
+          "match_words": "epoxy|garage coating",
+          "answer": "We do not do epoxy or garage coatings."
+        }
+      ],
+      "source_text": "porcelain tile in the bathroom, 120 sq ft, austin",
+      "extracted": {
+        "intent": "new_quote",
+        "area_sqft": 120,
+        "city": "austin",
+        "evidence": {
+          "area_sqft": "120 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "out_of_scope": "tile and stone",
+      "gate_color": "red"
+    }
+  },
+  {
+    "name": "dimensions are multiplied instead of taken as an area",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp 12x10 in the bedroom, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "city": "austin",
+        "area_sqft": 12,
+        "evidence": {
+          "material": "lvp",
+          "city": "austin",
+          "area_sqft": "12x10"
+        }
+      }
+    },
+    "expect": {
+      "area_sqft": 120,
+      "area_status": "derived",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "a number that contradicts the words around it is refused",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp 2 bedrooms, 400 sq ft, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "city": "austin",
+        "area_sqft": 2,
+        "evidence": {
+          "material": "lvp",
+          "city": "austin",
+          "area_sqft": "2 bedrooms, 400 sq ft"
+        }
+      }
+    },
+    "expect": {
+      "area_sqft": null,
+      "area_status": "contradicted",
+      "gate_color": "red"
+    }
+  },
+  {
+    "name": "a count of rooms is not an area",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp in 2 rooms, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "city": "austin",
+        "area_sqft": 2,
+        "evidence": {
+          "material": "lvp",
+          "city": "austin",
+          "area_sqft": "2 rooms"
+        }
+      }
+    },
+    "expect": {
+      "area_sqft": null,
+      "area_status": "not_an_area",
+      "gate_color": "red"
+    }
+  },
+  {
+    "name": "metric in the body but not in the quoted words is asked about",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp, about 32 m2 of flooring, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "city": "austin",
+        "area_sqft": 32,
+        "evidence": {
+          "material": "lvp",
+          "city": "austin",
+          "area_sqft": "32"
+        }
+      }
+    },
+    "expect": {
+      "area_status": "known",
+      "gate_color": "red",
+      "missing_fields": [
+        "area_sqft"
+      ]
+    }
+  },
+  {
+    "name": "a product resolves through the catalogue before any blacklist",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "vinyl tile, 300 sq ft, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "vinyl tile",
+        "city": "austin",
+        "area_sqft": 300,
+        "evidence": {
+          "material": "vinyl tile",
+          "city": "austin",
+          "area_sqft": "300 sq ft"
+        }
+      },
+      "services": [
+        {
+          "label": "luxury vinyl plank",
+          "we_do": true,
+          "match_words": "lvp|vinyl plank|vinyl tile",
+          "answer": "Yes."
+        },
+        {
+          "label": "tile and stone",
+          "we_do": false,
+          "match_words": "tile|porcelain",
+          "answer": "We do not install tile."
+        }
+      ]
+    },
+    "expect": {
+      "product_status": "known",
+      "material_category": "LVP",
+      "out_of_scope": null
+    }
+  },
+  {
+    "name": "a signature written before areas had a status cannot suppress a quote",
+    "row": {
+      "prior_from_contact": 1,
+      "prior_signatures": [
+        {
+          "m": "LVP",
+          "a": 300
+        }
+      ],
+      "zone_by_city": "core",
+      "source_text": "lvp 300 sq ft austin",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "300 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "same_signature": false,
+      "category": "quote_request"
+    }
+  },
+  {
+    "name": "damage words plus a complete new job is a lead, not a warranty claim",
+    "row": {
+      "prior_from_contact": 3,
+      "zone_by_city": "core",
+      "source_text": "my old laminate is buckling and there are gaps by the door, i want it replaced. how much for about 355 sq ft of lvp in austin tx?",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 355,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "355 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "category": "quote_request",
+      "route": "quote"
+    }
+  },
+  {
+    "name": "damage words from a known contact with no new job is still a complaint",
+    "row": {
+      "prior_from_contact": 3,
+      "source_text": "the planks are buckling and there are gaps by the door",
+      "extracted": {
+        "intent": "follow_up",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "complaint",
+      "route": "support"
+    }
+  },
+  {
+    "name": "a warranty claim that names the material and area is still a complaint",
+    "row": {
+      "prior_from_contact": 3,
+      "zone_by_city": "core",
+      "source_text": "the 300 sq ft of lvp you installed in austin is buckling at the seams",
+      "extracted": {
+        "intent": "complaint",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "300 sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "category": "complaint",
+      "route": "support"
+    }
+  },
+  {
+    "name": "a single homeowner says I accept, not we accept",
+    "row": {
+      "prior_from_contact": 2,
+      "prior_offers": 1,
+      "source_text": "Thanks for the quote. Looks good to me, I accept. When can you start?",
+      "extracted": {
+        "intent": "follow_up",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "offer_response",
+      "route": "project",
+      "gate_color": "red"
+    }
+  },
+  {
+    "name": "looks good alone from a known contact is still an answer to an offer",
+    "row": {
+      "prior_from_contact": 2,
+      "prior_offers": 1,
+      "source_text": "That looks good, when could you come?",
+      "extracted": {
+        "intent": "follow_up",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "offer_response",
+      "route": "project",
+      "gate_color": "red"
+    }
+  },
+  {
+    "name": "looks good next to a complete new job is a new quote, not an acceptance",
+    "row": {
+      "prior_from_contact": 2,
+      "prior_offers": 1,
+      "source_text": "Your work looks good. Now I need LVP in the guest room, 240 sq ft, Austin TX, over the existing vinyl, glue down.",
+      "extracted": {
+        "intent": "quote_request",
+        "material": "lvp",
+        "area_sqft": 240,
+        "city": "Austin TX",
+        "existing_floor_action": "install_over",
+        "fixing_method": "glue_down",
+        "old_floor_removal": false,
+        "evidence": {
+          "material": "I need LVP in the guest room",
+          "area_sqft": "240 sq ft",
+          "city": "Austin TX",
+          "existing_floor_action": "over the existing vinyl",
+          "fixing_method": "glue down"
+        }
+      }
+    },
+    "expect": {
+      "category": "quote_request"
+    }
+  },
+  {
+    "name": "over my budget is pushback even in the singular",
+    "row": {
+      "prior_from_contact": 2,
+      "prior_offers": 1,
+      "source_text": "That is over my budget I am afraid, more than I expected.",
+      "extracted": {
+        "intent": "follow_up",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "offer_response",
+      "route": "project",
+      "gate_color": "red"
+    }
+  },
+  {
+    "name": "old floor coming out is removal, not a site visit",
+    "row": {
+      "prior_from_contact": 2,
+      "prior_offers": 0,
+      "source_text": "laminate for the hallway. It is about 210 sq ft, and the old vinyl needs to come out. Buda TX.",
+      "extracted": {
+        "intent": "scheduling",
+        "material": "laminate",
+        "area_sqft": 210,
+        "city": "Buda TX",
+        "existing_floor_action": "remove_first",
+        "old_floor_removal": true,
+        "evidence": {
+          "material": "laminate for the hallway",
+          "area_sqft": "about 210 sq ft",
+          "city": "Buda TX",
+          "existing_floor_action": "the old vinyl needs to come out"
+        }
+      }
+    },
+    "expect": {
+      "category": "quote_request"
+    }
+  },
+  {
+    "name": "asking someone to come out and measure is scheduling",
+    "row": {
+      "prior_from_contact": 2,
+      "prior_offers": 0,
+      "source_text": "Can you come out to measure next week?",
+      "extracted": {
+        "intent": "scheduling",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "scheduling",
+      "route": "project"
+    }
+  },
+  {
+    "name": "moving the appointment is scheduling even with the job data present",
+    "row": {
+      "prior_from_contact": 2,
+      "prior_offers": 0,
+      "source_text": "Can we move the appointment to Thursday? Still the same 210 sq ft of laminate in Buda TX.",
+      "extracted": {
+        "intent": "scheduling",
+        "material": "laminate",
+        "area_sqft": 210,
+        "city": "Buda TX",
+        "evidence": {
+          "material": "laminate",
+          "area_sqft": "210 sq ft",
+          "city": "Buda TX"
+        }
+      }
+    },
+    "expect": {
+      "category": "scheduling",
+      "route": "project"
+    }
+  },
+  {
+    "name": "moving furniture is not moving an appointment",
+    "row": {
+      "prior_from_contact": 0,
+      "prior_offers": 0,
+      "source_text": "I will move it to the garage myself before you arrive. LVP, 300 sq ft, Austin TX, over the existing vinyl, glue down, no stairs.",
+      "extracted": {
+        "intent": "quote_request",
+        "material": "lvp",
+        "area_sqft": 300,
+        "city": "Austin TX",
+        "existing_floor_action": "install_over",
+        "fixing_method": "glue_down",
+        "old_floor_removal": false,
+        "evidence": {
+          "material": "LVP",
+          "area_sqft": "300 sq ft",
+          "city": "Austin TX",
+          "existing_floor_action": "over the existing vinyl",
+          "fixing_method": "glue down"
+        }
+      }
+    },
+    "expect": {
+      "category": "quote_request"
+    }
+  },
+  {
+    "name": "a lift nobody mentioned cannot remove the upper-floor surcharge",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp on the third floor of my building, about 300 sq ft, round rock, tx.",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "LVP",
+        "area_sqft": 300,
+        "city": "Round Rock, TX",
+        "floor_level": "third floor",
+        "lift": true,
+        "evidence": {
+          "material": "lvp on the third floor",
+          "area_sqft": "about 300 sq ft",
+          "city": "round rock, tx",
+          "floor_level": "third floor"
+        }
+      }
+    },
+    "expect": {
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "a lift the email states is taken like any other fact",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp on the third floor of my building, about 300 sq ft, round rock, tx. there is a lift.",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "LVP",
+        "area_sqft": 300,
+        "city": "Round Rock, TX",
+        "floor_level": "third floor",
+        "lift": true,
+        "evidence": {
+          "material": "lvp on the third floor",
+          "area_sqft": "about 300 sq ft",
+          "city": "round rock, tx",
+          "floor_level": "third floor",
+          "lift": "there is a lift"
+        }
+      }
+    },
+    "expect": {
+      "pricing_allowed": true
+    }
+  },
+  {
+    "name": "a subject carrying the whole request is not an empty email",
+    "row": {
+      "body_empty": true,
+      "zone_by_city": "core",
+      "source_text": "how much for lvp in the living room, 320 sq ft, round rock tx?",
+      "extracted": {
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "quote_request"
+    }
+  },
+  {
+    "name": "an email with nothing in it at all is unknown",
+    "row": {
+      "body_empty": true,
+      "source_text": "",
+      "extracted": {
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "unknown",
+      "route": "review"
+    }
+  },
+  {
+    "name": "the twenty-first floor is not the first floor",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp on the 21st floor, about 300 sq ft, round rock, tx.",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "LVP",
+        "area_sqft": 300,
+        "city": "Round Rock, TX",
+        "floor_level": "21st floor",
+        "evidence": {
+          "material": "lvp on the 21st floor",
+          "area_sqft": "about 300 sq ft",
+          "city": "round rock, tx",
+          "floor_level": "21st floor"
+        }
+      }
+    },
+    "expect": {
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "a city nobody wrote cannot supply the zone when only the postcode was quoted",
+    "row": {
+      "zone_by_city": "core",
+      "zone_by_zip": null,
+      "source_text": "lvp, about 300 sq ft, 73301.",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "LVP",
+        "area_sqft": 300,
+        "city": "Round Rock",
+        "zip": "73301",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "about 300 sq ft",
+          "zip": "73301"
+        }
+      }
+    },
+    "expect": {
+      "geo_zone": null
+    }
+  }
+]

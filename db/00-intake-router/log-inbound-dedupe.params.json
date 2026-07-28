@@ -1,0 +1,3 @@
+{
+  "queryReplacement": "={{ [$json.gmail_message_id, $json.internet_message_id, $json.thread_id, $json.contact_email, $json.from_name, $json.source, $json.needs_sender_extraction, $json.body_clean, $json.body_raw, $json.body_html, $json.body_fully_quoted, $json.body_empty, $json.has_photo, $json.image_count, $json.pdf_count, $json.auto_submitted, $json.precedence, $json.list_unsubscribe, $json.contract_version, JSON.stringify($json.raw_email), $json.is_outbound ? 'outbound' : 'inbound', $json.is_outbound ? 'owner' : 'client', $json.is_outbound] }}"
+}

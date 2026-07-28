@@ -1,0 +1,140 @@
+{
+  "name": "90 Errors — Flooring",
+  "nodes": [
+    {
+      "id": "err-trg",
+      "name": "Any workflow failed",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "call-trg",
+      "name": "Called by a lane",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        400
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "note",
+      "name": "Purpose",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        200,
+        20
+      ],
+      "parameters": {
+        "width": 520,
+        "height": 140,
+        "content": "### 90 Errors\nTwo ways in: n8n hands over an uncaught crash, or a router lane hands over a failure it caught.\nBoth land in the same failures table.\nTechnical detail goes to whoever maintains this; the owner is told consequences, not causes."
+      }
+    },
+    {
+      "id": "norm",
+      "name": "Normalise failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const PG = 'Record failure';\n\nreturn $input.all().map((item, i) => {\n  const j = item.json || {};\n  const fromErrorTrigger = !!j.execution || !!j.workflow;\n\n  const message = fromErrorTrigger\n    ? (j.execution?.error?.message || j.execution?.lastNodeExecuted || 'workflow failed')\n    : (j._error\n       || (typeof j.error === 'string' ? j.error : j.error?.message)\n       || j.error?.description\n       || 'handled failure');\n\n  return {\n    json: {\n      source: fromErrorTrigger ? 'error_trigger' : 'router_lane',\n      workflow_name: j.workflow?.name || null,\n      workflow_id: j.workflow?.id || null,\n      execution_id: j.execution?.id ? String(j.execution.id) : null,\n      node_name: j.execution?.lastNodeExecuted || j._node || null,\n      message: String(message).slice(0, 2000),\n      gmail_message_id: j.gmail_message_id || null,\n      payload: j,\n    },\n    pairedItem: { item: i },\n  };\n});\n"
+      }
+    },
+    {
+      "id": "rec",
+      "name": "Record failure",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        760,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO failures (source, workflow_name, workflow_id, execution_id, node_name,\n  message, gmail_message_id, payload)\nVALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)\nRETURNING id, source, node_name, message;",
+        "options": {
+          "queryReplacement": "={{ [$json.source, $json.workflow_name, $json.workflow_id, $json.execution_id, $json.node_name, $json.message, $json.gmail_message_id, JSON.stringify($json.payload)] }}"
+        }
+      }
+    },
+    {
+      "id": "todo",
+      "name": "TODO notify the maintainer",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        300
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Any workflow failed": {
+      "main": [
+        [
+          {
+            "node": "Normalise failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Called by a lane": {
+      "main": [
+        [
+          {
+            "node": "Normalise failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise failure": {
+      "main": [
+        [
+          {
+            "node": "Record failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record failure": {
+      "main": [
+        [
+          {
+            "node": "TODO notify the maintainer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

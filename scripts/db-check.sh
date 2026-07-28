@@ -1,63 +1,77 @@
 #!/bin/sh
 set -e
 
-: "${DATABASE_URL:?DATABASE_URL is not set}"
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-TMP=schema_check_$$
-
-cleanup() { psql "$DATABASE_URL" -q -c "DROP SCHEMA IF EXISTS $TMP CASCADE" >/dev/null 2>&1 || true; }
+WORK=$(mktemp -d)
+OWNED=no
+cleanup() {
+  rm -rf "$WORK"
+  [ "$OWNED" = yes ] && psql "$CHECK_DATABASE_URL" -q \
+    -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1
+  return 0
+}
 trap cleanup EXIT
 
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q \
-  -c "CREATE SCHEMA $TMP; SET search_path TO $TMP;" \
-  -f "$ROOT/db/migrations/0001-schema.sql" \
-  -f "$ROOT/db/seeds/reference-data.sql" \
-  -f "$ROOT/db/seeds/reference-data.sql"
+: "${CHECK_DATABASE_URL:?CHECK_DATABASE_URL is not set — point it at an empty throwaway database. It gets written to.}"
 
-if [ "$1" != "--live" ]; then
-  echo "schema check passed: the baseline builds from empty and the seed loads into it twice"
-  exit 0
-fi
-
-DIFF=$(psql "$DATABASE_URL" -t -A -F'|' -v ON_ERROR_STOP=1 <<SQL
-WITH fresh AS (
-  SELECT table_name, column_name, data_type, is_nullable,
-         replace(coalesce(column_default, ''), '$TMP.', '') AS column_default
-    FROM information_schema.columns WHERE table_schema = '$TMP'),
-live AS (
-  SELECT table_name, column_name, data_type, is_nullable,
-         replace(coalesce(column_default, ''), 'public.', '') AS column_default
-    FROM information_schema.columns WHERE table_schema = 'public'),
-fresh_con AS (
-  SELECT c.conname::text AS name, replace(pg_get_constraintdef(c.oid), '$TMP.', '') AS def
-    FROM pg_constraint c WHERE c.connamespace = '$TMP'::regnamespace),
-live_con AS (
-  SELECT c.conname::text AS name, replace(pg_get_constraintdef(c.oid), 'public.', '') AS def
-    FROM pg_constraint c WHERE c.connamespace = 'public'::regnamespace),
-fresh_idx AS (
-  SELECT indexname::text AS name, replace(indexdef, '$TMP.', '') AS def
-    FROM pg_indexes WHERE schemaname = '$TMP'),
-live_idx AS (
-  SELECT indexname::text AS name, replace(indexdef, 'public.', '') AS def
-    FROM pg_indexes WHERE schemaname = 'public')
-SELECT 'column missing in live', table_name || '.' || column_name FROM (SELECT * FROM fresh EXCEPT SELECT * FROM live) x
-UNION ALL
-SELECT 'column only in live', table_name || '.' || column_name FROM (SELECT * FROM live EXCEPT SELECT * FROM fresh) x
-UNION ALL
-SELECT 'constraint missing in live', name || ' :: ' || def FROM (SELECT * FROM fresh_con EXCEPT SELECT * FROM live_con) x
-UNION ALL
-SELECT 'constraint only in live', name || ' :: ' || def FROM (SELECT * FROM live_con EXCEPT SELECT * FROM fresh_con) x
-UNION ALL
-SELECT 'index missing in live', name || ' :: ' || def FROM (SELECT * FROM fresh_idx EXCEPT SELECT * FROM live_idx) x
-UNION ALL
-SELECT 'index only in live', name || ' :: ' || def FROM (SELECT * FROM live_idx EXCEPT SELECT * FROM fresh_idx) x
-SQL
-)
-
-if [ -n "$DIFF" ]; then
-  echo "the live database does not match db/migrations/0001-schema.sql:"
-  echo "$DIFF" | sed 's/^/  /'
+EXISTING=$(psql "$CHECK_DATABASE_URL" -t -A -c \
+  "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'")
+if [ "$EXISTING" != "0" ]; then
+  echo "refusing to run: CHECK_DATABASE_URL already holds $EXISTING tables in public."
+  echo "it must be empty and disposable — never the database holding real data."
   exit 1
 fi
 
-echo "schema check passed: the live database matches the baseline, and the seed loads into it"
+OWNED=yes
+psql "$CHECK_DATABASE_URL" -v ON_ERROR_STOP=1 -q \
+  -f "$ROOT/db/schema.sql" \
+  -f "$ROOT/db/seeds/reference-data.sql"
+
+counts() {
+  psql "$CHECK_DATABASE_URL" -t -A -c "SELECT
+    (SELECT count(*) FROM price_bands)   || ' price bands, '   ||
+    (SELECT count(*) FROM pricing_rules) || ' pricing rules, ' ||
+    (SELECT count(*) FROM service_area)  || ' service areas, ' ||
+    (SELECT count(*) FROM services)      || ' services'"
+}
+
+FIRST=$(counts)
+psql "$CHECK_DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$ROOT/db/seeds/reference-data.sql"
+SECOND=$(counts)
+
+if [ "$FIRST" != "$SECOND" ]; then
+  echo "the seed is not idempotent: $FIRST after one load, $SECOND after two"
+  exit 1
+fi
+
+structure() {
+  psql "$1" -t -A -c "
+    SELECT 'column     ' || table_name || '.' || column_name || ' ' || data_type || ' ' ||
+           is_nullable || ' ' || coalesce(column_default, '-')
+      FROM information_schema.columns WHERE table_schema = 'public'
+    UNION ALL
+    SELECT 'constraint ' || conname || ' ' || pg_get_constraintdef(oid)
+      FROM pg_constraint WHERE connamespace = 'public'::regnamespace
+    UNION ALL
+    SELECT 'index      ' || indexname || ' ' || replace(indexdef, 'public.', '')
+      FROM pg_indexes WHERE schemaname = 'public'
+    ORDER BY 1"
+}
+
+if [ "$1" != "--live" ]; then
+  echo "schema check passed: the baseline builds from empty, and the seed leaves $FIRST whether loaded once or twice"
+  exit 0
+fi
+
+: "${DATABASE_URL:?DATABASE_URL is not set — needed to read the live schema. It is only ever read from.}"
+
+structure "$CHECK_DATABASE_URL" > "$WORK/fresh"
+structure "$DATABASE_URL"       > "$WORK/live"
+
+if ! diff "$WORK/fresh" "$WORK/live" > "$WORK/diff"; then
+  echo "the live database does not match db/schema.sql:"
+  sed -n 's/^< /  only in db\/schema.sql:   /p; s/^> /  only in the live database: /p' "$WORK/diff"
+  exit 1
+fi
+
+echo "schema check passed: the live database matches db/schema.sql, and the seed is idempotent"

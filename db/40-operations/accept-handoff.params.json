@@ -1,0 +1,3 @@
+{
+  "queryReplacement": "={{ [$json.gmail_message_id, 'digest_pending', '40 Operations — Flooring'] }}"
+}

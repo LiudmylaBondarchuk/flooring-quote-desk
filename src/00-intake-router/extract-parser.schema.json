@@ -1,0 +1,217 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "intent",
+    "material",
+    "area_sqft",
+    "rooms",
+    "floor_level",
+    "lift",
+    "pattern",
+    "subfloor_flag",
+    "old_floor_removal",
+    "city",
+    "zip",
+    "urgency",
+    "is_commercial",
+    "existing_floor",
+    "existing_floor_action",
+    "fixing_method",
+    "evidence"
+  ],
+  "properties": {
+    "intent": {
+      "type": "string"
+    },
+    "material": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "area_sqft": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "rooms": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "floor_level": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "lift": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "pattern": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "subfloor_flag": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "old_floor_removal": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "city": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "zip": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "urgency": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "is_commercial": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "existing_floor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "existing_floor_action": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "fixing_method": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "material",
+        "area_sqft",
+        "city",
+        "zip",
+        "floor_level",
+        "lift",
+        "pattern",
+        "subfloor_flag",
+        "old_floor_removal",
+        "existing_floor",
+        "existing_floor_action",
+        "fixing_method",
+        "is_commercial"
+      ],
+      "properties": {
+        "material": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "area_sqft": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "city": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "zip": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "floor_level": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lift": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pattern": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subfloor_flag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "old_floor_removal": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "existing_floor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "existing_floor_action": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fixing_method": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "is_commercial": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

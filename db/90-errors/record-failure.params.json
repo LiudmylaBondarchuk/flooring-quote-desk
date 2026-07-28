@@ -1,0 +1,3 @@
+{
+  "queryReplacement": "={{ [$json.source, $json.workflow_name, $json.workflow_id, $json.execution_id, $json.node_name, $json.message, $json.gmail_message_id, JSON.stringify($json.payload)] }}"
+}

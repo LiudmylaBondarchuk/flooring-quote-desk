@@ -43,7 +43,8 @@ CREATE TABLE offers (
 
     CONSTRAINT offers_status_known  CHECK (status IN ('draft', 'sent', 'accepted', 'declined', 'expired')),
     CONSTRAINT offers_outcome_known CHECK (outcome IS NULL OR outcome IN ('won', 'lost')),
-    CONSTRAINT offers_total_sane    CHECK (total_low IS NULL OR total_low >= 0),
+    CONSTRAINT offers_total_sane    CHECK ((total_low  IS NULL OR total_low  >= 0)
+                                        AND (total_high IS NULL OR total_high >= 0)),
     CONSTRAINT offers_total_ordered CHECK (total_high IS NULL OR total_low IS NULL OR total_high >= total_low)
 );
 
@@ -59,7 +60,7 @@ CREATE TABLE messages (
     direction                 text        NOT NULL,
     sender                    text        NOT NULL,
     source                    text        NOT NULL DEFAULT 'gmail_direct',
-    contact_email             text        NOT NULL DEFAULT '',
+    contact_email             text,
     from_name                 text        NOT NULL DEFAULT '',
     is_outbound               boolean     NOT NULL DEFAULT false,
     needs_sender_extraction   boolean     NOT NULL DEFAULT false,
@@ -84,9 +85,11 @@ CREATE TABLE messages (
     extraction_schema_version text,
 
     category                  text        NOT NULL DEFAULT 'unknown',
+    matched_rule              text,
+    out_of_scope              text,
     route                     text        NOT NULL DEFAULT 'review',
     handling                  text        NOT NULL DEFAULT 'manual_review',
-    gate_color                text,
+    gate_color                text        DEFAULT 'yellow',
     gate_reasons              jsonb       NOT NULL DEFAULT '[]'::jsonb,
     missing_fields            jsonb       NOT NULL DEFAULT '[]'::jsonb,
     dropped_fields            jsonb       NOT NULL DEFAULT '[]'::jsonb,
@@ -143,6 +146,7 @@ CREATE TABLE messages (
     CONSTRAINT messages_pricing_needs_known_area CHECK (pricing_allowed = false OR area_status = 'known'),
     CONSTRAINT messages_auto_reply_is_safe CHECK (handling <> 'auto'
         OR (danger = false AND category IN ('pre_sales', 'quote_request'))),
+    CONSTRAINT messages_queued_work_has_a_colour CHECK (handling <> 'manual_review' OR gate_color IS NOT NULL),
     CONSTRAINT messages_handoff_is_stamped CHECK ((handled_by IS NULL) = (handoff_at IS NULL))
 );
 
@@ -174,10 +178,11 @@ CREATE TABLE price_bands (
     rate_low     numeric(10, 2) NOT NULL,
     rate_high    numeric(10, 2) NOT NULL,
     wastage_pct  integer        NOT NULL DEFAULT 10,
-    min_charge   numeric(10, 2) NOT NULL,
+    min_charge   numeric(10, 2),
     notes        text,
 
     CONSTRAINT price_bands_component_known CHECK (component IN ('floor', 'stairs', 'trim')),
+    CONSTRAINT price_bands_floor_has_minimum CHECK (component <> 'floor' OR min_charge IS NOT NULL),
     CONSTRAINT price_bands_unit_known  CHECK (unit IN ('sqft', 'sqyd', 'each', 'job')),
     CONSTRAINT price_bands_range_sane  CHECK (rate_low > 0 AND rate_high >= rate_low),
     CONSTRAINT price_bands_wastage_pct CHECK (wastage_pct BETWEEN 0 AND 100)
@@ -224,6 +229,8 @@ CREATE TABLE failures (
 
 CREATE INDEX failures_open_idx ON failures (created_at DESC) WHERE resolved_at IS NULL;
 
+COMMENT ON COLUMN messages.contact_email IS
+    'Null when the sender is unknown — a platform lead with no reply-to. Null never matches null, so an unknown sender cannot inherit anyone else''s history.';
 COMMENT ON COLUMN messages.extracted IS
     'What the model claimed. Never constrained, never trusted on its own.';
 COMMENT ON COLUMN messages.intent IS
@@ -233,13 +240,17 @@ COMMENT ON COLUMN messages.category IS
 COMMENT ON COLUMN messages.dropped_fields IS
     'Values the model produced that no words in the email supported.';
 COMMENT ON COLUMN messages.body_raw IS
-    'The email as it arrived. body holds the same text with the quoted history removed.';
+    'The text the email carried: its plain part, or the plain text recovered from its HTML. body holds the same text with the quoted history removed, body_html the markup it came in.';
 COMMENT ON COLUMN messages.area_sqft IS
     'Square feet the gate accepted. area_status says how it got there: stated, converted or derived.';
 COMMENT ON COLUMN services.priority IS
-    'Lower wins when an email matches more than one entry. "vinyl tile" is plank work, not tile work.';
+    'Order within one side of the catalogue. What the firm does is always checked before what it refuses, in code.';
+COMMENT ON COLUMN messages.matched_rule IS
+    'Which of the classification rules fired. The only record of why this email went where it went.';
 COMMENT ON COLUMN offers.total_low IS
     'A quote for this work is a range, not a number. final_amount holds what was actually agreed.';
+COMMENT ON COLUMN price_bands.min_charge IS
+    'A minimum applies to a floor job. Stairs are charged per step and carry no minimum of their own.';
 COMMENT ON COLUMN price_bands.component IS
     'Floors are priced per square foot, stairs per step. The component decides which unit applies.';
 COMMENT ON COLUMN messages.pricing_allowed IS
