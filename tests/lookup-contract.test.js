@@ -72,3 +72,26 @@ test('the catalogue puts everything the firm does ahead of everything it refuses
   const priorities = rows.map((r) => r.priority);
   assert.equal(new Set(priorities).size, priorities.length, 'two catalogue entries share a priority');
 });
+
+test('what the model wrote crosses into Postgres without a control character', () => {
+  const expression = JSON.parse(readFileSync(
+    join(root, 'db', '00-intake-router', 'lookup-geo-catalogue-history.params.json'), 'utf8'))
+    .queryReplacement.replace(/^=\{\{\s*/, '').replace(/\s*\}\}$/, '');
+  const build = new Function('$json', '$', `return ${expression}`);
+
+  const mangled = `m${String.fromCharCode(0)}${String.fromCharCode(2)}`;
+  const wrapped = `round${String.fromCharCode(10)}rock`;
+  const [extracted] = build(
+    { output: { area_unit: 'sqm', city: wrapped, evidence: { area_unit: mangled, city: wrapped } } },
+    () => ({ item: { json: {} } }));
+
+  assert.ok(![...extracted].some((c) => c.charCodeAt(0) < 0x20),
+    'a control character reached the jsonb parameter — Postgres refuses NUL in text, and one of ' +
+    'them kills the lookup and takes the rest of the batch with it');
+  assert.ok(!extracted.includes('\\u0000'),
+    'the control character survived as an escape sequence: stripping after JSON.stringify looks ' +
+    'right and does nothing, because by then the byte is six ordinary characters');
+  assert.ok(extracted.includes('round rock'),
+    'a line break inside a quote was deleted rather than replaced, which glues the words together ' +
+    'and makes the gate call an honest quote a fabrication');
+});

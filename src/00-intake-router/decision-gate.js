@@ -54,7 +54,14 @@ const AREA_UNITS = {
 };
 const AREA_UNIT_WHITELIST = Object.keys(AREA_UNITS);
 const SQFT_QUOTED = /sq ?\.? ?ft|square feet|\bsf\b/i;
+const UNIT_SPELLED = {
+  sqft: /sq ?\.? ?ft|square feet|\bsf\b|\bfeet\b|\bfoot\b/i,
+  sqm: /\bm2\b|m²|sq ?m\b|square met|\bmet(er|re)s?\b/i,
+  sqyd: /sq ?\.? ?yds?\b|square yards?|\byards?\b/i,
+};
 const METRIC_QUOTED = /\bm2\b|m²|sq ?m\b|square met|metr/i;
+const LINEAR_FEET = /\bft\b|\bfeet\b|\bfoot\b|\d\s*'/i;
+const LINEAR_METRES = /\bm\b|\bmet(er|re)s?\b/i;
 const DIMENSIONS = /(\d+(?:[.,]\d+)?)\s*(?:x|×|by)\s*(\d+(?:[.,]\d+)?)/i;
 const COUNT_NOT_AREA = /\b(rooms?|bedrooms?|bathrooms?|units?|pieces?|boxes?)\b/i;
 
@@ -86,8 +93,16 @@ const asQuantity = (value, evidenceText, unit) => {
   }
   if (dims.length === 1) {
     const product = num(dims[0][1]) * num(dims[0][2]);
-    return { status: 'derived', sqft: Math.round(product), unit: 'sqft',
-      note: `${dims[0][1]} x ${dims[0][2]} multiplied to ${Math.round(product)} sq ft` };
+    const side = unit || (LINEAR_FEET.test(ev) ? 'sqft' : (LINEAR_METRES.test(ev) ? 'sqm' : null));
+    if (!side) {
+      return { status: 'no_unit', sqft: null, unit: null,
+        note: `"${ev}" multiplies to ${Math.round(product)}, but neither side says feet or metres — ask` };
+    }
+    const converted = Math.round(product * AREA_UNITS[side].factor);
+    return { status: 'derived', sqft: converted, unit: side,
+      note: side === 'sqft'
+        ? `${dims[0][1]} x ${dims[0][2]} multiplied to ${converted} sq ft`
+        : `${dims[0][1]} x ${dims[0][2]} ${AREA_UNITS[side].spoken} multiplied and converted to ${converted} sq ft` };
   }
   if (COUNT_NOT_AREA.test(ev) && !stated.length) {
     return { status: 'not_an_area', sqft: null, unit: null, note: `"${ev}" counts things, it is not an area` };
@@ -104,7 +119,7 @@ const asQuantity = (value, evidenceText, unit) => {
   }
   if (SQFT_QUOTED.test(ev)) return { status: 'known', sqft: Math.round(raw), unit: 'sqft', note: null };
   return { status: 'no_unit', sqft: null, unit: null,
-    note: `"${ev}" is a number with no unit beside it — ask whether it is square feet or metres` };
+    note: `"${ev}" is a number with no unit beside it — ask whether it is square feet, square metres or square yards` };
 };
 
 const asPlace = (zone, located) => {
@@ -206,7 +221,13 @@ for (const item of $input.all()) {
   const declined = product.status === 'out_of_scope' ? declinedRaw : null;
 
   const areaUnitRaw = norm(take('area_unit', ex.area_unit));
-  const areaUnit = AREA_UNIT_WHITELIST.includes(areaUnitRaw) ? areaUnitRaw : null;
+  const areaUnitSpelledOut = AREA_UNIT_WHITELIST.includes(areaUnitRaw)
+    && UNIT_SPELLED[areaUnitRaw].test(String(ev.area_unit ?? ''));
+  const areaUnit = areaUnitSpelledOut ? areaUnitRaw : null;
+  if (areaUnitRaw && !areaUnitSpelledOut) {
+    reasons.push(`the unit was given as "${areaUnitRaw}" but the words quoted for it were `
+      + `"${ev.area_unit}" — the two do not agree, so no unit was accepted`);
+  }
   const quantity = asQuantity(take('area_sqft', ex.area_sqft), ev.area_sqft, areaUnit);
   const area = quantity.sqft;
   const areaOk = Number.isFinite(area) && area > 0;

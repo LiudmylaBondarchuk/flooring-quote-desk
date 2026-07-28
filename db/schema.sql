@@ -258,7 +258,7 @@ COMMENT ON COLUMN messages.dropped_fields IS
 COMMENT ON COLUMN messages.body_raw IS
     'The text the email carried: its plain part, or the plain text recovered from its HTML. body holds the same text with the quoted history removed, body_html the markup it came in.';
 COMMENT ON COLUMN messages.area_unit IS
-    'The unit the customer wrote beside the number, read from the email and never assumed. Null means the email gave a number with no unit, which is a question for a human, not a default.';
+    'The unit the gate accepted for the area, read from the words the customer wrote and never assumed. Null means no unit was accepted — area_status says whether that was a number without one, a number that contradicted itself, or no number at all.';
 COMMENT ON COLUMN messages.area_sqft IS
     'Square feet the gate accepted, when it accepted one. area_status says how the number got there, and its own constraint says what that can be.';
 COMMENT ON COLUMN services.priority IS

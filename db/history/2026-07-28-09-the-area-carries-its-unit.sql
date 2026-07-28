@@ -17,6 +17,6 @@ ALTER TABLE messages ADD CONSTRAINT messages_area_unit_known
     CHECK (area_unit IS NULL OR area_unit IN ('sqft', 'sqm', 'sqyd'));
 
 COMMENT ON COLUMN messages.area_unit IS
-    'The unit the customer wrote beside the number, read from the email and never assumed. Null means the email gave a number with no unit, which is a question for a human, not a default.';
+    'The unit the gate accepted for the area, read from the words the customer wrote and never assumed. Null means no unit was accepted — area_status says whether that was a number without one, a number that contradicted itself, or no number at all.';
 
 COMMIT;

@@ -1248,7 +1248,7 @@
     "name": "dimensions are multiplied instead of taken as an area",
     "row": {
       "zone_by_city": "core",
-      "source_text": "lvp 12x10 in the bedroom, austin tx",
+      "source_text": "lvp 12x10 ft in the bedroom, austin tx",
       "extracted": {
         "intent": "new_quote",
         "material": "lvp",
@@ -1257,15 +1257,17 @@
         "evidence": {
           "material": "lvp",
           "city": "austin",
-          "area_sqft": "12x10"
+          "area_sqft": "12x10 ft"
         }
       }
     },
     "expect": {
       "area_sqft": 120,
       "area_status": "derived",
+      "area_unit": "sqft",
       "pricing_allowed": false
-    }
+    },
+    "why": "Two numbers with a cross between them are a room, not an area, and multiplying them is the only way to get one. The sides still have to say what they measure: twelve by ten feet and twelve by ten metres differ by a factor of ten, and the gate is not allowed to pick for the customer."
   },
   {
     "name": "a number that contradicts the words around it is refused",
@@ -2037,6 +2039,59 @@
     "expect": {
       "dropped_fields": [],
       "geo_zone": "core"
+    }
+  },
+  {
+    "name": "dimensions with no unit on either side are a question too",
+    "why": "The rule that a bare number must not be assumed to be square feet does not stop being true when the number arrives as a multiplication. Twelve by ten is a hundred and twenty of something, and nothing in the email says of what.",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp 12x10 in the bedroom, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "city": "austin",
+        "area_sqft": 12,
+        "evidence": {
+          "material": "lvp",
+          "city": "austin",
+          "area_sqft": "12x10"
+        }
+      }
+    },
+    "expect": {
+      "area_sqft": null,
+      "area_status": "no_unit",
+      "gate_color": "red",
+      "pricing_allowed": false
+    }
+  },
+  {
+    "name": "a unit that does not match the words quoted for it is not a unit",
+    "why": "Grounding proves the quoted words are in the email; it cannot prove the value means them. A model that answers sqft while quoting m2 would have the gate store the metric number unconverted — the tenfold error the unit field exists to prevent, arriving through the field itself.",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp, about 32 m² in austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 32,
+        "area_unit": "sqft",
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "32",
+          "area_unit": "m²",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "area_sqft": null,
+      "area_status": "no_unit",
+      "area_unit": null,
+      "gate_color": "red",
+      "pricing_allowed": false
     }
   }
 ]
