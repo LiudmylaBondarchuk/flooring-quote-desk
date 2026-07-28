@@ -432,7 +432,12 @@
         "part": "array"
       },
       "prompt": true,
-      "fixture_field": "extracted.area_unit"
+      "why_no_fixture_field": [
+        "This list is what the gate stores, not what the model may write. A customer writes sq ft,",
+        "square metres, sq yd; the gate reads whichever of those it sees and keeps the one name.",
+        "Holding fixtures to the stored spelling would forbid them from testing the reading, which",
+        "is the part that goes wrong. What the gate emits is checked by the reachability arm instead."
+      ]
     },
     "comparable_area": {
       "means": "the area_status values solid enough to compare one job against another. A guess is not a signature.",

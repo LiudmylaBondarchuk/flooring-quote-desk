@@ -220,13 +220,21 @@ for (const item of $input.all()) {
   }
   const declined = product.status === 'out_of_scope' ? declinedRaw : null;
 
+  const unitInWords = (text) => {
+    const s = String(text ?? '');
+    for (const unit of AREA_UNIT_WHITELIST) if (UNIT_SPELLED[unit].test(s)) return unit;
+    return null;
+  };
   const areaUnitRaw = norm(take('area_unit', ex.area_unit));
-  const areaUnitSpelledOut = AREA_UNIT_WHITELIST.includes(areaUnitRaw)
-    && UNIT_SPELLED[areaUnitRaw].test(String(ev.area_unit ?? ''));
-  const areaUnit = areaUnitSpelledOut ? areaUnitRaw : null;
-  if (areaUnitRaw && !areaUnitSpelledOut) {
-    reasons.push(`the unit was given as "${areaUnitRaw}" but the words quoted for it were `
-      + `"${ev.area_unit}" — the two do not agree, so no unit was accepted`);
+  const unitClaimed = unitInWords(areaUnitRaw);
+  const unitQuoted = unitInWords(ev.area_unit);
+  const areaUnit = unitClaimed && unitClaimed === unitQuoted ? unitClaimed : null;
+  if (areaUnitRaw && !areaUnit) {
+    reasons.push(unitQuoted
+      ? `the unit was given as "${areaUnitRaw}" but the words quoted for it read as `
+        + `${unitQuoted} — the two do not agree, so no unit was accepted`
+      : `"${areaUnitRaw}" was offered as the unit and the words quoted for it, `
+        + `"${ev.area_unit}", name no unit at all`);
   }
   const quantity = asQuantity(take('area_sqft', ex.area_sqft), ev.area_sqft, areaUnit);
   const area = quantity.sqft;

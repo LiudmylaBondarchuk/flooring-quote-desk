@@ -2093,5 +2093,31 @@
       "gate_color": "red",
       "pricing_allowed": false
     }
+  },
+  {
+    "name": "the unit is read as the customer spells it, not as the schema names it",
+    "why": "The model answers in the words of the email, and a person writes sq ft, not sqft. Demanding the schema's own spelling threw away a perfectly grounded unit and asked the customer for something they had already given — which is the failure the order layer exists to stop.",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "lvp in the living room, about 320 sq ft, austin tx",
+      "extracted": {
+        "intent": "new_quote",
+        "material": "lvp",
+        "area_sqft": 320,
+        "area_unit": "sq ft",
+        "city": "austin",
+        "evidence": {
+          "material": "lvp",
+          "area_sqft": "320",
+          "area_unit": "sq ft",
+          "city": "austin"
+        }
+      }
+    },
+    "expect": {
+      "area_sqft": 320,
+      "area_status": "known",
+      "area_unit": "sqft"
+    }
   }
 ]
