@@ -687,6 +687,32 @@
         1988,
         304
       ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH updated AS (\n  UPDATE messages SET\n    category        = 'unknown',\n    route           = 'review',\n    handling        = 'manual_review',\n    gate_color      = 'red',\n    pricing_allowed = false,\n    gate_reasons    = jsonb_build_array($2::text)\n  WHERE gmail_message_id = $1\n  RETURNING gmail_message_id\n)\nSELECT\n  $1::text                        AS gmail_message_id,\n  $2::text                        AS _error,\n  'Save triage'::text             AS _node,\n  (SELECT count(*) FROM updated)::int AS rows_updated;",
+        "options": {
+          "queryReplacement": "={{ [$('Decision gate').item.json.gmail_message_id, 'the decision could not be stored — ' + ($json.message || 'no reason given')] }}"
+        }
+      },
+      "id": "c1f2a3b4-5566-4777-8888-99aabbccddee",
+      "name": "Say the write was refused",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1848,
+        564
+      ],
+      "retryOnFail": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "onError": "continueErrorOutput"
     }
   ],
   "connections": {
@@ -792,7 +818,7 @@
         ],
         [
           {
-            "node": "→ 90 Errors",
+            "node": "Say the write was refused",
             "type": "main",
             "index": 0
           }
@@ -952,6 +978,29 @@
           },
           {
             "node": "→ 50 Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Say the write was refused": {
+      "main": [
+        [
+          {
+            "node": "→ 50 Review",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "→ 90 Errors",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "→ 90 Errors",
             "type": "main",
             "index": 0
           }
