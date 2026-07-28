@@ -32,8 +32,11 @@ const promptBody = (path) => {
   return text === null ? null : text.split('\n---\n').slice(1).join('\n---\n').trim();
 };
 
+const only = process.argv.slice(2).filter((a) => !a.startsWith('-'));
+
 let changed = 0;
 for (const file of readdirSync(join(root, 'workflows')).filter((f) => f.endsWith('.json'))) {
+  if (only.length && !only.some((want) => file.startsWith(want))) continue;
   const exported = JSON.parse(readFileSync(join(root, 'workflows', file), 'utf8'));
   const id = process.env[`WF_${file.replace(/\W/g, '_').toUpperCase()}`];
   const live = await api(`/workflows?limit=100`).then((r) =>
