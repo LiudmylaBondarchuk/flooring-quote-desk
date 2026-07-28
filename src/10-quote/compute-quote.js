@@ -1,7 +1,7 @@
 const PRICING_VERSION = 'quote-v1';
 const CURRENCY = 'USD';
 const PRICED_UNIT = 'sqft';
-const RATE_BASIS = "rates come from published US cost guides, not this firm's own price list";
+const RATE_BASIS = 'rates are this firm\'s own price list as it stood when the quote was made, and the rates used are written into this breakdown';
 
 const LINE_KINDS = { floor: 'floor', removal: 'removal', minimum: 'minimum' };
 
@@ -16,7 +16,10 @@ const REFUSALS = [
   ['no_removal_rate',     (f) => f.removal && f.removalRate === null],
 ];
 
-const money = (n) => Math.round(n * 100) / 100;
+// Math.round(n * 100) reads the half-cent off a binary float, and 10.075 * 100 is 1007.4999...,
+// so the cent goes down when it should go up. Rounding through the decimal exponent asks
+// JavaScript for the shortest decimal that is this float, and rounds that instead.
+const money = (n) => Number(`${Math.round(Number(`${n}e2`))}e-2`);
 
 const num = (v) => {
   if (v === null || v === undefined || v === '') return null;
@@ -100,7 +103,9 @@ const priceOne = (row) => {
   const floorLines = [];
   const minimumLines = [];
   const priced = bands.map((b) => {
-    const quantity = money(area * (1 + b.wastage / 100));
+    // square feet rounded to cents is not a unit of anything. Rounding it here and then
+    // multiplying by a rate loses precision before the only place it means money.
+    const quantity = area * (1 + b.wastage / 100);
     const floorLow = money(quantity * b.low);
     const floorHigh = money(quantity * b.high);
     floorLines.push({
@@ -108,7 +113,7 @@ const priceOne = (row) => {
       label: b.label,
       source: 'price_bands',
       unit: PRICED_UNIT,
-      quantity,
+      quantity: money(quantity),
       wastage_pct: b.wastage,
       rate_low: b.low,
       rate_high: b.high,

@@ -146,8 +146,8 @@ for (const [index, { name, row, expect }] of fixtures.entries()) {
     const kinds = result.breakdown.lines.map((l) => LINE_KINDS.indexOf(l.kind));
     assert.deepEqual(kinds, [...kinds].sort((a, b) => a - b),
       'the breakdown lines are not grouped in the order the kinds are declared');
-    assert.ok(result.breakdown.basis.includes('cost guides'),
-      'the breakdown does not say the rates come from published guides rather than this firm');
+    assert.ok(result.breakdown.basis.includes("firm's own price list"),
+      'the breakdown does not say whose price list these rates are');
   });
 
   test(`removal is charged on the floor that is there, not on the one that is bought — ${name}`, () => {
