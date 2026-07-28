@@ -140,6 +140,8 @@ CREATE TABLE messages (
         'click_lock', 'floating', 'glue_down', 'nail_down', 'staple_down',
         'loose_lay', 'peel_and_stick', 'mortar_set', 'thinset')),
 
+    CONSTRAINT messages_area_sane CHECK (area_sqft IS NULL
+        OR (area_sqft > 0 AND area_sqft < 1000000)),
     CONSTRAINT messages_pricing_is_green_quote CHECK (pricing_allowed = false
         OR (category = 'quote_request' AND gate_color = 'green')),
     CONSTRAINT messages_pricing_never_dangerous CHECK (pricing_allowed = false OR danger = false),
