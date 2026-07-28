@@ -128,6 +128,7 @@ CREATE TABLE messages (
     pdf_count                 integer     NOT NULL DEFAULT 0,
 
     extracted                 jsonb,
+    settled                   jsonb,
     intent                    text,
     prompt_version            text,
     extraction_schema_version text,
@@ -349,5 +350,8 @@ COMMENT ON COLUMN price_bands.active IS
     'False means the row left the spreadsheet. Nothing quotes it; everything already quoted against it still reads.';
 COMMENT ON TABLE price_band_events IS
     'One row per field a sync changed. Answers "why is this price different from last month" without a backup.';
+
+COMMENT ON COLUMN messages.settled IS
+    'The facts the gate stood behind for this message, as it handed them to the merge. Distinct from the reported columns beside it, which show what the customer wrote even where it was refused.';
 
 COMMIT;

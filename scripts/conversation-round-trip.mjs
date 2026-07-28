@@ -166,6 +166,92 @@ console.log('\none customer, three emails, the facts arriving in pieces');
   check('and changes nothing', orderOf(third.order_id).area_sqft, 450);
 }
 
+console.log('\na question first, then the work');
+{
+  const asked = arrive({
+    id: 'q1', thread: 'th-q', from: 'quinn@example.com',
+    text: 'hi, do you install laminate? cedar park tx',
+    extracted: { intent: 'pre_sales_question', material: 'laminate', city: 'cedar park',
+      evidence: { material: 'laminate', city: 'cedar park' } },
+  });
+  check('a question about what the firm does opens no order', asked.order_id, null);
+
+  const then = arrive({
+    id: 'q2', thread: 'th-q', from: 'quinn@example.com',
+    text: 'great — it is about 450 sq ft',
+    extracted: { intent: 'new_quote', area_sqft: 450, area_unit: 'sqft',
+      evidence: { area_sqft: '450', area_unit: 'sq ft' } },
+  });
+  check('the second email opens one', then.order_id !== null, true);
+  check('and it already knows the material from the question', orderOf(then.order_id).material_category, 'Laminate');
+  check('and the town', orderOf(then.order_id).city, 'cedar park');
+  check('with the area from this email', orderOf(then.order_id).area_sqft, 450);
+  check('so nothing is left to ask for', missing(then.merged.still_missing), []);
+}
+
+console.log('\ntwo questions, the second correcting the first, then the work');
+{
+  arrive({
+    id: 'r1', thread: 'th-r', from: 'rosa@example.com',
+    text: 'hi, do you do carpet? buda tx',
+    extracted: { intent: 'pre_sales_question', material: 'carpet', city: 'buda',
+      evidence: { material: 'carpet', city: 'buda' } },
+  });
+  arrive({
+    id: 'r2', thread: 'th-r', from: 'rosa@example.com',
+    text: 'actually i think laminate, and it is kyle tx not buda',
+    extracted: { intent: 'pre_sales_question', material: 'laminate', city: 'kyle',
+      evidence: { material: 'laminate', city: 'kyle' } },
+  });
+  const work = arrive({
+    id: 'r3', thread: 'th-r', from: 'rosa@example.com',
+    text: 'about 260 sq ft',
+    extracted: { intent: 'new_quote', area_sqft: 260, area_unit: 'sqft',
+      evidence: { area_sqft: '260', area_unit: 'sq ft' } },
+  });
+  check('the later question wins on material', orderOf(work.order_id).material_category, 'Laminate');
+  check('and on the town', orderOf(work.order_id).city, 'kyle');
+  check('the order still has this email\'s area', orderOf(work.order_id).area_sqft, 260);
+}
+
+console.log('\na thread where an earlier message settled nothing at all');
+{
+  arrive({
+    id: 's1', thread: 'th-s', from: 'sam@example.com',
+    text: 'hello?',
+    extracted: { intent: 'pre_sales_question', evidence: {} },
+  });
+  const work = arrive({
+    id: 's2', thread: 'th-s', from: 'sam@example.com',
+    text: 'vinyl in the kitchen, 140 sq ft, hutto tx',
+    extracted: { intent: 'new_quote', material: 'vinyl', area_sqft: 140, area_unit: 'sqft', city: 'hutto',
+      evidence: { material: 'vinyl', area_sqft: '140', area_unit: 'sq ft', city: 'hutto' } },
+  });
+  check('an empty earlier message costs nothing', orderOf(work.order_id).material_category, 'Vinyl');
+  check('and the order is complete', missing(work.merged.still_missing), []);
+}
+
+console.log('\na second job in a thread whose first job was booked');
+{
+  const first = arrive({
+    id: 't1', thread: 'th-t', from: 'tara@example.com',
+    text: 'lvp 300 sq ft, manor tx',
+    extracted: { intent: 'new_quote', material: 'lvp', area_sqft: 300, area_unit: 'sqft', city: 'manor',
+      evidence: { material: 'lvp', area_sqft: '300', area_unit: 'sq ft', city: 'manor' } },
+  });
+  run(['-c', `UPDATE orders SET state = 'booked', closed_at = now() WHERE id = ${first.order_id}`]);
+  const second = arrive({
+    id: 't2', thread: 'th-t', from: 'tara@example.com',
+    text: 'now the bedroom too, carpet, 190 sq ft',
+    extracted: { intent: 'new_quote', material: 'carpet', area_sqft: 190, area_unit: 'sqft',
+      evidence: { material: 'carpet', area_sqft: '190', area_unit: 'sq ft' } },
+  });
+  check('the second job is its own order', second.order_id !== first.order_id, true);
+  check('it takes the new material, not the booked one', orderOf(second.order_id).material_category, 'Carpet');
+  check('and the finished job keeps its own', orderOf(first.order_id).material_category, 'LVP');
+  check('the booked area did not follow it', orderOf(second.order_id).area_sqft, 190);
+}
+
 console.log('\na customer who measured in metres');
 {
   const a = arrive({
@@ -274,9 +360,16 @@ console.log('\na customer who says nothing more');
 
 console.log('\nnothing leaked between any of them');
 {
-  const orders = Number(ask('SELECT count(*) FROM orders'));
-  const threads = Number(ask('SELECT count(DISTINCT thread_id) FROM orders'));
-  check('every order belongs to one thread and every thread to one order', orders, threads);
+  // not "one order per thread" — a thread whose job was booked may carry new work, and one
+  // above does. The rule the unique index actually holds is that only one of them is open.
+  check('no thread holds two open orders', Number(ask(
+    "SELECT count(*) FROM (SELECT thread_id FROM orders"
+    + " WHERE state NOT IN ('booked','done','lost') AND thread_id IS NOT NULL"
+    + ' GROUP BY thread_id HAVING count(*) > 1) crowded')), 0);
+  check('the only thread carrying two is the one whose first job was booked', JSON.parse(ask(
+    "SELECT coalesce(json_agg(json_build_object('thread', thread_id, 'orders', n)), '[]'::json)"
+    + ' FROM (SELECT thread_id, count(*) AS n FROM orders GROUP BY thread_id HAVING count(*) > 1) many')),
+  [{ thread: 'th-t', orders: 2 }]);
   check('no order holds an area from a message the gate refused',
     Number(ask('SELECT count(*) FROM orders WHERE area_sqft >= 20000')), 0);
   check('every event names the message it came from',

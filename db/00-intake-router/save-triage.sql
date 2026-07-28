@@ -17,6 +17,7 @@ UPDATE messages SET
   gate_reasons              = $12::jsonb,
   missing_fields            = $13::jsonb,
   dropped_fields            = $14::jsonb,
+  settled                   = $27::jsonb,
   material_category         = $17,
   assumptions               = $19::jsonb,
   existing_floor_action     = $20,

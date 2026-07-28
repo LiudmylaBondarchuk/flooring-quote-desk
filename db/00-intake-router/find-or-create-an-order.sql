@@ -5,9 +5,42 @@ WITH open_in_thread AS (
    ORDER BY created_at DESC
    LIMIT 1
 ),
+already_said AS (
+  -- What the thread has said before this order existed. A question about capability opens no
+  -- order — it is not work yet — so the material the gate recognised in it has nowhere to go, and
+  -- without this the customer is asked again for what they already wrote.
+  --
+  -- Read from settled, never from the reported columns: the number a person sees on a message can
+  -- be one the gate refused, and messages.area_sqft holds it. The latest message to have settled a
+  -- field wins, because a customer who corrects themselves means the correction.
+  SELECT
+    (array_agg(settled ->> 'material_category' ORDER BY created_at DESC)
+       FILTER (WHERE settled ->> 'material_category' IS NOT NULL))[1] AS material_category,
+    (array_agg(settled ->> 'area_sqft' ORDER BY created_at DESC)
+       FILTER (WHERE settled ->> 'area_sqft' IS NOT NULL))[1]         AS area_sqft,
+    (array_agg(settled ->> 'area_unit' ORDER BY created_at DESC)
+       FILTER (WHERE settled ->> 'area_unit' IS NOT NULL))[1]         AS area_unit,
+    (array_agg(settled ->> 'city' ORDER BY created_at DESC)
+       FILTER (WHERE settled ->> 'city' IS NOT NULL))[1]              AS city,
+    (array_agg(settled ->> 'zone' ORDER BY created_at DESC)
+       FILTER (WHERE settled ->> 'zone' IS NOT NULL))[1]              AS zone,
+    (array_agg(settled ->> 'existing_floor_action' ORDER BY created_at DESC)
+       FILTER (WHERE settled ->> 'existing_floor_action' IS NOT NULL))[1] AS existing_floor_action,
+    (array_agg(settled ->> 'fixing_method' ORDER BY created_at DESC)
+       FILTER (WHERE settled ->> 'fixing_method' IS NOT NULL))[1]     AS fixing_method,
+    (array_agg(settled ->> 'old_floor_removal' ORDER BY created_at DESC)
+       FILTER (WHERE settled ->> 'old_floor_removal' IS NOT NULL))[1] AS old_floor_removal
+    FROM messages
+   WHERE thread_id = $2
+     AND order_id IS NULL
+     AND gmail_message_id <> $1
+),
 made AS (
-  INSERT INTO orders (contact_email, thread_id)
-  SELECT $3, $2
+  INSERT INTO orders (contact_email, thread_id, material_category, area_sqft, area_unit,
+                      city, zone, existing_floor_action, fixing_method, old_floor_removal)
+  SELECT $3, $2, t.material_category, t.area_sqft::numeric, t.area_unit,
+         t.city, t.zone, t.existing_floor_action, t.fixing_method, t.old_floor_removal::boolean
+    FROM already_said t
    WHERE NOT EXISTS (SELECT 1 FROM open_in_thread)
      AND $4::boolean
   RETURNING id
