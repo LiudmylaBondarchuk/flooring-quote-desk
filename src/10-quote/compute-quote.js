@@ -12,7 +12,7 @@ const REFUSALS = [
   ['no_material',         (f) => f.material === null],
   ['no_price_band',       (f) => f.material !== null && f.bands.length === 0],
   ['no_area',             (f) => f.area === null],
-  ['area_not_known',      (f) => f.row.area_status !== 'known'],
+  ['area_not_usable',     (f) => f.row.area_comparable !== true],
   ['no_removal_rate',     (f) => f.removal && f.removalRate === null],
 ];
 

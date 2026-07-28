@@ -423,7 +423,7 @@
         "no_material",
         "no_price_band",
         "no_area",
-        "area_not_known",
+        "area_not_usable",
         "no_removal_rate"
       ],
       "gate": {

@@ -12,9 +12,23 @@
       "area_status": "known",
       "old_floor_removal": true,
       "bands": [
-        { "category": "LVP", "product": "Luxury vinyl plank / tile", "unit": "sqft", "rate_low": "4.50", "rate_high": "9.00", "wastage_pct": 10, "min_charge": "400.00" }
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "4.50",
+          "rate_high": "9.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
       ],
-      "rules": { "old_floor_removal": { "val_low": "1.50", "val_high": "3.50" } }
+      "rules": {
+        "old_floor_removal": {
+          "val_low": "1.50",
+          "val_high": "3.50"
+        }
+      },
+      "area_comparable": true
     },
     "expect": {
       "priceable": true,
@@ -40,9 +54,23 @@
       "area_status": "known",
       "old_floor_removal": true,
       "bands": [
-        { "category": "LVP", "product": "Luxury vinyl plank / tile", "unit": "sqft", "rate_low": 4.5, "rate_high": 9, "wastage_pct": 10, "min_charge": 400 }
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": 4.5,
+          "rate_high": 9,
+          "wastage_pct": 10,
+          "min_charge": 400
+        }
       ],
-      "rules": { "old_floor_removal": { "val_low": 1.5, "val_high": 3.5 } }
+      "rules": {
+        "old_floor_removal": {
+          "val_low": 1.5,
+          "val_high": 3.5
+        }
+      },
+      "area_comparable": true
     },
     "expect": {
       "priceable": true,
@@ -66,9 +94,23 @@
       "area_status": "known",
       "old_floor_removal": false,
       "bands": [
-        { "category": "Carpet", "product": "Carpet + pad", "unit": "sqft", "rate_low": "2.00", "rate_high": "5.00", "wastage_pct": 10, "min_charge": "300.00" }
+        {
+          "category": "Carpet",
+          "product": "Carpet + pad",
+          "unit": "sqft",
+          "rate_low": "2.00",
+          "rate_high": "5.00",
+          "wastage_pct": 10,
+          "min_charge": "300.00"
+        }
       ],
-      "rules": { "old_floor_removal": { "val_low": "1.50", "val_high": "3.50" } }
+      "rules": {
+        "old_floor_removal": {
+          "val_low": "1.50",
+          "val_high": "3.50"
+        }
+      },
+      "area_comparable": true
     },
     "expect": {
       "priceable": true,
@@ -92,9 +134,23 @@
       "area_status": "known",
       "old_floor_removal": false,
       "bands": [
-        { "category": "Carpet", "product": "Carpet + pad", "unit": "sqft", "rate_low": "2.00", "rate_high": "5.00", "wastage_pct": 10, "min_charge": "300.00" }
+        {
+          "category": "Carpet",
+          "product": "Carpet + pad",
+          "unit": "sqft",
+          "rate_low": "2.00",
+          "rate_high": "5.00",
+          "wastage_pct": 10,
+          "min_charge": "300.00"
+        }
       ],
-      "rules": { "old_floor_removal": { "val_low": "1.50", "val_high": "3.50" } }
+      "rules": {
+        "old_floor_removal": {
+          "val_low": "1.50",
+          "val_high": "3.50"
+        }
+      },
+      "area_comparable": true
     },
     "expect": {
       "priceable": true,
@@ -118,10 +174,32 @@
       "area_status": "known",
       "old_floor_removal": false,
       "bands": [
-        { "category": "Laminate", "product": "Laminate standard", "unit": "sqft", "rate_low": "4.00", "rate_high": "8.00", "wastage_pct": 10, "min_charge": "350.00" },
-        { "category": "Laminate", "product": "Laminate premium (water-resistant)", "unit": "sqft", "rate_low": "6.00", "rate_high": "10.00", "wastage_pct": 10, "min_charge": "350.00" }
+        {
+          "category": "Laminate",
+          "product": "Laminate standard",
+          "unit": "sqft",
+          "rate_low": "4.00",
+          "rate_high": "8.00",
+          "wastage_pct": 10,
+          "min_charge": "350.00"
+        },
+        {
+          "category": "Laminate",
+          "product": "Laminate premium (water-resistant)",
+          "unit": "sqft",
+          "rate_low": "6.00",
+          "rate_high": "10.00",
+          "wastage_pct": 10,
+          "min_charge": "350.00"
+        }
       ],
-      "rules": { "old_floor_removal": { "val_low": "1.50", "val_high": "3.50" } }
+      "rules": {
+        "old_floor_removal": {
+          "val_low": "1.50",
+          "val_high": "3.50"
+        }
+      },
+      "area_comparable": true
     },
     "expect": {
       "priceable": true,
@@ -145,9 +223,23 @@
       "area_status": "known",
       "old_floor_removal": true,
       "bands": [
-        { "category": "Vinyl", "product": "Sheet vinyl", "unit": "sqft", "rate_low": "2.00", "rate_high": "5.00", "wastage_pct": 15, "min_charge": "250.00" }
+        {
+          "category": "Vinyl",
+          "product": "Sheet vinyl",
+          "unit": "sqft",
+          "rate_low": "2.00",
+          "rate_high": "5.00",
+          "wastage_pct": 15,
+          "min_charge": "250.00"
+        }
       ],
-      "rules": { "old_floor_removal": { "val_low": "1.50", "val_high": "3.50" } }
+      "rules": {
+        "old_floor_removal": {
+          "val_low": "1.50",
+          "val_high": "3.50"
+        }
+      },
+      "area_comparable": true
     },
     "expect": {
       "priceable": true,
@@ -171,9 +263,18 @@
       "area_status": "known",
       "old_floor_removal": false,
       "bands": [
-        { "category": "Wood", "product": "Engineered wood", "unit": "sqft", "rate_low": "7.00", "rate_high": "14.00", "wastage_pct": 10, "min_charge": "450.00" }
+        {
+          "category": "Wood",
+          "product": "Engineered wood",
+          "unit": "sqft",
+          "rate_low": "7.00",
+          "rate_high": "14.00",
+          "wastage_pct": 10,
+          "min_charge": "450.00"
+        }
       ],
-      "rules": {}
+      "rules": {},
+      "area_comparable": true
     },
     "expect": {
       "priceable": true,
@@ -197,11 +298,25 @@
       "area_status": "known",
       "old_floor_removal": false,
       "bands": [
-        { "category": "LVP", "product": "Luxury vinyl plank / tile", "unit": "sqft", "rate_low": "4.50", "rate_high": "9.00", "wastage_pct": 10, "min_charge": "400.00" }
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "4.50",
+          "rate_high": "9.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
       ],
-      "rules": {}
+      "rules": {},
+      "area_comparable": true
     },
-    "expect": { "priceable": false, "refusals": ["pricing_not_allowed"] }
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "pricing_not_allowed"
+      ]
+    }
   },
   {
     "name": "a message the gate left yellow",
@@ -216,11 +331,26 @@
       "area_status": "known",
       "old_floor_removal": false,
       "bands": [
-        { "category": "LVP", "product": "Luxury vinyl plank / tile", "unit": "sqft", "rate_low": "4.50", "rate_high": "9.00", "wastage_pct": 10, "min_charge": "400.00" }
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "4.50",
+          "rate_high": "9.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
       ],
-      "rules": {}
+      "rules": {},
+      "area_comparable": true
     },
-    "expect": { "priceable": false, "refusals": ["pricing_not_allowed", "not_green"] }
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "pricing_not_allowed",
+        "not_green"
+      ]
+    }
   },
   {
     "name": "commercial work",
@@ -235,11 +365,27 @@
       "area_status": "known",
       "old_floor_removal": false,
       "bands": [
-        { "category": "LVP", "product": "Luxury vinyl plank / tile", "unit": "sqft", "rate_low": "4.50", "rate_high": "9.00", "wastage_pct": 10, "min_charge": "400.00" }
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "4.50",
+          "rate_high": "9.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
       ],
-      "rules": {}
+      "rules": {},
+      "area_comparable": true
     },
-    "expect": { "priceable": false, "refusals": ["pricing_not_allowed", "not_green", "commercial"] }
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "pricing_not_allowed",
+        "not_green",
+        "commercial"
+      ]
+    }
   },
   {
     "name": "nobody said what material",
@@ -254,9 +400,17 @@
       "area_status": "known",
       "old_floor_removal": false,
       "bands": [],
-      "rules": {}
+      "rules": {},
+      "area_comparable": true
     },
-    "expect": { "priceable": false, "refusals": ["pricing_not_allowed", "not_green", "no_material"] }
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "pricing_not_allowed",
+        "not_green",
+        "no_material"
+      ]
+    }
   },
   {
     "name": "a material the price book no longer carries",
@@ -271,9 +425,15 @@
       "area_status": "known",
       "old_floor_removal": false,
       "bands": [],
-      "rules": {}
+      "rules": {},
+      "area_comparable": true
     },
-    "expect": { "priceable": false, "refusals": ["no_price_band"] }
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "no_price_band"
+      ]
+    }
   },
   {
     "name": "a rate the per-square-foot formula cannot express",
@@ -288,11 +448,25 @@
       "area_status": "known",
       "old_floor_removal": false,
       "bands": [
-        { "category": "Wood", "product": null, "unit": "each", "rate_low": "40.00", "rate_high": "80.00", "wastage_pct": 0, "min_charge": null }
+        {
+          "category": "Wood",
+          "product": null,
+          "unit": "each",
+          "rate_low": "40.00",
+          "rate_high": "80.00",
+          "wastage_pct": 0,
+          "min_charge": null
+        }
       ],
-      "rules": {}
+      "rules": {},
+      "area_comparable": true
     },
-    "expect": { "priceable": false, "refusals": ["no_price_band"] }
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "no_price_band"
+      ]
+    }
   },
   {
     "name": "a band whose range is upside down",
@@ -307,11 +481,25 @@
       "area_status": "known",
       "old_floor_removal": false,
       "bands": [
-        { "category": "LVP", "product": "Luxury vinyl plank / tile", "unit": "sqft", "rate_low": "9.00", "rate_high": "4.50", "wastage_pct": 10, "min_charge": "400.00" }
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "9.00",
+          "rate_high": "4.50",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
       ],
-      "rules": {}
+      "rules": {},
+      "area_comparable": true
     },
-    "expect": { "priceable": false, "refusals": ["no_price_band"] }
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "no_price_band"
+      ]
+    }
   },
   {
     "name": "no area at all",
@@ -326,13 +514,27 @@
       "area_status": "unknown",
       "old_floor_removal": false,
       "bands": [
-        { "category": "LVP", "product": "Luxury vinyl plank / tile", "unit": "sqft", "rate_low": "4.50", "rate_high": "9.00", "wastage_pct": 10, "min_charge": "400.00" }
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "4.50",
+          "rate_high": "9.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
       ],
-      "rules": {}
+      "rules": {},
+      "area_comparable": false
     },
     "expect": {
       "priceable": false,
-      "refusals": ["pricing_not_allowed", "not_green", "no_area", "area_not_known"]
+      "refusals": [
+        "pricing_not_allowed",
+        "not_green",
+        "no_area",
+        "area_not_usable"
+      ]
     }
   },
   {
@@ -348,13 +550,25 @@
       "area_status": "converted",
       "old_floor_removal": false,
       "bands": [
-        { "category": "LVP", "product": "Luxury vinyl plank / tile", "unit": "sqft", "rate_low": "4.50", "rate_high": "9.00", "wastage_pct": 10, "min_charge": "400.00" }
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "4.50",
+          "rate_high": "9.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
       ],
-      "rules": {}
+      "rules": {},
+      "area_comparable": true
     },
     "expect": {
       "priceable": false,
-      "refusals": ["pricing_not_allowed", "not_green", "area_not_known"]
+      "refusals": [
+        "pricing_not_allowed",
+        "not_green"
+      ]
     }
   },
   {
@@ -370,11 +584,25 @@
       "area_status": "known",
       "old_floor_removal": true,
       "bands": [
-        { "category": "LVP", "product": "Luxury vinyl plank / tile", "unit": "sqft", "rate_low": "4.50", "rate_high": "9.00", "wastage_pct": 10, "min_charge": "400.00" }
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "4.50",
+          "rate_high": "9.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
       ],
-      "rules": {}
+      "rules": {},
+      "area_comparable": true
     },
-    "expect": { "priceable": false, "refusals": ["no_removal_rate"] }
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "no_removal_rate"
+      ]
+    }
   },
   {
     "name": "a boolean that arrived as text",
@@ -389,10 +617,55 @@
       "area_status": "known",
       "old_floor_removal": false,
       "bands": [
-        { "category": "LVP", "product": "Luxury vinyl plank / tile", "unit": "sqft", "rate_low": "4.50", "rate_high": "9.00", "wastage_pct": 10, "min_charge": "400.00" }
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "4.50",
+          "rate_high": "9.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
+      ],
+      "rules": {},
+      "area_comparable": true
+    },
+    "expect": {
+      "priceable": false,
+      "refusals": [
+        "pricing_not_allowed"
+      ]
+    }
+  },
+  {
+    "name": "an area given in square metres is priced",
+    "row": {
+      "gmail_message_id": "converted-priced",
+      "pricing_allowed": true,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "LVP",
+      "area_sqft": 344.44,
+      "area_status": "converted",
+      "area_comparable": true,
+      "old_floor_removal": false,
+      "bands": [
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": 4.5,
+          "rate_high": 9,
+          "wastage_pct": 10,
+          "min_charge": 400
+        }
       ],
       "rules": {}
     },
-    "expect": { "priceable": false, "refusals": ["pricing_not_allowed"] }
+    "expect": {
+      "priceable": true,
+      "refusals": []
+    },
+    "why": "The whole point of reading the unit the customer wrote is that the job can then be priced. A converted area reaching the lane and being refused would make that work pointless."
   }
 ]
