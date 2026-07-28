@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "local environment file, never committed"
+paths = ['''^\.env$''']
