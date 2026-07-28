@@ -1,0 +1,440 @@
+{
+  "name": "70 Catalogue — Flooring",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "cccc0001-0000-4000-8000-000000000002",
+      "name": "By hand",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- What price_bands will accept in its three closed columns, read out of the constraints\n-- themselves rather than written down a second time.\n--\n-- The validator that reads the spreadsheet needs these lists to say \"row 7 says sqfeet, and the\n-- unit has to be one of sqft, sqyd, each, job\". Every other way of giving it that knowledge is a\n-- copy: a const in a Code node, a literal in this file, a table seeded to agree with a CHECK.\n-- Copies drift, and the first sign of drift here is a sync that refuses a row the database would\n-- have taken, or takes one it will not.\n--\n-- The category spellings come back exactly as the constraint writes them, which is what lets the\n-- validator turn a customer-grade \"lvp\" in the sheet into the LVP the rest of the schema uses.\n--\n-- COLLATE \"C\" because a plain ORDER BY sorts by the database's own locale: LVP lands before\n-- Laminate on one machine and after it on another, and the answer this query gives should not\n-- depend on where it runs.\n\nSELECT jsonb_object_agg(column_name, accepted) AS accepts\n  FROM (\n        SELECT regexp_replace(c.conname, '^price_bands_|_known$', '', 'g') AS column_name,\n               to_jsonb(array_agg(found[1] ORDER BY found[1] COLLATE \"C\")) AS accepted\n          FROM pg_constraint c\n          CROSS JOIN LATERAL regexp_matches(pg_get_constraintdef(c.oid), '''([^'']+)''', 'g') AS found\n         WHERE c.conrelid = 'price_bands'::regclass\n           AND c.contype = 'c'\n           AND c.conname LIKE '%\\_known'\n         GROUP BY 1\n       ) per_column;",
+        "options": {}
+      },
+      "id": "cccc0001-0000-4000-8000-000000000003",
+      "name": "What the catalogue accepts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "1HoOd03XVb2labxWXtOd5jYWkg7grBctNsSxKuRUc4cc",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Arkusz1"
+        },
+        "options": {}
+      },
+      "id": "cccc0001-0000-4000-8000-000000000004",
+      "name": "Read the price list",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        480,
+        100
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": null,
+          "name": "Google Service Account account"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const accepts = $('What the catalogue accepts').first().json.accepts || {};\n\nconst FIELDS = ['category', 'component', 'product', 'unit',\n  'rate_low', 'rate_high', 'wastage_pct', 'min_charge', 'notes'];\nconst REQUIRED = ['category', 'rate_low', 'rate_high'];\nconst DEFAULTS = { component: 'floor', unit: 'sqft', wastage_pct: 10 };\nconst FIRST_DATA_ROW = 2;\nconst FROM_THE_TOOL = ['row_number'];\n\nconst text = (raw) => String(raw ?? '').replace(/\\s+/g, ' ').trim();\nconst key = (heading) => text(heading).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');\n\nconst number = (raw) => {\n  const written = text(raw);\n  if (written === '') return { given: false, value: null };\n  const bare = written.replace(/[$\\s]/g, '');\n  if (/^-?\\d+(\\.\\d+)?$/.test(bare)) return { given: true, value: Number(bare) };\n  if (/^-?\\d{1,3}(,\\d{3})+(\\.\\d+)?$/.test(bare)) return { given: true, value: Number(bare.replace(/,/g, '')) };\n  return { given: true, value: null, unreadable: written };\n};\n\nconst spelledAs = (accepted, written) => {\n  const wanted = text(written).toLowerCase();\n  return (accepted || []).find((value) => value.toLowerCase() === wanted) || null;\n};\n\nconst rows = $input.all().map((item) => item.json);\nconst refusals = [];\nconst refuse = (line, why) => refusals.push(line === null ? why : `row ${line}: ${why}`);\n\nconst named = rows.map((row) => {\n  const renamed = {};\n  for (const [heading, value] of Object.entries(row)) renamed[key(heading)] = value;\n  return renamed;\n});\n\nconst filled = named\n  .map((row, index) => ({ row, line: Number(row.row_number) || index + FIRST_DATA_ROW }))\n  .filter(({ row }) => FIELDS.some((field) => text(row[field]) !== ''));\n\nconst headings = new Set(named.flatMap((row) => Object.keys(row)));\nconst missing = FIELDS.filter((field) => !headings.has(field));\n\nif (rows.length === 0) {\n  refuse(null, 'the sheet came back with no rows at all. Nothing is applied, because an empty '\n    + 'answer is what a failed read looks like as well as an emptied sheet');\n} else if (missing.length > 0) {\n  refuse(null, `the sheet has no ${missing.join(', ')} column. Expected headings: ${FIELDS.join(', ')}`);\n} else if (filled.length === 0) {\n  refuse(null, 'every row in the sheet is blank');\n}\n\nconst clean = [];\nif (refusals.length === 0) {\n  const seen = new Map();\n\n  for (const { row, line } of filled) {\n    const before = refusals.length;\n\n    for (const field of REQUIRED) {\n      if (text(row[field]) === '') refuse(line, `${field} is empty, and it has to be filled in`);\n    }\n\n    const category = spelledAs(accepts.category, row.category);\n    if (text(row.category) !== '' && category === null) {\n      refuse(line, `category says \"${text(row.category)}\", and the firm installs `\n        + `${(accepts.category || []).join(', ')}. Adding a sixth material is a change to the database, not the sheet`);\n    }\n\n    const component = text(row.component) === '' ? DEFAULTS.component\n      : spelledAs(accepts.component, row.component);\n    if (text(row.component) !== '' && component === null) {\n      refuse(line, `component says \"${text(row.component)}\", and it has to be one of `\n        + `${(accepts.component || []).join(', ')}`);\n    }\n\n    const unit = text(row.unit) === '' ? DEFAULTS.unit : spelledAs(accepts.unit, row.unit);\n    if (text(row.unit) !== '' && unit === null) {\n      refuse(line, `unit says \"${text(row.unit)}\", and it has to be one of ${(accepts.unit || []).join(', ')}`);\n    }\n\n    const low = number(row.rate_low);\n    const high = number(row.rate_high);\n    const wastage = number(row.wastage_pct);\n    const minimum = number(row.min_charge);\n\n    for (const [field, read] of [['rate_low', low], ['rate_high', high],\n      ['wastage_pct', wastage], ['min_charge', minimum]]) {\n      if (read.unreadable !== undefined) refuse(line, `${field} says \"${read.unreadable}\", which is not a number`);\n    }\n\n    if (low.value !== null && low.value <= 0) refuse(line, `rate_low is ${low.value}, and a rate has to be above zero`);\n    if (high.value !== null && low.value !== null && high.value < low.value) {\n      refuse(line, `rate_high (${high.value}) is below rate_low (${low.value})`);\n    }\n    if (wastage.value !== null && (!Number.isInteger(wastage.value) || wastage.value < 0 || wastage.value > 100)) {\n      refuse(line, `wastage_pct is ${wastage.value}, and it has to be a whole number between 0 and 100`);\n    }\n    if (minimum.value !== null && minimum.value < 0) refuse(line, `min_charge is ${minimum.value}, which is below zero`);\n    if (component === 'floor' && !minimum.given) {\n      refuse(line, 'min_charge is empty, and every floor rate needs one — it is what a small job is billed');\n    }\n\n    const product = text(row.product) || null;\n    const together = `${category} / ${component} / ${(product || '').toLowerCase()}`;\n    if (seen.has(together)) {\n      refuse(line, `this is the same ${category} / ${component}`\n        + `${product ? ` / ${product}` : ' with no product'} as row ${seen.get(together)}`);\n    } else if (refusals.length === before) {\n      seen.set(together, line);\n    }\n\n    if (refusals.length !== before) continue;\n\n    clean.push({\n      category,\n      component,\n      product,\n      unit,\n      rate_low: low.value,\n      rate_high: high.value,\n      wastage_pct: wastage.given ? wastage.value : DEFAULTS.wastage_pct,\n      min_charge: minimum.given ? minimum.value : null,\n      notes: text(row.notes) || null,\n      sheet_row: line,\n    });\n  }\n}\n\nconst sane = refusals.length === 0 && clean.length > 0;\n\nreturn [{\n  json: {\n    sane,\n    rows_seen: rows.length,\n    rows_accepted: sane ? clean.length : 0,\n    refusals,\n    ignored_columns: [...headings]\n      .filter((heading) => heading !== '' && !FIELDS.includes(heading) && !FROM_THE_TOOL.includes(heading))\n      .sort(),\n    rows: sane ? clean : [],\n    said: sane\n      ? `${clean.length} row(s) read from the sheet, nothing wrong with any of them`\n      : `The price list was not applied. Nothing in the database changed.\\n\\n${refusals.join('\\n')}`,\n  },\n}];\n"
+      },
+      "id": "cccc0001-0000-4000-8000-000000000005",
+      "name": "Read the sheet",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "sane",
+              "leftValue": "={{ $json.sane }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cccc0001-0000-4000-8000-000000000006",
+      "name": "Is the sheet sound?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Copy a spreadsheet the validator has already agreed with into price_bands, as one statement.\n--\n-- One statement is the whole safety argument. Postgres either runs all of this or none of it, so\n-- there is no state in which half the price list is this month's and half is last month's, and no\n-- ordering in which a failure halfway through leaves the catalogue describing a business that\n-- does not exist. Every branch below is a CTE for that reason and no other.\n--\n-- Nothing here deletes. A row that has left the sheet is set inactive, keeps its id, and keeps\n-- every event and quote that ever pointed at it. Coming back is then an ordinary edit rather than\n-- a recovery: put the row back in the sheet and the next sync switches it on again.\n--\n-- The count(*) > 0 guards are the second copy of a rule the validator already enforces. They stay\n-- because they answer a different question: the validator asks whether the sheet is sensible, and\n-- these ask whether this statement is allowed to empty a catalogue on the strength of an empty\n-- argument, whatever ran before it and whatever anyone rewires later.\n\nWITH incoming AS (\n    SELECT sheet ->> 'category'                    AS category,\n           sheet ->> 'component'                   AS component,\n           nullif(sheet ->> 'product', '')         AS product,\n           sheet ->> 'unit'                        AS unit,\n           (sheet ->> 'rate_low')::numeric(10, 2)  AS rate_low,\n           (sheet ->> 'rate_high')::numeric(10, 2) AS rate_high,\n           (sheet ->> 'wastage_pct')::integer      AS wastage_pct,\n           (sheet ->> 'min_charge')::numeric(10, 2) AS min_charge,\n           nullif(sheet ->> 'notes', '')           AS notes\n      FROM jsonb_array_elements($1::jsonb) AS sheet\n),\nwas AS (\n    SELECT id, category, component, product, unit, rate_low, rate_high,\n           wastage_pct, min_charge, notes, active\n      FROM price_bands\n),\nupserted AS (\n    INSERT INTO price_bands (category, component, product, unit, rate_low, rate_high,\n                             wastage_pct, min_charge, notes, active, updated_at)\n    SELECT category, component, product, unit, rate_low, rate_high,\n           wastage_pct, min_charge, notes, true, now()\n      FROM incoming\n     WHERE (SELECT count(*) FROM incoming) > 0\n    ON CONFLICT (category, component, coalesce(product, ''))\n    DO UPDATE SET unit        = excluded.unit,\n                  rate_low    = excluded.rate_low,\n                  rate_high   = excluded.rate_high,\n                  wastage_pct = excluded.wastage_pct,\n                  min_charge  = excluded.min_charge,\n                  notes       = excluded.notes,\n                  active      = true,\n                  updated_at  = now()\n     WHERE (price_bands.unit, price_bands.rate_low, price_bands.rate_high, price_bands.wastage_pct,\n            price_bands.min_charge, price_bands.notes, price_bands.active)\n        IS DISTINCT FROM\n           (excluded.unit, excluded.rate_low, excluded.rate_high, excluded.wastage_pct,\n            excluded.min_charge, excluded.notes, true)\n    RETURNING id, category, component, product, unit, rate_low, rate_high,\n              wastage_pct, min_charge, notes, active, (xmax = 0) AS was_added\n),\ntouched AS (\n    SELECT *, category || ' / ' || component || ' / ' || coalesce(product, '(no product)') AS band_key\n      FROM upserted\n),\nretired AS (\n    UPDATE price_bands p\n       SET active = false, updated_at = now()\n     WHERE p.active\n       AND (SELECT count(*) FROM incoming) > 0\n       AND NOT EXISTS (\n           SELECT 1 FROM incoming i\n            WHERE i.category = p.category\n              AND i.component = p.component\n              AND coalesce(i.product, '') = coalesce(p.product, ''))\n    RETURNING id, category || ' / ' || component || ' / ' || coalesce(product, '(no product)') AS band_key\n),\ndifferences AS (\n    SELECT t.id, t.band_key, each.field, each.old_value, each.new_value\n      FROM touched t\n      JOIN was b ON b.id = t.id\n      CROSS JOIN LATERAL (VALUES\n          ('unit',        b.unit,               t.unit),\n          ('rate_low',    b.rate_low::text,     t.rate_low::text),\n          ('rate_high',   b.rate_high::text,    t.rate_high::text),\n          ('wastage_pct', b.wastage_pct::text,  t.wastage_pct::text),\n          ('min_charge',  b.min_charge::text,   t.min_charge::text),\n          ('notes',       b.notes,              t.notes),\n          ('active',      b.active::text,       t.active::text)\n      ) AS each(field, old_value, new_value)\n     WHERE each.old_value IS DISTINCT FROM each.new_value\n),\nnoted_new AS (\n    INSERT INTO price_band_events (price_band_id, band_key, kind, field, old_value, new_value)\n    SELECT id, band_key, 'added', NULL, NULL,\n           rate_low::text || '-' || rate_high::text || ' per ' || unit\n      FROM touched WHERE was_added\n    RETURNING 1\n),\nnoted_changed AS (\n    INSERT INTO price_band_events (price_band_id, band_key, kind, field, old_value, new_value)\n    SELECT id, band_key,\n           CASE WHEN field = 'active' THEN 'reactivated' ELSE 'changed' END,\n           field, old_value, new_value\n      FROM differences\n    RETURNING 1\n),\nnoted_retired AS (\n    INSERT INTO price_band_events (price_band_id, band_key, kind, field, old_value, new_value)\n    SELECT id, band_key, 'deactivated', 'active', 'true', 'false' FROM retired\n    RETURNING 1\n)\nSELECT (SELECT count(*) FROM incoming)::int                                    AS rows_in_sheet,\n       (SELECT count(*) FROM touched WHERE was_added)::int                     AS added,\n       (SELECT count(DISTINCT id) FROM differences WHERE field <> 'active')::int AS changed,\n       (SELECT count(*) FROM differences WHERE field = 'active')::int          AS reactivated,\n       (SELECT count(*) FROM retired)::int                                     AS deactivated,\n       (SELECT count(*) FROM noted_new)::int\n     + (SELECT count(*) FROM noted_changed)::int\n     + (SELECT count(*) FROM noted_retired)::int                               AS events_written,\n       -- counted rather than queried: every CTE here reads the snapshot this statement began\n       -- with, so asking price_bands how many rows are active would answer for the catalogue\n       -- as it was before the first word of this statement ran.\n       ((SELECT count(*) FROM was WHERE active)\n      + (SELECT count(*) FROM touched WHERE was_added)\n      + (SELECT count(*) FROM differences WHERE field = 'active')\n      - (SELECT count(*) FROM retired))::int                                   AS active_after;",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json.rows)] }}"
+        }
+      },
+      "id": "cccc0001-0000-4000-8000-000000000007",
+      "name": "Apply the price list",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1200,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "flooring.demo.austin@gmail.com",
+        "subject": "={{ \"Price list: \" + $json.added + \" added, \" + $json.changed + \" changed, \" + $json.deactivated + \" retired\" }}",
+        "emailType": "text",
+        "message": "={{ \"The spreadsheet was copied into the catalogue.\\n\\n\" + \"rows read from the sheet: \" + $json.rows_in_sheet + \"\\n\" + \"added: \" + $json.added + \"\\n\" + \"changed: \" + $json.changed + \"\\n\" + \"switched back on: \" + $json.reactivated + \"\\n\" + \"no longer in the sheet, switched off: \" + $json.deactivated + \"\\n\" + \"prices live now: \" + $json.active_after + \"\\n\\n\" + \"Nothing was deleted. A row that left the sheet keeps its history and comes back if you paste it in again.\" }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "cccc0001-0000-4000-8000-000000000008",
+      "name": "Say what changed",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1680,
+        0
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": null,
+          "name": "Gmail account"
+        }
+      },
+      "webhookId": "51fd69b3-c3f3-45c1-8d02-1b7fc8511b93"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "flooring.demo.austin@gmail.com",
+        "subject": "Price list was NOT applied",
+        "emailType": "text",
+        "message": "={{ $json.said }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "cccc0001-0000-4000-8000-000000000009",
+      "name": "Say why nothing changed",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1200,
+        220
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": null,
+          "name": "Gmail account"
+        }
+      },
+      "webhookId": "4f2f0bf8-a158-403c-8df1-204bd4f8cfc5"
+    },
+    {
+      "parameters": {
+        "width": 560,
+        "height": 220,
+        "content": "### Nothing here half-applies\n\nThe sheet is read, judged whole, and only then copied. One bad row stops the\nwhole copy and the owner is told which row and why — the catalogue keeps the\nprices it had.\n\nThe copy itself is a single SQL statement, so there is no moment in which half\nthe catalogue is this month's and half is last month's.\n\nNothing is ever deleted. A row that leaves the sheet is switched off, keeps its\nid and its history, and comes back on if it is pasted in again."
+      },
+      "id": "cccc0001-0000-4000-8000-00000000000a",
+      "name": "Why this is one statement",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "flooring-catalogue",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "cccc0001-0000-4000-8000-00000000000b",
+      "name": "The sheet says apply it",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "flooring-catalogue",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": null,
+          "name": "Flooring catalogue hook"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 6
+            }
+          ]
+        }
+      },
+      "id": "cccc0001-0000-4000-8000-000000000001",
+      "name": "Every morning",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "worth",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ ($json.added + $json.changed + $json.reactivated + $json.deactivated) > 0 || !$('Every morning').isExecuted }}",
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cccc0001-0000-4000-8000-00000000000c",
+      "name": "Worth a letter?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $('Read the sheet').item.json.sane ? ('Applied. ' + $('Apply the price list').item.json.added + ' added, ' + $('Apply the price list').item.json.changed + ' changed, ' + $('Apply the price list').item.json.deactivated + ' switched off. ' + $('Apply the price list').item.json.active_after + ' prices are live.') : $('Read the sheet').item.json.said }}",
+        "options": {}
+      },
+      "id": "cccc0001-0000-4000-8000-00000000000d",
+      "name": "Answer the sheet",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1920,
+        110
+      ]
+    }
+  ],
+  "connections": {
+    "By hand": {
+      "main": [
+        [
+          {
+            "node": "What the catalogue accepts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What the catalogue accepts": {
+      "main": [
+        [
+          {
+            "node": "Read the price list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the price list": {
+      "main": [
+        [
+          {
+            "node": "Read the sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the sheet": {
+      "main": [
+        [
+          {
+            "node": "Is the sheet sound?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is the sheet sound?": {
+      "main": [
+        [
+          {
+            "node": "Apply the price list",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Say why nothing changed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply the price list": {
+      "main": [
+        [
+          {
+            "node": "Worth a letter?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "The sheet says apply it": {
+      "main": [
+        [
+          {
+            "node": "What the catalogue accepts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every morning": {
+      "main": [
+        [
+          {
+            "node": "What the catalogue accepts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Worth a letter?": {
+      "main": [
+        [
+          {
+            "node": "Say what changed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Say what changed": {
+      "main": [
+        [
+          {
+            "node": "Answer the sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Say why nothing changed": {
+      "main": [
+        [
+          {
+            "node": "Answer the sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

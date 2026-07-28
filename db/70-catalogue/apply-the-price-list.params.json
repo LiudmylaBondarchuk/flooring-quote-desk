@@ -1,0 +1,3 @@
+{
+  "queryReplacement": "={{ [JSON.stringify($json.rows)] }}"
+}
