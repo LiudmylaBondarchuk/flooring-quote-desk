@@ -248,6 +248,7 @@ for (const item of $input.all()) {
   const place = asPlace((zipGrounded ? row.zone_by_zip : null)
     || (cityGrounded ? row.zone_by_city : null) || null, locationGrounded);
   const zone = place.zone;
+  const city = cityGrounded ? (String(ex.city ?? '').replace(/\s+/g, ' ').trim() || null) : null;
 
   const patternRaw = norm(take('pattern', ex.pattern));
   const pattern = PATTERN_WHITELIST.includes(patternRaw) ? patternRaw : null;
@@ -494,6 +495,7 @@ for (const item of $input.all()) {
     product_status: product.status,
     pattern,
     geo_zone: zone,
+    city,
     gate_color: color,
     gate_reasons: reasons,
     matched_rule: matchedRule,
