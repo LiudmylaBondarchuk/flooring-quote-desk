@@ -241,7 +241,10 @@ CREATE TABLE price_bands (
     wastage_pct  integer        NOT NULL DEFAULT 10,
     min_charge   numeric(10, 2),
     notes        text,
+    active       boolean        NOT NULL DEFAULT true,
+    updated_at   timestamptz    NOT NULL DEFAULT now(),
 
+    CONSTRAINT price_bands_category_known CHECK (category IN ('LVP', 'Laminate', 'Wood', 'Vinyl', 'Carpet')),
     CONSTRAINT price_bands_component_known CHECK (component IN ('floor', 'stairs', 'trim')),
     CONSTRAINT price_bands_floor_has_minimum CHECK (component <> 'floor' OR min_charge IS NOT NULL),
     CONSTRAINT price_bands_unit_known  CHECK (unit IN ('sqft', 'sqyd', 'each', 'job')),
@@ -250,6 +253,24 @@ CREATE TABLE price_bands (
 );
 
 CREATE UNIQUE INDEX price_bands_product_unique ON price_bands (category, component, coalesce(product, ''));
+CREATE INDEX price_bands_active_idx ON price_bands (category) WHERE active;
+
+CREATE TABLE price_band_events (
+    id            integer     GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    price_band_id integer     REFERENCES price_bands (id) ON DELETE SET NULL,
+    band_key      text        NOT NULL,
+    kind          text        NOT NULL,
+    field         text,
+    old_value     text,
+    new_value     text,
+    created_at    timestamptz NOT NULL DEFAULT now(),
+
+    CONSTRAINT price_band_events_kind_known CHECK (kind IN (
+        'added', 'changed', 'deactivated', 'reactivated'))
+);
+
+CREATE INDEX price_band_events_band_idx ON price_band_events (price_band_id, created_at);
+CREATE INDEX price_band_events_when_idx ON price_band_events (created_at DESC);
 
 
 CREATE TABLE pricing_rules (
@@ -323,5 +344,10 @@ COMMENT ON COLUMN messages.handling IS
     'Who answers: auto means a reply may leave without a human, manual_review means it may not, none means no reply at all.';
 COMMENT ON COLUMN messages.same_signature IS
     'This contact already asked about the same material and area recently.';
+
+COMMENT ON COLUMN price_bands.active IS
+    'False means the row left the spreadsheet. Nothing quotes it; everything already quoted against it still reads.';
+COMMENT ON TABLE price_band_events IS
+    'One row per field a sync changed. Answers "why is this price different from last month" without a backup.';
 
 COMMIT;

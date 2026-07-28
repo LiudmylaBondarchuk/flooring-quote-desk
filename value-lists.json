@@ -185,7 +185,8 @@
       ],
       "sql": [
         "messages.material_category",
-        "orders.material_category"
+        "orders.material_category",
+        "price_bands.category"
       ],
       "gate": {
         "const": "MATERIAL_MAP",
@@ -411,6 +412,18 @@
       ],
       "sql": [
         "price_bands.unit"
+      ]
+    },
+    "price_band_event_kind": {
+      "means": "what a price-list sync did to one row. A row never leaves the table, so leaving the spreadsheet is an event like any other.",
+      "values": [
+        "added",
+        "changed",
+        "deactivated",
+        "reactivated"
+      ],
+      "sql": [
+        "price_band_events.kind"
       ]
     },
     "place_status": {

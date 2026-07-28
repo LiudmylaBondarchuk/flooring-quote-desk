@@ -39,6 +39,8 @@ jobs:
         run: npm run db:check
       - name: every decision can be stored, read back and handed to its lane
         run: npm run db:round-trip
+      - name: a price list copies into the catalogue without half-applying
+        run: npm run catalogue:round-trip
 
   scan:
     runs-on: ubuntu-latest
