@@ -381,6 +381,28 @@ try {
     }
   }
 
+  const ABSURD = [
+    ['a negative area', '-1'],
+    ['an area of nothing', '0'],
+    ['a number far past any floor', '1000000'],
+  ];
+  const survivor = decisions.find(({ json }) => json.area_sqft !== null);
+  if (!survivor) {
+    failures.push({ stage: 'refusing an impossible area', name: '',
+      error: 'no fixture stores an area at all, so the constraint is never put to the test' });
+  }
+  for (const [name, value] of (survivor ? ABSURD : [])) {
+    let refused = false;
+    try {
+      run(['-v', 'ON_ERROR_STOP=1', '-c',
+        `UPDATE messages SET area_sqft = ${value} WHERE gmail_message_id = ${literal(survivor.id)}`]);
+    } catch { refused = true; }
+    if (!refused) {
+      failures.push({ stage: 'refusing an impossible area', name,
+        error: `the database stored ${value} sq ft — a constraint that lets this through catches nothing` });
+    }
+  }
+
   if (Number(ask('SELECT count(*) FROM failures')) !== 2) {
     failures.push({ stage: 'recording a failure', name: '',
       error: `the error lane holds ${ask('SELECT count(*) FROM failures')} rows, two were written` });
