@@ -39,6 +39,19 @@ const COMPLETE_LEAD = {
 const ROUTES = valueLists.route.values;
 const HANDLINGS = valueLists.handling.values;
 
+test('no text the gate produces is an empty string', () => {
+  const blanks = [];
+  for (const { name, row } of fixtures) {
+    const decision = runGate(row);
+    for (const [field, value] of Object.entries(decision)) {
+      if (value === '') blanks.push(`${field} on "${name}"`);
+    }
+  }
+  assert.deepEqual(blanks, [],
+    `${blanks.join(', ')} — a blank standing in for absence is the habit that put '' in ` +
+    'contact_email and matched every sender with no address to every other one. Absent is null');
+});
+
 const population = [
   ...fixtures.map(({ name, row }) => ({ name, row })),
   { name: 'complete lead, nothing wrong', row: COMPLETE_LEAD },

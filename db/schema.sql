@@ -131,6 +131,9 @@ CREATE TABLE messages (
     CONSTRAINT messages_route_known    CHECK (route IN (
         'quote', 'project', 'support', 'operations', 'review', 'log')),
     CONSTRAINT messages_handling_known CHECK (handling IN ('auto', 'manual_review', 'none')),
+    CONSTRAINT messages_intent_known   CHECK (intent IS NULL OR intent IN (
+        'new_quote', 'pre_sales_question', 'follow_up', 'offer_response',
+        'scheduling', 'billing', 'complaint', 'spam_or_other')),
     CONSTRAINT messages_color_known    CHECK (gate_color IS NULL OR gate_color IN ('green', 'yellow', 'red')),
     CONSTRAINT messages_segment_known  CHECK (segment  IS NULL OR segment  IN ('residential', 'commercial')),
     CONSTRAINT messages_zone_known     CHECK (geo_zone IS NULL OR geo_zone IN ('core', 'edge', 'out')),
@@ -244,7 +247,7 @@ COMMENT ON COLUMN messages.contact_email IS
 COMMENT ON COLUMN messages.extracted IS
     'What the model claimed. Never constrained, never trusted on its own.';
 COMMENT ON COLUMN messages.intent IS
-    'The model''s guess at intent. An input to classification, never the classification itself.';
+    'What the gate accepted of the model''s guess at intent, null when the answer was not on the list. An input to classification, never the classification itself; the raw answer stays in extracted.';
 COMMENT ON COLUMN messages.category IS
     'What the gate decided after checking every model value against the words in the email.';
 COMMENT ON COLUMN messages.dropped_fields IS
