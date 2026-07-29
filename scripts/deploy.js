@@ -102,8 +102,26 @@ for (const file of readdirSync(join(root, 'workflows')).filter((f) => f.endsWith
     }
     nodes.push(node);
   }
-  // the export mirrors the instance, so once a node is added its wiring is the export's to state
-  if (brought.length) Object.assign(connections, exported.connections);
+  // Only the edges the new nodes need. Assigning the export's connections wholesale looked like a
+  // merge and was not: it replaces a source node's whole list, so any edge drawn on the canvas
+  // since the last export would vanish the next time anything was added. An edge is copied here
+  // only when one of its ends is a node that did not exist a moment ago; everything else on the
+  // instance is left exactly as the canvas has it.
+  if (brought.length) {
+    const fresh = new Set(brought.map((n) => n.name));
+    for (const [from, groups] of Object.entries(exported.connections)) {
+      if (!groups?.main) continue;
+      const live = connections[from] || (connections[from] = { main: [] });
+      groups.main.forEach((group, i) => {
+        for (const edge of group || []) {
+          if (!fresh.has(from) && !fresh.has(edge.node)) continue;
+          while (live.main.length <= i) live.main.push([]);
+          const there = live.main[i].some((e) => e.node === edge.node && e.index === edge.index);
+          if (!there) live.main[i].push(edge);
+        }
+      });
+    }
+  }
 
   let touched = brought.length;
   const inExport = new Map(exported.nodes.map((n) => [n.name, n]));
