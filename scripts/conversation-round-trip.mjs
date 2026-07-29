@@ -135,12 +135,14 @@ const askAbout = (id, orderId) => jsonRowOf(quoteSql('should-we-ask-and-for-what
 
 // the node that turns a decision and a stored sentence into the letter a person receives
 const composeSource = read('src', '10-quote', 'compose-the-reply.js');
-// one argument, deliberately: everything the reply needs comes back from the query that decided
-// to speak, so a test cannot supply a field the running node would not have
-const compose = (decision) => new Function('$input', '$', composeSource)(
-  { all: () => [] },
-  () => ({ first: () => ({ json: decision }) }),
-)[0].json;
+// The decisions go in as the node's own input, deliberately: everything the reply needs comes back
+// from the query that decided to speak, so a test cannot supply a field the running node would not
+// have. Reaching back to another node throws here, because that is how the address went missing.
+const composeAll = (...decisions) => new Function('$input', '$', composeSource)(
+  { all: () => decisions.map((json) => ({ json })) },
+  (name) => { throw new Error(`the reply reached back to ${name} instead of reading its input`); },
+).map((r) => r.json);
+const compose = (decision) => composeAll(decision)[0];
 const recordAsk = (id, orderId, asking) => rowOf(quoteSql('say-we-asked'), [id, orderId, asking]);
 
 const orderOf = (id) => JSON.parse(ask(
@@ -813,6 +815,33 @@ console.log('\nwhere a letter goes is the sentence\'s decision');
   check('and still carries the words themselves', /roughly how many square feet/.test(draft.body), true);
   check('it does not claim to have reached her', draft.reaches_the_customer, false);
   run(['-c', "UPDATE reply_templates SET sends_automatically = true WHERE key = 'needs_area'"]);
+}
+
+console.log('\ntwo customers in one poll are both answered');
+{
+  // the mailbox is read once a minute and hands the lane everything it found, so two enquiries
+  // arriving in the same minute reach the composing step together
+  const a = arrive({
+    id: 'b1', thread: 'th-b1', from: 'iris@example.com',
+    text: 'laminate please, in buda tx',
+    extracted: { intent: 'new_quote', material: 'laminate', city: 'buda',
+      evidence: { material: 'laminate', city: 'buda' } },
+  });
+  const b = arrive({
+    id: 'b2', thread: 'th-b2', from: 'otto@example.com',
+    text: 'lvp for the shop floor at home, kyle tx',
+    extracted: { intent: 'new_quote', material: 'lvp', city: 'kyle',
+      evidence: { material: 'lvp', city: 'kyle' } },
+  });
+
+  const letters = composeAll(askAbout('b1', a.order_id), askAbout('b2', b.order_id));
+  check('both enquiries produce a letter', letters.length, 2);
+  check('the first goes to the first customer', letters[0].to, 'iris@example.com');
+  check('and the second to the second, not a repeat of the first', letters[1].to, 'otto@example.com');
+  check('each stays in its own thread',
+    [letters[0].thread_id, letters[1].thread_id], ['th-b1', 'th-b2']);
+  check('neither carries a price',
+    letters.some((l) => /\$|[0-9]{2,}/.test(l.body)), false);
 }
 
 
