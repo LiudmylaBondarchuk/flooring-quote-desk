@@ -58,6 +58,13 @@ changing how it sounds is an edit rather than a deployment, and a combination wi
 no sentence written for it is refused rather than sent empty. Nothing is sent yet —
 this is the decision and the words, not the sending.
 
+**A letter from the desk's own mailbox is the desk's.** Gmail labels a message sent
+to oneself with SENT and INBOX both, and the old test for outbound wanted SENT
+without INBOX — so every reply the desk sent to the demo address came back as
+though a customer had written it, landed in a lane, and grew the thread's history.
+Nothing looped only because the lane it landed in does nothing yet. The sender's
+address decides it now, whatever Gmail labelled it.
+
 **Checks, and what they are worth.** Four harnesses run against a real Postgres on
 every push, one of them driving whole conversations — several customers at once with
 interleaved threads, a returning customer whose first job was booked, a refused

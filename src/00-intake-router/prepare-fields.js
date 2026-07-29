@@ -1,5 +1,15 @@
 const CONTRACT_VERSION = 1;
 
+// The mailbox this router reads. Gmail labels a message the desk sends to itself with SENT *and*
+// INBOX, so "SENT and not INBOX" reads our own letter as a customer writing in: it lands in a lane,
+// grows the thread's history, and changes how the gate judges the next real message. Any lane that
+// answers would then answer itself.
+//
+// The address is not a secret and not a setting a person tunes — it is which mailbox this workflow
+// is pointed at, and the Gmail node's credential does not expose it to a Code node. Changing the
+// mailbox means changing this line.
+const OUR_MAILBOX = 'flooring.demo.austin@gmail.com';
+
 const PLATFORM = /@(?:mail\.)?(angi|angieslist|homeadvisor|thumbtack|yelp|porch|networx|modernize)\./i;
 const ADDR = /[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)+/;
 const SUBJECT_TAGS = /^\s*[[(](?:external|ext|spam|suspected spam|bulk|caution|warning)[\])]\s*/i;
@@ -65,10 +75,11 @@ return $input.all().map((item, i) => {
     if (!m.id) throw new Error('missing Gmail message id (m.id)');
 
     const labels = Array.isArray(m.labelIds) ? m.labelIds : [];
-    const isOutbound = labels.includes('SENT') && !labels.includes('INBOX');
 
     const from = m.from?.value?.[0] || {};
     const fromEmail = lower(from.address);
+    const isOutbound = fromEmail === lower(OUR_MAILBOX)
+      || (labels.includes('SENT') && !labels.includes('INBOX'));
     const replyToEmail = emailIn(hdr(m, 'reply-to'));
     const isPlatform = PLATFORM.test(fromEmail || '');
     const contactEmail = isPlatform
