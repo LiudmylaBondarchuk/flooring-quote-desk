@@ -131,8 +131,13 @@ for (const file of readdirSync(join(root, 'workflows')).filter((f) => f.endsWith
     // that could not be corrected from the repository -- and the note on this very lane went on
     // saying nothing was sent from it after the sending was built.
     if (node.type === 'n8n-nodes-base.stickyNote') {
+      // undefined means the export has nothing to say about this note; an empty string is a note
+      // deliberately cleared, and truthiness cannot tell those apart
       const said = inExport.get(node.name)?.parameters?.content;
-      if (said && said !== node.parameters.content) { node.parameters.content = said; touched++; }
+      if (said !== undefined && said !== node.parameters.content) {
+        node.parameters.content = said;
+        touched++;
+      }
       continue;
     }
     if (node.parameters?.jsCode) {
