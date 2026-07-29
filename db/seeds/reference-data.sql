@@ -134,6 +134,24 @@ INSERT INTO service_area (city, zip, zone, notes) VALUES
     ('Corpus Christi', '78401', 'out', NULL)
 ON CONFLICT (lower(city), coalesce(zip, '')) DO NOTHING;
 
+INSERT INTO reply_templates (key, body, notes) VALUES
+    ('needs_area',
+     'Thanks for getting in touch. To price this I need one more thing: roughly how many square feet is the floor? A rough number is fine — I can firm it up on site.',
+     'sent when the material is known and the area is not'),
+    ('needs_material',
+     'Thanks for getting in touch. What are you thinking of putting down — luxury vinyl plank, laminate, engineered wood, sheet vinyl or carpet?',
+     'sent when the area is known and the material is not'),
+    ('needs_both',
+     'Thanks for getting in touch. Two things and I can put a number on it: what are you thinking of putting down, and roughly how many square feet is the floor?',
+     'sent when neither the material nor the area is known'),
+    ('needs_location',
+     'Thanks for getting in touch. Whereabouts is the property? I work in Austin and about thirty miles around it.',
+     'sent when the town is not known'),
+    ('signature',
+     E'\n\nBest,\nthe flooring desk',
+     'appended to every reply')
+ON CONFLICT (key) DO NOTHING;
+
 INSERT INTO services (priority, label, we_do, match_words, answer, notes) VALUES
     (20, 'laminate', true, 'laminate', 'Yes, we install laminate.', NULL),
     (30, 'engineered wood', true, 'engineered|hardwood|wood floor', 'Yes, we install engineered and solid hardwood.', NULL),

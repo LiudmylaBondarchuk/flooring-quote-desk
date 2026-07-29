@@ -125,6 +125,22 @@ const priceIt = (id) => {
   return { gathered, quote: q, written };
 };
 
+// the two statements that decide whether to speak, and record having spoken
+// A statement with nothing data-modifying in it can be wrapped, and then the values come back as
+// JSON with their types and their line breaks intact. Splitting psql's own output on newlines read
+// a signature as an empty string and quietly stopped checking it.
+const jsonRowOf = (sql, values) => JSON.parse(ask(`SELECT row_to_json(t) FROM (${fill(sql, values)}) t`));
+
+const askAbout = (id, orderId) => jsonRowOf(quoteSql('should-we-ask-and-for-what'), [id, orderId]);
+
+// the node that turns a decision and a stored sentence into the letter a person receives
+const composeSource = read('src', '10-quote', 'compose-the-reply.js');
+const compose = (decision, message) => new Function('$input', '$', composeSource)(
+  { all: () => [] },
+  (name) => ({ first: () => ({ json: name === 'Accept handoff' ? message : decision }) }),
+)[0].json;
+const recordAsk = (id, orderId, asking) => rowOf(quoteSql('say-we-asked'), [id, orderId, asking]);
+
 const orderOf = (id) => JSON.parse(ask(
   `SELECT row_to_json(o) FROM (SELECT material_category, area_sqft, area_unit, city, zone, state
      FROM orders WHERE id = ${literal(String(id))}::int) o`));
@@ -508,6 +524,167 @@ console.log('\nan order that has already been booked');
   check('no offer is written against finished work', priced.written.offer_id, '');
   check('the booked order is untouched', orderOf(a.order_id).state, 'booked');
   check('and nothing was linked to the message', priced.written.message_linked, 'f');
+}
+
+console.log('\nthe system asks for what is missing, once');
+{
+  const first = arrive({
+    id: 'q10', thread: 'th-ask', from: 'zoe@example.com',
+    text: 'hi, i want laminate in the hallway, kyle tx',
+    extracted: { intent: 'new_quote', material: 'laminate', city: 'kyle',
+      evidence: { material: 'laminate', city: 'kyle' } },
+  });
+  const one = askAbout('q10', first.order_id);
+  check('it knows to ask', one.should_ask, true);
+  check('and what for', one.asking_for, 'area');
+  check('with words a person wrote', one.template_key, 'needs_area');
+  recordAsk('q10', first.order_id, one.asking_for);
+
+  const second = arrive({
+    id: 'q11', thread: 'th-ask', from: 'zoe@example.com',
+    text: 'sorry, forgot to say - hallway and the landing',
+    extracted: { intent: 'new_quote', evidence: {} },
+  });
+  const twice = askAbout('q11', second.order_id);
+  check('a second email adding nothing does not get the same question again', twice.should_ask, false);
+  check('though it is still the thing that is missing', twice.asking_for, 'area');
+
+  const third = arrive({
+    id: 'q12', thread: 'th-ask', from: 'zoe@example.com',
+    text: 'it is about 380 sq ft',
+    extracted: { intent: 'new_quote', area_sqft: 380, area_unit: 'sqft',
+      evidence: { area_sqft: '380', area_unit: 'sq ft' } },
+  });
+  const done = askAbout('q12', third.order_id);
+  check('once answered there is nothing to ask', done.should_ask, false);
+  check('and nothing is missing', done.asking_for, '');
+  check('exactly one question was ever recorded', Number(ask(
+    `SELECT count(*) FROM order_events WHERE order_id = ${first.order_id} AND kind = 'asked'`)), 1);
+}
+
+console.log('\nthe letter a customer would actually receive');
+{
+  const a = arrive({
+    id: 'w1', thread: 'th-w', from: 'wren@example.com',
+    text: 'hi, laminate in the hallway please, kyle tx',
+    extracted: { intent: 'new_quote', material: 'laminate', city: 'kyle',
+      evidence: { material: 'laminate', city: 'kyle' } },
+  });
+  const decision = askAbout('w1', a.order_id);
+  const letter = compose(decision, { contact_email: 'wren@example.com', thread_id: 'th-w',
+    subject: 'laminate in the hallway' });
+
+  check('it goes to the person who wrote in', letter.to, 'wren@example.com');
+  check('it stays in their thread', letter.thread_id, 'th-w');
+  check('the subject is a reply to theirs', letter.subject, 'Re: laminate in the hallway');
+  check('it asks for the one thing missing, in the words a person wrote',
+    letter.body.startsWith('Thanks for getting in touch. To price this I need one more thing'), true);
+  check('it does not ask for what it already knows', /what are you thinking of putting down/.test(letter.body), false);
+  check('it is signed', letter.body.trimEnd().endsWith('the flooring desk'), true);
+  check('no number and no price is anywhere in it', /\$|\bsq ft\b|[0-9]{2,}/.test(letter.body), false);
+
+  const already = compose(askAbout('w1', a.order_id), { contact_email: 'wren@example.com',
+    thread_id: 'th-w', subject: 'Re: laminate in the hallway' });
+  check('a subject that is already a reply is not doubled', already.subject, 'Re: laminate in the hallway');
+}
+
+console.log('\nthe states the letter only claimed to handle');
+{
+  const a = arrive({
+    id: 'w3', thread: 'th-w3', from: 'una@example.com',
+    text: 'carpet, 240 sq ft please',
+    extracted: { intent: 'new_quote', material: 'carpet', area_sqft: 240, area_unit: 'sqft',
+      evidence: { material: 'carpet', area_sqft: '240', area_unit: 'sq ft' } },
+  });
+  const town = askAbout('w3', a.order_id);
+  check('only the town is missing', town.asking_for, 'location');
+  check('and it has its own words', town.template_key, 'needs_location');
+  check('which ask about the property, not the floor',
+    /Whereabouts is the property/.test(town.body), true);
+
+  const b = arrive({
+    id: 'w4', thread: 'th-w4', from: 'tom@example.com',
+    text: 'about 500 sq ft in leander tx, not sure what to put down',
+    extracted: { intent: 'new_quote', area_sqft: 500, area_unit: 'sqft', city: 'leander',
+      evidence: { area_sqft: '500', area_unit: 'sq ft', city: 'leander' } },
+  });
+  const material = askAbout('w4', b.order_id);
+  check('only the material is missing', material.asking_for, 'material');
+  check('and the words list what the firm lays',
+    /luxury vinyl plank, laminate, engineered wood/.test(material.body), true);
+
+  run(['-c', `UPDATE orders SET state = 'booked', closed_at = now() WHERE id = ${b.order_id}`]);
+  const closed = askAbout('w4', b.order_id);
+  check('a finished job is not asked anything', closed.should_ask, false);
+
+  const noSubject = compose(town, { contact_email: 'una@example.com', thread_id: 'th-w3', subject: '' });
+  check('an email with no subject still gets a sensible one', noSubject.subject, 'Re: your enquiry');
+
+  let refused = false;
+  try {
+    compose(town, { contact_email: null, thread_id: 'th-w3', subject: 'carpet' });
+  } catch (e) {
+    refused = /no address to answer/.test(e.message);
+  }
+  check('a lead with no reply-to is refused, not sent into the void', refused, true);
+}
+
+console.log('\na template nobody wrote is refused rather than sent empty');
+{
+  run(['-c', "DELETE FROM reply_templates WHERE key = 'needs_both'"]);
+  const a = arrive({
+    id: 'w2', thread: 'th-w2', from: 'vic@example.com',
+    text: 'hello, i need a floor doing, buda tx',
+    extracted: { intent: 'new_quote', city: 'buda', evidence: { city: 'buda' } },
+  });
+  const decision = askAbout('w2', a.order_id);
+  let refused = false;
+  try {
+    compose(decision, { contact_email: 'vic@example.com', thread_id: 'th-w2', subject: 'a floor' });
+  } catch (e) {
+    refused = /reply_templates is missing a row/.test(e.message);
+  }
+  check('an empty letter is refused, not sent', refused, true);
+  run(['-c', "INSERT INTO reply_templates (key, body) VALUES ('needs_both',"
+    + " 'Thanks for getting in touch. Two things and I can put a number on it.')"]);
+}
+
+console.log('\na customer who answers half of it gets asked for the rest');
+{
+  const first = arrive({
+    id: 'q20', thread: 'th-half', from: 'yuri@example.com',
+    text: 'hello, i need a floor doing, manor tx',
+    extracted: { intent: 'new_quote', city: 'manor', evidence: { city: 'manor' } },
+  });
+  const one = askAbout('q20', first.order_id);
+  check('both things are missing', one.asking_for, 'material,area');
+  check('and the words say so', one.template_key, 'needs_both');
+  recordAsk('q20', first.order_id, one.asking_for);
+
+  const second = arrive({
+    id: 'q21', thread: 'th-half', from: 'yuri@example.com',
+    text: 'carpet please',
+    extracted: { intent: 'new_quote', material: 'carpet', evidence: { material: 'carpet' } },
+  });
+  const two = askAbout('q21', second.order_id);
+  check('the question changed, so it is asked again', two.should_ask, true);
+  check('for what is left', two.asking_for, 'area');
+  check('with different words', two.template_key, 'needs_area');
+}
+
+console.log('\nthe gate hands on the answer to a question about what the firm does');
+{
+  const a = arrive({
+    id: 'q30', thread: 'th-cap', from: 'xena@example.com',
+    text: 'do you install laminate? cedar park tx',
+    extracted: { intent: 'pre_sales_question', material: 'laminate', city: 'cedar park',
+      evidence: { material: 'laminate', city: 'cedar park' } },
+  });
+  check('it was read as a question, not as work', a.decision.category, 'pre_sales');
+  check('and the answer came from the services table', a.decision.service_answer,
+    'Yes, we install laminate.');
+  check('which says the firm does it', a.decision.service_we_do, true);
+  check('no order was opened for a question', a.order_id, null);
 }
 
 console.log('\nnothing leaked between any of them');

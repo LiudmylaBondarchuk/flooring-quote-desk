@@ -48,6 +48,16 @@ cannot be priced automatically, because the note about it colours the message an
 `pricing_allowed` requires green — a decision about which reasons are doubts and
 which are notes, not a defect to patch quietly.
 
+**The system knows what to ask, and asks it once.** An order that is missing the
+material, the area or the town says so, and the question that goes out names only
+what is outstanding. Asking is recorded like any other event, and the decision to
+ask reads that history rather than a flag: a second email adding nothing gets no
+second copy of the same question, while a customer who answers half of it is asked
+for the rest, in different words. What the firm says is stored in the database, so
+changing how it sounds is an edit rather than a deployment, and a combination with
+no sentence written for it is refused rather than sent empty. Nothing is sent yet —
+this is the decision and the words, not the sending.
+
 **Checks, and what they are worth.** Four harnesses run against a real Postgres on
 every push, one of them driving whole conversations — several customers at once with
 interleaved threads, a returning customer whose first job was booked, a refused

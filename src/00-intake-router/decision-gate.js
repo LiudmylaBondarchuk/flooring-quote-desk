@@ -219,6 +219,10 @@ for (const item of $input.all()) {
     reasons.push(`material "${rawMaterial}" is not in the price catalogue`);
   }
   const declined = product.status === 'out_of_scope' ? declinedRaw : null;
+  // The service that matched has an answer written next to it in the database, and the gate has
+  // already done the matching. Handing the text on rather than the label keeps the matching in one
+  // place: anything that answered a customer by matching again would be a second copy of this.
+  const answering = declinedRaw || offered || null;
 
   const unitInWords = (text) => {
     const s = String(text ?? '');
@@ -530,6 +534,9 @@ for (const item of $input.all()) {
     gate_reasons: reasons,
     matched_rule: matchedRule,
     out_of_scope: declined ? declined.label : null,
+    service_label: answering ? answering.label : null,
+    service_answer: answering ? answering.answer : null,
+    service_we_do: answering ? answering.we_do : null,
     existing_floor_action: scope,
     fixing_method: fixing,
     old_floor_removal: removal,

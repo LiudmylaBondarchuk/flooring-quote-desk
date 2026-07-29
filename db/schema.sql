@@ -72,7 +72,7 @@ CREATE TABLE order_events (
     created_at        timestamptz NOT NULL DEFAULT now(),
 
     CONSTRAINT order_events_kind_known CHECK (kind IN (
-        'created', 'merged', 'corrected', 'state_change', 'approved', 'rejected'))
+        'created', 'merged', 'corrected', 'state_change', 'approved', 'rejected', 'asked'))
 );
 
 CREATE INDEX order_events_order_idx ON order_events (order_id, created_at);
@@ -299,6 +299,14 @@ CREATE TABLE services (
 
 CREATE UNIQUE INDEX services_label_unique ON services (lower(label));
 
+CREATE TABLE reply_templates (
+    id         integer     GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    key        text        NOT NULL UNIQUE,
+    body       text        NOT NULL,
+    notes      text,
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE failures (
     id                integer     GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     source            text        NOT NULL,
@@ -359,5 +367,8 @@ COMMENT ON COLUMN messages.settled IS
 
 COMMENT ON COLUMN orders.area_status IS
     'How the area was arrived at, carried from the message that settled it. Only the three the gate calls solid enough to price from can be here.';
+
+COMMENT ON TABLE reply_templates IS
+    'What the firm says, in the owner''s words. Placeholders in {braces} are filled from the order; anything else is sent as written.';
 
 COMMIT;
