@@ -22,6 +22,7 @@ CREATE TABLE orders (
     material_category     text,
     area_sqft             numeric(10, 2),
     area_unit             text,
+    area_status           text,
     city                  text,
     zone                  text,
     existing_floor_action text,
@@ -41,6 +42,8 @@ CREATE TABLE orders (
         OR material_category IN ('LVP', 'Laminate', 'Wood', 'Vinyl', 'Carpet')),
     CONSTRAINT orders_area_unit_known CHECK (area_unit IS NULL
         OR area_unit IN ('sqft', 'sqm', 'sqyd')),
+    CONSTRAINT orders_area_status_known CHECK (area_status IS NULL
+        OR area_status IN ('known', 'converted', 'derived')),
     CONSTRAINT orders_zone_known CHECK (zone IS NULL OR zone IN ('core', 'edge', 'out')),
     CONSTRAINT orders_floor_action_known CHECK (existing_floor_action IS NULL
         OR existing_floor_action IN ('remove_first', 'over_existing')),
@@ -353,5 +356,8 @@ COMMENT ON TABLE price_band_events IS
 
 COMMENT ON COLUMN messages.settled IS
     'The facts the gate stood behind for this message, as it handed them to the merge. Distinct from the reported columns beside it, which show what the customer wrote even where it was refused.';
+
+COMMENT ON COLUMN orders.area_status IS
+    'How the area was arrived at, carried from the message that settled it. Only the three the gate calls solid enough to price from can be here.';
 
 COMMIT;

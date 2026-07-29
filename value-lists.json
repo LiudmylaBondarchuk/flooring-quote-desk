@@ -513,11 +513,13 @@
         "converted",
         "derived"
       ],
+      "sql": [
+        "orders.area_status"
+      ],
       "gate": {
         "const": "COMPARABLE_AREA",
         "part": "array"
-      },
-      "why_no_sql": "a subset of area_status used only to decide whether two enquiries describe the same job"
+      }
     }
   }
 }

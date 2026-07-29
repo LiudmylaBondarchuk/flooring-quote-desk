@@ -109,6 +109,22 @@ const arrive = ({ id, thread, from, text, extracted, headers }) => {
 const missing = (raw) => (raw === '{}' || raw === '' || raw === undefined
   ? [] : raw.replace(/^\{|\}$/g, '').split(',').filter(Boolean));
 
+const quoteSql = (n) => read('db', '10-quote', `${n}.sql`).replace(/;\s*$/, '');
+const computeSource = read('src', '10-quote', 'compute-quote.js');
+
+// gather -> compute -> write, the three steps the lane runs, with nothing standing in for any
+const priceIt = (id) => {
+  const gathered = JSON.parse(ask(
+    `SELECT row_to_json(t) FROM (${fill(quoteSql('gather-what-a-price-needs'), [id])}) t`));
+  const [computed] = node(computeSource, [gathered]);
+  const q = computed.json;
+  if (!q.priceable) return { gathered, quote: q, written: null };
+  const written = rowOf(quoteSql('write-the-offer'),
+    [id, gathered.order_id, q.subtotal_low, q.subtotal_high, q.total_low, q.total_high,
+      JSON.stringify(q.breakdown), q.pricing_version]);
+  return { gathered, quote: q, written };
+};
+
 const orderOf = (id) => JSON.parse(ask(
   `SELECT row_to_json(o) FROM (SELECT material_category, area_sqft, area_unit, city, zone, state
      FROM orders WHERE id = ${literal(String(id))}::int) o`));
@@ -356,6 +372,142 @@ console.log('\na customer who says nothing more');
   check('and it knows what it is waiting for', missing(a.merged.still_missing), ['area_sqft']);
   check('it can be found by anyone looking for stalled work',
     Number(ask("SELECT count(*) FROM orders WHERE state = 'new' AND area_sqft IS NULL")) >= 1, true);
+}
+
+console.log('\na complete order is priced and the price is written down');
+{
+  const a = arrive({
+    id: 'p1', thread: 'th-p', from: 'pia@example.com',
+    text: 'lvp please, 400 sq ft, round rock tx',
+    extracted: { intent: 'new_quote', material: 'lvp', area_sqft: 400, area_unit: 'sqft',
+      city: 'round rock',
+      evidence: { material: 'lvp', area_sqft: '400', area_unit: 'sq ft', city: 'round rock' } },
+  });
+  const priced = priceIt('p1');
+  check('the gate let this one be priced', priced.gathered.pricing_allowed, true);
+  check('the catalogue gave it a band', priced.gathered.bands.length > 0, true);
+  check('a price came out', priced.quote.priceable, true);
+  check('the range is the right way round', priced.quote.total_low <= priced.quote.total_high, true);
+  check('the breakdown names what it charged for',
+    [...new Set(priced.quote.breakdown.lines.map((l) => l.kind))].sort(), ['floor']);
+
+  const stored = JSON.parse(ask("SELECT row_to_json(o) FROM (SELECT total_low, total_high, status,"
+    + ` pricing_version, breakdown IS NOT NULL AS has_breakdown FROM offers WHERE id = ${priced.written.offer_id}) o`));
+  check('the offer holds what was computed',
+    [Number(stored.total_low), Number(stored.total_high)], [priced.quote.total_low, priced.quote.total_high]);
+  check('and it is a draft, not something sent', stored.status, 'draft');
+  check('with the arithmetic it came from', stored.pricing_version, priced.quote.pricing_version);
+  check('and the parts it is made of', stored.has_breakdown, true);
+
+  check('the order moved to quoted', orderOf(a.order_id).state, 'quoted');
+  check('and the move says what it moved from', JSON.parse(ask(
+    "SELECT coalesce(json_agg(json_build_object('from', old_value, 'to', new_value)), '[]'::json)"
+    + ` FROM order_events WHERE order_id = ${a.order_id} AND kind = 'state_change'`)),
+  [{ from: 'new', to: 'quoted' }]);
+}
+
+console.log('\nasking for the old floor to be taken away stops the price');
+{
+  // Not an approval of this. The arithmetic has a removal line and a rate for it, and cannot
+  // reach either: any reason at all turns the message yellow, pricing_allowed needs green, and
+  // "the old floor comes out" is a note about what will be charged, not a doubt about anything.
+  // Recorded so it is visible rather than discovered again from a customer who never got a quote.
+  arrive({
+    id: 'p3', thread: 'th-p3', from: 'nadia@example.com',
+    text: 'laminate, 300 sq ft, buda tx, and please take the old floor away',
+    extracted: { intent: 'new_quote', material: 'laminate', area_sqft: 300, area_unit: 'sqft',
+      city: 'buda', old_floor_removal: true,
+      evidence: { material: 'laminate', area_sqft: '300', area_unit: 'sq ft', city: 'buda',
+        old_floor_removal: 'take the old floor away' } },
+  });
+  const priced = priceIt('p3');
+  check('the order knows the old floor is coming out', priced.gathered.old_floor_removal, true);
+  check('the catalogue and the removal rate are both there',
+    [priced.gathered.bands.length > 0, 'old_floor_removal' in priced.gathered.rules], [true, true]);
+  check('and still no price is allowed', priced.gathered.pricing_allowed, false);
+  check('refused for the colour, not for anything missing',
+    priced.quote.refusals, ['pricing_not_allowed', 'not_green']);
+}
+
+console.log('\nan order still missing its area is not priced');
+{
+  const a = arrive({
+    id: 'p2', thread: 'th-p2', from: 'omar@example.com',
+    text: 'i want carpet in the bedroom, kyle tx, size to follow',
+    extracted: { intent: 'new_quote', material: 'carpet', city: 'kyle',
+      evidence: { material: 'carpet', city: 'kyle' } },
+  });
+  const priced = priceIt('p2');
+  check('no price was produced', priced.quote.priceable, false);
+  check('and it says why, without guessing', priced.quote.refusals.includes('no_area'), true);
+  check('nothing was written', priced.written, null);
+  check('the order is where it was', orderOf(a.order_id).state, 'new');
+  check('no offer exists for it', Number(ask(`SELECT count(*) FROM offers WHERE order_id = ${a.order_id}`)), 0);
+}
+
+console.log('\nthe same order priced a second time');
+{
+  const a = arrive({
+    id: 'p4', thread: 'th-p4', from: 'mira@example.com',
+    text: 'laminate, 500 sq ft, leander tx',
+    extracted: { intent: 'new_quote', material: 'laminate', area_sqft: 500, area_unit: 'sqft',
+      city: 'leander',
+      evidence: { material: 'laminate', area_sqft: '500', area_unit: 'sq ft', city: 'leander' } },
+  });
+  const first = priceIt('p4');
+  check('the first quote moved the order', first.written.order_moved, 't');
+
+  const again = priceIt('p4');
+  check('a second run writes a second offer', again.written.offer_id !== first.written.offer_id, true);
+  check('the order does not move again', again.written.order_moved, 'f');
+  check('and no second state change is recorded', Number(ask(
+    `SELECT count(*) FROM order_events WHERE order_id = ${a.order_id} AND kind = 'state_change'`)), 1);
+  check('the order is still quoted', orderOf(a.order_id).state, 'quoted');
+}
+
+console.log('\na material whose bands are all switched off in the spreadsheet');
+{
+  const a = arrive({
+    id: 'p5', thread: 'th-p5', from: 'lena@example.com',
+    text: 'sheet vinyl please, 220 sq ft, hutto tx',
+    extracted: { intent: 'new_quote', material: 'vinyl', area_sqft: 220, area_unit: 'sqft', city: 'hutto',
+      evidence: { material: 'vinyl', area_sqft: '220', area_unit: 'sq ft', city: 'hutto' } },
+  });
+  run(['-c', "UPDATE price_bands SET active = false WHERE category = 'Vinyl'"]);
+  const priced = priceIt('p5');
+  check('the catalogue offers nothing for it', priced.gathered.bands.length, 0);
+  check('so no price is produced', priced.quote.priceable, false);
+  check('and it says the catalogue is why', priced.quote.refusals.includes('no_price_band'), true);
+  check('the order was not moved', orderOf(a.order_id).state, 'new');
+  run(['-c', "UPDATE price_bands SET active = true WHERE category = 'Vinyl'"]);
+}
+
+console.log('\na message that never belonged to an order');
+{
+  arrive({
+    id: 'p6', thread: 'th-p6', from: 'kai@example.com',
+    text: 'thanks, that is all for now',
+    extracted: { intent: 'follow_up', evidence: {} },
+  });
+  const priced = priceIt('p6');
+  check('there is no order behind it', priced.gathered.order_id, null);
+  check('no price is produced', priced.quote.priceable, false);
+  check('and nothing was written', priced.written, null);
+}
+
+console.log('\nan order that has already been booked');
+{
+  const a = arrive({
+    id: 'p7', thread: 'th-p7', from: 'jon@example.com',
+    text: 'carpet, 260 sq ft, buda tx',
+    extracted: { intent: 'new_quote', material: 'carpet', area_sqft: 260, area_unit: 'sqft', city: 'buda',
+      evidence: { material: 'carpet', area_sqft: '260', area_unit: 'sq ft', city: 'buda' } },
+  });
+  run(['-c', `UPDATE orders SET state = 'booked', closed_at = now() WHERE id = ${a.order_id}`]);
+  const priced = priceIt('p7');
+  check('no offer is written against finished work', priced.written.offer_id, '');
+  check('the booked order is untouched', orderOf(a.order_id).state, 'booked');
+  check('and nothing was linked to the message', priced.written.message_linked, 'f');
 }
 
 console.log('\nnothing leaked between any of them');
