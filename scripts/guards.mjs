@@ -174,6 +174,21 @@ if (touched > differs) {
     + 'how this branch should be shaped');
 }
 
+// A migration is the shape of the system changing. CHANGELOG.md is what a reader is told the
+// system is. When the first moves and the second does not, the document describes something that
+// no longer exists — which for a repository whose worth is being understood is worse than an entry
+// nobody wrote. It went eleven merged branches out of date before anyone noticed, so the rule fires
+// on exactly the change that makes it wrong, and stays quiet otherwise.
+const migrations = git('diff', '--name-only', '--diff-filter=A', base, 'HEAD', '--', 'db/history/')
+  .split('\n').filter(Boolean);
+const described = git('diff', '--name-only', base, 'HEAD', '--', 'CHANGELOG.md').split('\n').filter(Boolean);
+if (migrations.length && !described.length) {
+  complain(`${migrations.length} migration(s) here, and CHANGELOG.md says nothing about them`,
+    'a migration changes what the system is; the changelog is what a reader is told it is. When '
+    + 'one moves without the other the description outlives the thing described',
+    `say what changed, in a sentence a stranger could use: ${migrations.join(', ')}`);
+}
+
 const commits = git('rev-list', `${base}..HEAD`).split('\n').filter(Boolean);
 for (const sha of commits) {
   const short = sha.slice(0, 7);
