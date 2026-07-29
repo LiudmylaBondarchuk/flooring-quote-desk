@@ -80,9 +80,9 @@ const TOUCHES = ['quote_request', 'existing_project', 'scheduling', 'offer_respo
 // One email, all the way through the router as the workflow wires it: prepared, logged, looked
 // up, decided, stored, attached to an order, merged. Nothing here is a stand-in — every step is
 // the file the instance runs.
-const arrive = ({ id, thread, from, text, extracted, headers }) => {
+const arrive = ({ id, thread, from, text, extracted, headers, labels }) => {
   const [prepared] = node(prepareSource, [{
-    id, threadId: thread, labelIds: ['INBOX'],
+    id, threadId: thread, labelIds: labels || ['INBOX'],
     from: { value: [{ address: from, name: from.split('@')[0] }] },
     text, html: '', headers: headers || {},
   }]);
@@ -685,6 +685,48 @@ console.log('\nthe gate hands on the answer to a question about what the firm do
     'Yes, we install laminate.');
   check('which says the firm does it', a.decision.service_we_do, true);
   check('no order was opened for a question', a.order_id, null);
+}
+
+console.log('\nour own letter coming back into the mailbox');
+{
+  const first = arrive({
+    id: 'l1', thread: 'th-loop', from: 'sara@example.com',
+    text: 'hi, laminate in the hallway, buda tx',
+    extracted: { intent: 'new_quote', material: 'laminate', city: 'buda',
+      evidence: { material: 'laminate', city: 'buda' } },
+  });
+  const asked = askAbout('l1', first.order_id);
+  check('we would ask for the area', asked.asking_for, 'area');
+  recordAsk('l1', first.order_id, asked.asking_for);
+  const before = orderOf(first.order_id);
+
+  // Gmail labels a letter the desk sends to itself with SENT and INBOX both, so the trigger picks
+  // it up again. This is the same letter arriving as if a customer had written it.
+  const ourOwn = arrive({
+    id: 'l2', thread: 'th-loop', from: 'flooring.demo.austin@gmail.com',
+    text: asked.body,
+    extracted: { intent: 'new_quote', evidence: {} },
+    labels: ['SENT', 'INBOX'],
+  });
+  check('the gate knows it is ours', ourOwn.decision.category, 'owner_reply');
+  check('it is logged, not routed into a lane', ourOwn.decision.route, 'log');
+  check('and nothing is handled', ourOwn.decision.handling, 'none');
+  // It is linked to the conversation's order, which is right: our own letter belongs to that
+  // exchange and a person reading the thread should see it. What matters is that it carries nothing
+  // into the order and leaves no event behind, because the gate settled nothing on it.
+  check('it belongs to the same conversation', ourOwn.order_id, first.order_id);
+  check('and contributes nothing to it', orderOf(first.order_id), before);
+  check('leaving no event of its own', Number(ask(
+    "SELECT count(*) FROM order_events WHERE gmail_message_id = 'l2'")), 0);
+
+  const answer = arrive({
+    id: 'l3', thread: 'th-loop', from: 'sara@example.com',
+    text: 'sorry - about 260 sq ft',
+    extracted: { intent: 'new_quote', area_sqft: 260, area_unit: 'sqft',
+      evidence: { area_sqft: '260', area_unit: 'sq ft' } },
+  });
+  check('the real answer still lands', orderOf(answer.order_id).area_sqft, 260);
+  check('and there is nothing left to ask', askAbout('l3', answer.order_id).should_ask, false);
 }
 
 console.log('\nnothing leaked between any of them');
