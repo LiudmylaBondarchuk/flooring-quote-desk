@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+if git diff --cached --name-only | grep -qx "CLAUDE.md"; then
+  echo "pre-commit: CLAUDE.md is staged — it must never be committed"
+  exit 1
+fi
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: gitleaks is not installed (brew install gitleaks)"
+  exit 1
+fi
+
+gitleaks protect --staged --redact --config .gitleaks.toml

@@ -44,6 +44,22 @@ jobs:
       - name: a conversation that runs for days keeps one order and one set of facts
         run: npm run conversation:round-trip
 
+  guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: the rules the hooks enforce locally, enforced for everyone
+        run: |
+          git fetch --no-tags origin main
+          npm run guards -- origin/main --branch "${BRANCH:-detached}"
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+
   scan:
     runs-on: ubuntu-latest
     steps:

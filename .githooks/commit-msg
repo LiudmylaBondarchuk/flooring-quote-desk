@@ -1,0 +1,3 @@
+#!/bin/sh
+# The rules live in scripts/guards.mjs, which CI runs too. This is only the early catch.
+exec node scripts/guards.mjs --message "$1"
