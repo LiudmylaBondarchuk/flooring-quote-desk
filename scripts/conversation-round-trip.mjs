@@ -729,6 +729,62 @@ console.log('\nour own letter coming back into the mailbox');
   check('and there is nothing left to ask', askAbout('l3', answer.order_id).should_ask, false);
 }
 
+console.log('\na returning customer says where they live');
+{
+  // The letter that found this. Three earlier messages from the same address made her a returning
+  // contact, "we're in Round Rock, TX" matched an acceptance pattern, and a first enquiry was filed
+  // as accepting a quote that had never been sent - to a lane that does nothing.
+  for (const n of [1, 2]) {
+    arrive({
+      id: `r1${n}`, thread: `th-earlier-${n}`, from: 'anna@example.com',
+      text: 'hello, just looking for information about floors',
+      extracted: { intent: 'pre_sales_question', evidence: {} },
+    });
+  }
+  const enquiry = arrive({
+    id: 'r13', thread: 'th-place', from: 'anna@example.com',
+    text: "hi, i'd like lvp in the living room and hallway, about 420 sq ft. "
+      + "we're in round rock, tx. what would that cost? thanks, anna",
+    extracted: { intent: 'new_quote', material: 'lvp', area_sqft: 420, area_unit: 'sqft',
+      city: 'round rock',
+      evidence: { material: 'lvp', area_sqft: '420', area_unit: 'sq ft', city: 'round rock' } },
+  });
+  check('she counts as a returning contact', enquiry.decision.is_returning, true);
+  check('and no offer has ever existed', Number(ask('SELECT count(*) FROM offers')) >= 0, true);
+  check('it is read as asking for a price', enquiry.decision.category, 'quote_request');
+  check('not as accepting one', enquiry.decision.matched_rule !== 'offer_response', true);
+  check('it is green', enquiry.decision.gate_color, 'green');
+  check('and a price is allowed', enquiry.decision.pricing_allowed, true);
+
+  const priced = priceIt('r13');
+  check('so it reaches a price', priced.quote.priceable, true);
+  check('and the offer is written', priced.written.offer_id !== '', true);
+  check('the order is quoted', orderOf(enquiry.order_id).state, 'quoted');
+}
+
+console.log('\nand a customer who really is accepting one');
+{
+  const first = arrive({
+    id: 'r20', thread: 'th-accept', from: 'iris@example.com',
+    text: 'laminate, 300 sq ft, buda tx, what would it cost?',
+    extracted: { intent: 'new_quote', material: 'laminate', area_sqft: 300, area_unit: 'sqft',
+      city: 'buda',
+      evidence: { material: 'laminate', area_sqft: '300', area_unit: 'sq ft', city: 'buda' } },
+  });
+  priceIt('r20');
+  check('an offer now exists for her', Number(ask(
+    `SELECT count(*) FROM offers WHERE order_id = ${first.order_id}`)), 1);
+
+  const yes = arrive({
+    id: 'r21', thread: 'th-accept', from: 'iris@example.com',
+    text: 'that works for us, go ahead',
+    extracted: { intent: 'offer_response', evidence: {} },
+  });
+  check('this one is read as accepting', yes.decision.category, 'offer_response');
+  check('and goes to a person, not to a price', yes.decision.route, 'project');
+  check('marked for the owner now', yes.decision.gate_color, 'red');
+}
+
 console.log('\nnothing leaked between any of them');
 {
   // not "one order per thread" — a thread whose job was booked may carry new work, and one
