@@ -26,6 +26,12 @@ SELECT
   (SELECT count(*) FROM messages m
     WHERE lower(m.contact_email) = lower($10::text) AND m.gmail_message_id <> $2::text
       AND m.offer_id IS NOT NULL) AS prior_offers,
+  -- Two different questions. "Has this person ever been quoted" is a fair signal that a complaint
+  -- is about work we did. "Is there an offer to accept" is about this conversation: a customer
+  -- quoted for a bathroom last year is not agreeing to that when they write about a bedroom now.
+  (SELECT count(*) FROM messages m
+    WHERE m.thread_id = $9::text AND m.gmail_message_id <> $2::text
+      AND m.offer_id IS NOT NULL) AS offers_in_thread,
   -- validated history only: material_category / area_sqft are what the gate accepted,
   -- never raw model output, so a hallucination cannot suppress a future quote
   (SELECT json_agg(json_build_object('m', m.material_category, 'a', m.area_sqft, 'st', m.area_status))

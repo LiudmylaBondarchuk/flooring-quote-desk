@@ -29,7 +29,9 @@ const RE = {
 
   schedulingStrong: /reschedul|re-?schedul|cancel (the )?(visit|appointment|measure)|appointment|book (a|the) (measure|visit|slot)|confirm (the )?(time|date|visit|appointment)|see you (on|at)/,
   schedulingWeak: /(can|could|would|will) (you|someone|somebody) come (by|out)|come (by|out) (to|and) (measure|look|see|check|take)|available (on|this|next)|what time|move (it|that|the (visit|appointment|install\w*|date|time)) to (monday|tuesday|wednesday|thursday|friday|saturday|sunday|next|another|a different|later|earlier)/,
-  offerYes: /\b(i'?m|we'?re|i am|we are) (good|in)\b|go ahead|let'?s (do|book|proceed|go)|\b(i|we) ('?ll |will )?accept(ed)?\b|\b(accepted|approved)\b|\b(i'?ll|we'?ll|i will|we will) take it\b|book (me|us)( in)?|sign me up|please proceed|sign(ed)? the|it'?s a deal/,
+  // "we're in" is assent only when the sentence ends there. Followed by a noun it is geography,
+  // and "we're in Round Rock, TX" was read as a customer accepting a quote nobody had sent.
+  offerYes: /\b(i'?m|we'?re|i am|we are) good\b|\b(i'?m|we'?re|i am|we are) in\b(?=[ \t]*(?:[.!?;,)]|$))|go ahead|let'?s (do|book|proceed|go)|\b(i|we) ('?ll |will )?accept(ed)?\b|\b(accepted|approved)\b|\b(i'?ll|we'?ll|i will|we will) take it\b|book (me|us)( in)?|sign me up|please proceed|sign(ed)? the|it'?s a deal/,
   offerYesWeak: /(sounds|looks) good|works for me|that works|happy with (the|that) (price|quote|number)/,
   offerNo: /too (expensive|high|much|pricey|steep)|out of (our |my )?budget|over (our|my) budget|can you do better|any (discount|room)|beat (that|this) (price|quote)|cheaper|a bit (steep|pricey)|more than (i|we) (expected|thought|wanted)/,
 
@@ -175,6 +177,7 @@ for (const item of $input.all()) {
   const fullyQuoted = row.body_fully_quoted === true;
   const isReturning = Number(row.prior_from_contact || 0) > 0 || Number(row.prior_in_thread || 0) > 0;
   const hadOffer = Number(row.prior_offers || 0) > 0;
+  const offerOnTheTable = Number(row.offers_in_thread || 0) > 0;
   const autoSubmitted = norm(row.auto_submitted);
   const isAutomated = (autoSubmitted !== '' && autoSubmitted !== 'no')
     || /bulk|junk|list|auto_reply/.test(norm(row.precedence))
@@ -306,7 +309,10 @@ for (const item of $input.all()) {
     category = 'complaint';
     matchedRule = 'complaint_signal';
     reasons.push('complaint — the owner answers personally, never a price');
-  } else if (isReturning && (said(RE.offerYes) || said(RE.offerNo)
+  // An offer has to exist before anyone can accept or haggle over it. Without this a returning
+  // customer opening with "go ahead" was filed as changing the state of a job that was never
+  // quoted, and the reply said the owner was needed now.
+  } else if (isReturning && offerOnTheTable && (said(RE.offerYes) || said(RE.offerNo)
              || (said(RE.offerYesWeak) && !(material && areaOk)))) {
     category = 'offer_response';
     matchedRule = 'offer_response';

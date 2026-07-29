@@ -209,7 +209,8 @@
       "extracted": {
         "intent": "follow_up",
         "evidence": {}
-      }
+      },
+      "offers_in_thread": 1
     },
     "expect": {
       "category": "offer_response",
@@ -226,7 +227,8 @@
       "extracted": {
         "intent": "follow_up",
         "evidence": {}
-      }
+      },
+      "offers_in_thread": 1
     },
     "expect": {
       "category": "offer_response",
@@ -1476,7 +1478,8 @@
       "extracted": {
         "intent": "follow_up",
         "evidence": {}
-      }
+      },
+      "offers_in_thread": 1
     },
     "expect": {
       "category": "offer_response",
@@ -1493,7 +1496,8 @@
       "extracted": {
         "intent": "follow_up",
         "evidence": {}
-      }
+      },
+      "offers_in_thread": 1
     },
     "expect": {
       "category": "offer_response",
@@ -1522,7 +1526,8 @@
           "existing_floor_action": "over the existing vinyl",
           "fixing_method": "glue down"
         }
-      }
+      },
+      "offers_in_thread": 1
     },
     "expect": {
       "category": "quote_request"
@@ -1537,7 +1542,8 @@
       "extracted": {
         "intent": "follow_up",
         "evidence": {}
-      }
+      },
+      "offers_in_thread": 1
     },
     "expect": {
       "category": "offer_response",
@@ -2118,6 +2124,30 @@
       "area_sqft": 320,
       "area_status": "known",
       "area_unit": "sqft"
+    }
+  },
+  {
+    "name": "a new enquiry from someone quoted once before is not an acceptance",
+    "why": "prior_offers counts every offer this contact has ever had, across years and jobs. A customer quoted for a bathroom last spring who writes about a bedroom now is starting again, and 'go ahead' cannot refer to a price nobody has sent them for this work. Only an offer in this exchange can be accepted.",
+    "row": {
+      "zone_by_city": "core",
+      "prior_from_contact": 4,
+      "prior_offers": 1,
+      "offers_in_thread": 0,
+      "source_text": "hi again - go ahead and send me something for the bedroom, about 180 sq ft",
+      "extracted": {
+        "intent": "new_quote",
+        "area_sqft": 180,
+        "area_unit": "sqft",
+        "evidence": {
+          "area_sqft": "180",
+          "area_unit": "sq ft"
+        }
+      }
+    },
+    "expect": {
+      "matched_rule": "wants_a_price",
+      "category": "quote_request"
     }
   }
 ]

@@ -65,6 +65,17 @@ though a customer had written it, landed in a lane, and grew the thread's histor
 Nothing looped only because the lane it landed in does nothing yet. The sender's
 address decides it now, whatever Gmail labelled it.
 
+**Accepting needs something to accept.** A returning customer's first enquiry was
+filed as agreeing to a quote that had never been sent, and routed to a lane that
+does nothing, because "we're in Round Rock, TX" matched a pattern for assent and
+the branch asked only whether the writer had been in touch before. Assent now
+needs an offer to exist, and "we're in" is only agreement when the sentence ends
+there — followed by a noun it is geography, and it no longer counts a line break
+as the end of one, because an address wrapped onto the next line is the commonest
+way that sentence appears in a letter. Which offer matters is now the one in this
+exchange rather than any this contact has ever had: a customer quoted for a
+bathroom last spring is not agreeing to that when they write about a bedroom now.
+
 **Checks, and what they are worth.** Four harnesses run against a real Postgres on
 every push, one of them driving whole conversations — several customers at once with
 interleaved threads, a returning customer whose first job was booked, a refused
