@@ -362,7 +362,8 @@
         "corrected",
         "state_change",
         "approved",
-        "rejected"
+        "rejected",
+        "asked"
       ],
       "sql": [
         "order_events.kind"
