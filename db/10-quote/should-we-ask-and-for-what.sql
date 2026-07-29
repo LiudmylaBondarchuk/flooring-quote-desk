@@ -34,6 +34,14 @@ arrived_since AS (
      AND kind IN ('merged', 'corrected')
      AND created_at > coalesce((SELECT created_at FROM last_ask), '-infinity'::timestamptz)
 ),
+letter AS (
+  -- who wrote in, and which thread it belongs to. Whatever composes the reply used to reach back
+  -- to an earlier node for this, and that node returns neither -- so a real run had nobody to
+  -- write to while a test that handed the fields in passed. One query answers the whole question.
+  SELECT contact_email, thread_id
+    FROM messages
+   WHERE gmail_message_id = $1::text
+),
 decided AS (
   SELECT m.still_missing,
          array_to_string(m.still_missing, ',')                     AS asking_for,
@@ -54,9 +62,13 @@ SELECT
   coalesce(d.should_ask, false)                               AS should_ask,
   chosen.key                                                  AS template_key,
   chosen.body                                                 AS body,
-  (SELECT body FROM reply_templates WHERE key = 'signature')  AS signature
+  coalesce(chosen.sends_automatically, false)                 AS may_go_alone,
+  (SELECT body FROM reply_templates WHERE key = 'signature')  AS signature,
+  l.contact_email,
+  l.thread_id
   FROM (SELECT 1) AS always
   LEFT JOIN decided d ON true
+  LEFT JOIN letter  l ON true
   -- the words come back with the decision, so whatever composes the reply is only joining
   -- strings: one query answered whether to speak and what to say, and nothing downstream has to
   -- ask the database a second question to find out

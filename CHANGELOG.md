@@ -8,8 +8,8 @@ this says what changed between releases. Never sync the two.
 ## 0.2.0
 
 A conversation now outlives the email that started it, the price list is kept by the
-owner rather than by a developer, and a price is computed and written down. Nothing
-is sent to anyone yet.
+owner rather than by a developer, and a price is computed and written down. The desk
+answers a customer for the first time — with a question, never with a figure.
 
 **A job is a job, not a piece of paper.** An email joins an open order in its own
 thread, or opens one when it is the kind of email that starts work; the database
@@ -34,15 +34,15 @@ out of the database's own constraints rather than written down a second time.
 
 **A price is computed from the order and recorded.** The three fields that decide
 whether it may be quoted come from the message in hand; everything the price is
-made of comes from the order. Only active bands are priced. The offer is a draft,
-and nothing in that lane can reach a customer.
+made of comes from the order. Only active bands are priced. The offer is a draft, and
+no number leaves the lane.
 
 **What was a known boundary and is no longer.** Area units are read from the words
 the customer wrote and converted, so a job given in square metres is priced. Job
 records spanning several emails are the orders layer above. Both were listed in
 0.1.0 as things left undone.
 
-**Still true, and deliberate.** Nothing reaches a customer. Four of the six lanes
+**Still true, and deliberate.** No figure reaches a customer. Four of the six lanes
 accept the handoff and stop. An enquiry asking for the old floor to be taken away
 cannot be priced automatically, because the note about it colours the message and
 `pricing_allowed` requires green — a decision about which reasons are doubts and
@@ -55,8 +55,28 @@ ask reads that history rather than a flag: a second email adding nothing gets no
 second copy of the same question, while a customer who answers half of it is asked
 for the rest, in different words. What the firm says is stored in the database, so
 changing how it sounds is an edit rather than a deployment, and a combination with
-no sentence written for it is refused rather than sent empty. Nothing is sent yet —
-this is the decision and the words, not the sending.
+no sentence written for it is refused rather than sent empty.
+
+**And the question is now actually sent, on the sentence's own terms.** Each stored
+sentence says whether it may go out unread; the column defaults to no, so a wording
+added later cannot escape by omission. One marked yes is sent as a reply, which
+leaves the subject and the thread to Gmail rather than inventing either, and the ask
+is recorded only after the send returns — a question the customer never received must
+not count as asked. One marked no is still composed: it goes to the owner, headed as
+not sent and naming who it was for, and nothing is recorded, so the next email asks
+again. Neither carries a number.
+
+The address to answer used to be read from a node that does not return one, so every
+real run would have refused for want of a recipient while a test that supplied the
+field by hand passed. It comes back from the query that decides to speak, and the
+harness can no longer hand in a field the running node would not have.
+
+**A file could describe a step the system did not have.** Deploying only replaced the
+bodies of nodes the instance already had, so a query written for a node nobody had
+created was deployed by doing nothing — which is how the words above sat finished in
+the repository while the lane had no step to say them. A node the export has and the
+instance does not is now created, with its credential matched by name against what is
+already in use.
 
 **A letter from the desk's own mailbox is the desk's.** Gmail labels a message sent
 to oneself with SENT and INBOX both, and the old test for outbound wanted SENT
