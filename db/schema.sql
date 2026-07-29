@@ -303,6 +303,7 @@ CREATE TABLE reply_templates (
     id         integer     GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     key        text        NOT NULL UNIQUE,
     body       text        NOT NULL,
+    sends_automatically boolean NOT NULL DEFAULT false,
     notes      text,
     updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -370,5 +371,8 @@ COMMENT ON COLUMN orders.area_status IS
 
 COMMENT ON TABLE reply_templates IS
     'What the firm says, in the owner''s words. Placeholders in {braces} are filled from the order; anything else is sent as written.';
+
+COMMENT ON COLUMN reply_templates.sends_automatically IS
+    'True when this sentence may reach a customer with nobody reading it first. False sends it to the owner instead, marked as not sent.';
 
 COMMIT;

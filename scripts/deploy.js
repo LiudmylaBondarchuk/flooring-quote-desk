@@ -27,6 +27,26 @@ const api = async (path, init = {}) => {
 
 const localFile = (path) => (existsSync(join(root, path)) ? readFileSync(join(root, path), 'utf8') : null);
 
+// The exports carry credential names and no ids, on purpose. A node being created here therefore
+// has to be told which stored credential it means, and the instance is the only place that knows:
+// whichever node is already using that name has the id. Read once, and only if something asks.
+let inUse = null;
+const credentialByName = async (kind, name) => {
+  if (!inUse) {
+    inUse = new Map();
+    const all = await api('/workflows?limit=100');
+    for (const listed of all.data) {
+      const full = await api(`/workflows/${listed.id}`);
+      for (const node of (full.activeVersion || full).nodes) {
+        for (const [k, cred] of Object.entries(node.credentials || {})) {
+          if (cred.id) inUse.set(`${k}:${cred.name}`, cred.id);
+        }
+      }
+    }
+  }
+  return inUse.get(`${kind}:${name}`);
+};
+
 const promptBody = (path) => {
   const text = localFile(path);
   return text === null ? null : text.split('\n---\n').slice(1).join('\n---\n').trim();
@@ -51,7 +71,41 @@ for (const file of readdirSync(join(root, 'workflows')).filter((f) => f.endsWith
   const nodes = full.activeVersion ? full.activeVersion.nodes : full.nodes;
   const connections = full.activeVersion ? full.activeVersion.connections : full.connections;
 
-  let touched = 0;
+  // Until now this only replaced the bodies of nodes the instance already had, so a node that
+  // existed here and not there was deployed by doing nothing at all -- the query file sat in the
+  // repository looking finished while the lane it belonged to had no such step. A node the export
+  // has and the instance does not is created, and its credentials are matched by name against what
+  // is already in use, because the export deliberately carries no credential ids.
+  const known = new Map();
+  for (const node of nodes) {
+    if (node.credentials) {
+      for (const [kind, cred] of Object.entries(node.credentials)) {
+        if (cred.id) known.set(`${kind}:${cred.name}`, cred.id);
+      }
+    }
+  }
+  const already = new Set(nodes.map((n) => n.name));
+  const brought = exported.nodes.filter((n) => !already.has(n.name));
+  for (const node of brought) {
+    if (node.credentials) {
+      for (const [kind, cred] of Object.entries(node.credentials)) {
+        const id = cred.id || known.get(`${kind}:${cred.name}`)
+          || await credentialByName(kind, cred.name);
+        if (!id) {
+          console.error(`refused ${file} — "${node.name}" wants the ${kind} credential `
+            + `"${cred.name}", and no node on this instance uses it, so there is no id to give it. `
+            + 'Create it in n8n first, or bind it there by hand.');
+          process.exit(1);
+        }
+        cred.id = id;
+      }
+    }
+    nodes.push(node);
+  }
+  // the export mirrors the instance, so once a node is added its wiring is the export's to state
+  if (brought.length) Object.assign(connections, exported.connections);
+
+  let touched = brought.length;
   for (const node of nodes) {
     if (node.parameters?.jsCode) {
       const src = localFile(join('src', scope, `${slug(node.name)}.js`));

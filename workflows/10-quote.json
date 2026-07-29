@@ -1,5 +1,5 @@
 {
-  "name": "10 Quote — Flooring",
+  "name": "10 Quote \u2014 Flooring",
   "nodes": [
     {
       "id": "sub-awaiting_pricing-trg",
@@ -26,7 +26,7 @@
       "parameters": {
         "width": 420,
         "height": 120,
-        "content": "### 10 Quote — Flooring\npricing + draft + queue colour (next step)\n\nReceives every field the router produced (passthrough)."
+        "content": "### 10 Quote \u2014 Flooring\npricing + draft + queue colour (next step)\n\nReceives every field the router produced (passthrough)."
       }
     },
     {
@@ -48,7 +48,7 @@
         "operation": "executeQuery",
         "query": "UPDATE messages SET\n  status     = $2,\n  handled_by = $3,\n  handoff_at = now()\nWHERE gmail_message_id = $1\nRETURNING gmail_message_id, category, handling, status, handled_by;",
         "options": {
-          "queryReplacement": "={{ [$json.gmail_message_id, 'awaiting_pricing', '10 Quote — Flooring'] }}"
+          "queryReplacement": "={{ [$json.gmail_message_id, 'awaiting_pricing', '10 Quote \u2014 Flooring'] }}"
         }
       }
     },
@@ -127,7 +127,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- A computed price that is not written down is a price nobody can be held to. This is where it\n-- becomes a record: the range, the parts it is made of, and the version of the arithmetic that\n-- produced it, so a quote given today can still be explained after the price list has moved.\n--\n-- One statement, so an offer cannot exist without the order having moved, and the order cannot\n-- read as quoted with no offer behind it.\n--\n-- The order's previous state is read before it changes and written into the event, because\n-- \"quoted\" is only half the story — a first quote and a re-quote after the customer changed the\n-- room are different things, and the difference is what it was before.\n--\n-- Nothing here closes anything. The offer is a draft: it exists, it has not been sent, and no\n-- part of this decides whether it should be.\n\nWITH before AS (\n  SELECT id, state FROM orders WHERE id = $2::int FOR UPDATE\n),\nmade AS (\n  INSERT INTO offers (order_id, subtotal_low, subtotal_high, total_low, total_high,\n                      breakdown, pricing_version, status)\n  SELECT b.id, $3::numeric, $4::numeric, $5::numeric, $6::numeric, $7::jsonb, $8::text, 'draft'\n    FROM before b\n   WHERE b.state NOT IN ('booked', 'done', 'lost')\n  RETURNING id, order_id\n),\nmoved AS (\n  UPDATE orders o SET state = 'quoted', updated_at = now()\n   WHERE o.id = (SELECT order_id FROM made)\n     AND (SELECT state FROM before) IS DISTINCT FROM 'quoted'\n  RETURNING o.id\n),\nnoted AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT id, $1, 'state_change', 'state', (SELECT state FROM before), 'quoted' FROM moved\n  RETURNING 1\n),\nlinked AS (\n  UPDATE messages SET offer_id = (SELECT id FROM made)\n   WHERE gmail_message_id = $1 AND (SELECT count(*) FROM made) = 1\n  RETURNING 1\n)\nSELECT\n  $1::text                                     AS gmail_message_id,\n  (SELECT id FROM made)                        AS offer_id,\n  (SELECT order_id FROM made)                  AS order_id,\n  (SELECT state FROM before)                   AS state_before,\n  (SELECT count(*) FROM moved)::int = 1        AS order_moved,\n  (SELECT count(*) FROM noted)::int = 1        AS change_recorded,\n  (SELECT count(*) FROM linked)::int = 1       AS message_linked;",
+        "query": "-- A computed price that is not written down is a price nobody can be held to. This is where it\n-- becomes a record: the range, the parts it is made of, and the version of the arithmetic that\n-- produced it, so a quote given today can still be explained after the price list has moved.\n--\n-- One statement, so an offer cannot exist without the order having moved, and the order cannot\n-- read as quoted with no offer behind it.\n--\n-- The order's previous state is read before it changes and written into the event, because\n-- \"quoted\" is only half the story \u2014 a first quote and a re-quote after the customer changed the\n-- room are different things, and the difference is what it was before.\n--\n-- Nothing here closes anything. The offer is a draft: it exists, it has not been sent, and no\n-- part of this decides whether it should be.\n\nWITH before AS (\n  SELECT id, state FROM orders WHERE id = $2::int FOR UPDATE\n),\nmade AS (\n  INSERT INTO offers (order_id, subtotal_low, subtotal_high, total_low, total_high,\n                      breakdown, pricing_version, status)\n  SELECT b.id, $3::numeric, $4::numeric, $5::numeric, $6::numeric, $7::jsonb, $8::text, 'draft'\n    FROM before b\n   WHERE b.state NOT IN ('booked', 'done', 'lost')\n  RETURNING id, order_id\n),\nmoved AS (\n  UPDATE orders o SET state = 'quoted', updated_at = now()\n   WHERE o.id = (SELECT order_id FROM made)\n     AND (SELECT state FROM before) IS DISTINCT FROM 'quoted'\n  RETURNING o.id\n),\nnoted AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT id, $1, 'state_change', 'state', (SELECT state FROM before), 'quoted' FROM moved\n  RETURNING 1\n),\nlinked AS (\n  UPDATE messages SET offer_id = (SELECT id FROM made)\n   WHERE gmail_message_id = $1 AND (SELECT count(*) FROM made) = 1\n  RETURNING 1\n)\nSELECT\n  $1::text                                     AS gmail_message_id,\n  (SELECT id FROM made)                        AS offer_id,\n  (SELECT order_id FROM made)                  AS order_id,\n  (SELECT state FROM before)                   AS state_before,\n  (SELECT count(*) FROM moved)::int = 1        AS order_moved,\n  (SELECT count(*) FROM noted)::int = 1        AS change_recorded,\n  (SELECT count(*) FROM linked)::int = 1       AS message_linked;",
         "options": {
           "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('Gather what a price needs').item.json.order_id, $json.subtotal_low, $json.subtotal_high, $json.total_low, $json.total_high, JSON.stringify($json.breakdown), $json.pricing_version] }}"
         }
@@ -152,7 +152,7 @@
       "parameters": {
         "width": 560,
         "height": 200,
-        "content": "### Nothing is sent from here\n\nA price is computed and written down as a draft. Whether it goes to the customer, and whether\nanyone signs it off first, is not decided in this lane and no node here can reach a customer.\n\nThe three fields that decide whether a price may be quoted come from the message being handled.\nEverything the price is made of comes from the order, because the email that named the material\nmay be weeks behind the one that gave the area."
+        "content": "### No number ever leaves this lane\n\nA price is computed and written down as a draft. Nothing here sends a figure to anyone: the only\nletter this lane can send asks for what the order is still missing, in words a person wrote and\nstored in reply_templates.\n\nWhether that letter may go out unread is the stored sentence's own decision. One marked as needing\na person first is still composed -- it goes to the owner, headed as not sent, and the ask is not\nrecorded, so the next email asks again.\n\nThe three fields that decide whether a price may be quoted come from the message being handled.\nEverything the price is made of comes from the order, because the email that named the material\nmay be weeks behind the one that gave the area."
       },
       "id": "aaaa2222-0000-4000-8000-000000000005",
       "name": "What this lane does not do",
@@ -162,6 +162,185 @@
         760,
         520
       ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Whether to ask the customer anything, and if so which words to use.\n--\n-- The rule that matters is asking once. Two emails a minute apart, both without an area, must not\n-- produce two identical requests \u2014 so this reads the order's own history rather than a flag: has\n-- this same question already gone out, and has anything new arrived since it did?\n--\n-- Anything new arriving is permission to ask again, because the customer answered part of it and\n-- the rest is still outstanding. The same question twice with nothing in between is not.\n--\n-- The template is chosen here rather than in code, so the decision about which words apply lives\n-- next to the decision about whether to speak at all.\n\nWITH mine AS (\n  SELECT o.id,\n         array_remove(ARRAY[\n           CASE WHEN o.material_category IS NULL THEN 'material' END,\n           CASE WHEN o.area_sqft IS NULL         THEN 'area'     END,\n           CASE WHEN o.zone IS NULL              THEN 'location' END], NULL) AS still_missing\n    FROM orders o\n   WHERE o.id = $2::int\n     AND o.state NOT IN ('booked', 'done', 'lost')\n),\nlast_ask AS (\n  SELECT created_at, new_value\n    FROM order_events\n   WHERE order_id = $2::int AND kind = 'asked'\n   ORDER BY created_at DESC\n   LIMIT 1\n),\narrived_since AS (\n  SELECT count(*) AS n\n    FROM order_events\n   WHERE order_id = $2::int\n     AND kind IN ('merged', 'corrected')\n     AND created_at > coalesce((SELECT created_at FROM last_ask), '-infinity'::timestamptz)\n),\nletter AS (\n  -- who wrote in, and which thread it belongs to. Whatever composes the reply used to reach back\n  -- to an earlier node for this, and that node returns neither -- so a real run had nobody to\n  -- write to while a test that handed the fields in passed. One query answers the whole question.\n  SELECT contact_email, thread_id\n    FROM messages\n   WHERE gmail_message_id = $1::text\n),\ndecided AS (\n  SELECT m.still_missing,\n         array_to_string(m.still_missing, ',')                     AS asking_for,\n         (SELECT new_value FROM last_ask)                          AS asked_before,\n         (SELECT n FROM arrived_since)                             AS facts_since,\n         cardinality(m.still_missing) > 0\n           AND ((SELECT new_value FROM last_ask) IS DISTINCT FROM array_to_string(m.still_missing, ',')\n                OR (SELECT n FROM arrived_since) > 0)              AS should_ask\n    FROM mine m\n)\nSELECT\n  $1::text                                                    AS gmail_message_id,\n  $2::int                                                     AS order_id,\n  coalesce(d.still_missing, ARRAY[]::text[])                  AS still_missing,\n  d.asking_for,\n  d.asked_before,\n  coalesce(d.facts_since, 0)                                  AS facts_since,\n  coalesce(d.should_ask, false)                               AS should_ask,\n  chosen.key                                                  AS template_key,\n  chosen.body                                                 AS body,\n  coalesce(chosen.sends_automatically, false)                 AS may_go_alone,\n  (SELECT body FROM reply_templates WHERE key = 'signature')  AS signature,\n  l.contact_email,\n  l.thread_id\n  FROM (SELECT 1) AS always\n  LEFT JOIN decided d ON true\n  LEFT JOIN letter  l ON true\n  -- the words come back with the decision, so whatever composes the reply is only joining\n  -- strings: one query answered whether to speak and what to say, and nothing downstream has to\n  -- ask the database a second question to find out\n  LEFT JOIN reply_templates chosen ON chosen.key = CASE\n    WHEN d.still_missing @> ARRAY['material', 'area'] THEN 'needs_both'\n    WHEN d.still_missing @> ARRAY['area']             THEN 'needs_area'\n    WHEN d.still_missing @> ARRAY['material']         THEN 'needs_material'\n    WHEN d.still_missing @> ARRAY['location']         THEN 'needs_location'\n  END;",
+        "options": {
+          "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('Gather what a price needs').item.json.order_id] }}"
+        }
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000010",
+      "name": "Should we ask, and for what",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1480,
+        440
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "should_ask",
+              "leftValue": "={{ $json.should_ask }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000011",
+      "name": "Is there a question to ask?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1720,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Where a letter goes when nobody may read it first. The same address the rest of the system\n// writes to, and the only address in this file that is not the customer's.\nconst OWNER = 'flooring.demo.austin@gmail.com';\n\nconst asked = $('Should we ask, and for what').first().json;\n\n// Joining strings, nothing else. Every sentence here was written by a person and is stored in\n// reply_templates, so changing how the firm sounds is an edit in the database rather than a\n// deployment -- and nothing in this file decides what the firm says.\nconst body = String(asked.body || '').trim();\nconst signature = String(asked.signature || '');\n\nif (!body) {\n  throw new Error(`no template is stored for ${asked.template_key || 'this combination'} -- `\n    + 'reply_templates is missing a row, and sending an empty letter is worse than sending none');\n}\n\n// A lead forwarded by a platform with no reply-to leaves no address to answer. The router already\n// says so through needs_sender_extraction, and a letter with nobody in the To field is not a letter.\n// Refusing here sends it to the error lane, where a person can find the address; sending it would\n// fail somewhere less visible, or worse, reach the platform instead of the customer.\nconst to = String(asked.contact_email || '').trim();\nif (!to) {\n  throw new Error('there is no address to answer: this arrived through a platform that forwarded '\n    + 'no reply-to, and the customer cannot be reached without one');\n}\n\n// Where it goes is the stored sentence's decision, not this file's. A sentence that may not go\n// out alone still gets written -- it goes to the owner, marked as not sent, so she can read it and\n// decide. Nothing is silently dropped and nothing reaches a customer unread.\nconst alone = asked.may_go_alone === true || asked.may_go_alone === 't';\n\n// The customer's copy is a reply, so the subject and the thread are Gmail's to continue and not\n// ours to invent -- one message id is the whole of it. Only the owner's copy needs a subject,\n// because it starts a new letter, and it says what it is at a glance.\nreturn [{\n  json: {\n    gmail_message_id: asked.gmail_message_id,\n    order_id: asked.order_id,\n    asking_for: asked.asking_for,\n    to: alone ? to : OWNER,\n    reaches_the_customer: alone,\n    thread_id: alone ? asked.thread_id : null,\n    subject: alone ? null : `Not sent -- a question for ${to}`,\n    body: alone ? body + signature\n      : `This was composed for ${to} and not sent, because the wording it uses is marked as `\n        + `needing a person first.\\n\\nAsking for: ${asked.asking_for}\\n\\n---\\n\\n${body}${signature}`,\n  },\n}];\n"
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000012",
+      "name": "Compose the reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1960,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "reaches_the_customer",
+              "leftValue": "={{ $json.reaches_the_customer }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000013",
+      "name": "May it go out alone?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2200,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $json.gmail_message_id }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000014",
+      "name": "Answer the customer",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2440,
+        360
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": null,
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Written after the question has gone out, never before. If sending fails, nothing here runs and\n-- the next email asks again \u2014 which is the right way round: a question the customer never received\n-- must not count as asked.\n\nINSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\nSELECT $2::int, $1::text, 'asked', 'still_missing', NULL, $3::text\n WHERE $2::int IS NOT NULL\nRETURNING order_id, new_value AS asked_for;",
+        "options": {
+          "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('Should we ask, and for what').item.json.order_id, $('Should we ask, and for what').item.json.asking_for] }}"
+        }
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000015",
+      "name": "Say we asked",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2680,
+        360
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000016",
+      "name": "Show it to the owner instead",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2440,
+        580
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": null,
+          "name": "Gmail account"
+        }
+      }
     }
   ],
   "connections": {
@@ -218,12 +397,81 @@
             "index": 0
           }
         ],
-        []
+        [
+          {
+            "node": "Should we ask, and for what",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Write the offer": {
       "main": [
         []
+      ]
+    },
+    "Should we ask, and for what": {
+      "main": [
+        [
+          {
+            "node": "Is there a question to ask?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is there a question to ask?": {
+      "main": [
+        [
+          {
+            "node": "Compose the reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Compose the reply": {
+      "main": [
+        [
+          {
+            "node": "May it go out alone?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "May it go out alone?": {
+      "main": [
+        [
+          {
+            "node": "Answer the customer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Show it to the owner instead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer the customer": {
+      "main": [
+        [
+          {
+            "node": "Say we asked",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },

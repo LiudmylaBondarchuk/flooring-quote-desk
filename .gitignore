@@ -14,3 +14,6 @@ docs/
 # else's push was ever checked. This repository disagrees.
 !.githooks/
 !.githooks/*
+
+# notes written for one reader, and never for this repository
+CLAUDE.md

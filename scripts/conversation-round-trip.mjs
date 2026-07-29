@@ -135,9 +135,11 @@ const askAbout = (id, orderId) => jsonRowOf(quoteSql('should-we-ask-and-for-what
 
 // the node that turns a decision and a stored sentence into the letter a person receives
 const composeSource = read('src', '10-quote', 'compose-the-reply.js');
-const compose = (decision, message) => new Function('$input', '$', composeSource)(
+// one argument, deliberately: everything the reply needs comes back from the query that decided
+// to speak, so a test cannot supply a field the running node would not have
+const compose = (decision) => new Function('$input', '$', composeSource)(
   { all: () => [] },
-  (name) => ({ first: () => ({ json: name === 'Accept handoff' ? message : decision }) }),
+  () => ({ first: () => ({ json: decision }) }),
 )[0].json;
 const recordAsk = (id, orderId, asking) => rowOf(quoteSql('say-we-asked'), [id, orderId, asking]);
 
@@ -571,21 +573,16 @@ console.log('\nthe letter a customer would actually receive');
       evidence: { material: 'laminate', city: 'kyle' } },
   });
   const decision = askAbout('w1', a.order_id);
-  const letter = compose(decision, { contact_email: 'wren@example.com', thread_id: 'th-w',
-    subject: 'laminate in the hallway' });
+  const letter = compose(decision);
 
   check('it goes to the person who wrote in', letter.to, 'wren@example.com');
   check('it stays in their thread', letter.thread_id, 'th-w');
-  check('the subject is a reply to theirs', letter.subject, 'Re: laminate in the hallway');
+  check('the subject is Gmail\'s to continue, not ours to invent', letter.subject, null);
   check('it asks for the one thing missing, in the words a person wrote',
     letter.body.startsWith('Thanks for getting in touch. To price this I need one more thing'), true);
   check('it does not ask for what it already knows', /what are you thinking of putting down/.test(letter.body), false);
   check('it is signed', letter.body.trimEnd().endsWith('the flooring desk'), true);
   check('no number and no price is anywhere in it', /\$|\bsq ft\b|[0-9]{2,}/.test(letter.body), false);
-
-  const already = compose(askAbout('w1', a.order_id), { contact_email: 'wren@example.com',
-    thread_id: 'th-w', subject: 'Re: laminate in the hallway' });
-  check('a subject that is already a reply is not doubled', already.subject, 'Re: laminate in the hallway');
 }
 
 console.log('\nthe states the letter only claimed to handle');
@@ -617,16 +614,16 @@ console.log('\nthe states the letter only claimed to handle');
   const closed = askAbout('w4', b.order_id);
   check('a finished job is not asked anything', closed.should_ask, false);
 
-  const noSubject = compose(town, { contact_email: 'una@example.com', thread_id: 'th-w3', subject: '' });
-  check('an email with no subject still gets a sensible one', noSubject.subject, 'Re: your enquiry');
-
+  // a platform that forwarded no reply-to, as the row actually looks in that case
+  run(['-c', "UPDATE messages SET contact_email = NULL WHERE gmail_message_id = 'w3'"]);
   let refused = false;
   try {
-    compose(town, { contact_email: null, thread_id: 'th-w3', subject: 'carpet' });
+    compose(askAbout('w3', a.order_id));
   } catch (e) {
     refused = /no address to answer/.test(e.message);
   }
   check('a lead with no reply-to is refused, not sent into the void', refused, true);
+  run(['-c', "UPDATE messages SET contact_email = 'una@example.com' WHERE gmail_message_id = 'w3'"]);
 }
 
 console.log('\na template nobody wrote is refused rather than sent empty');
@@ -640,13 +637,15 @@ console.log('\na template nobody wrote is refused rather than sent empty');
   const decision = askAbout('w2', a.order_id);
   let refused = false;
   try {
-    compose(decision, { contact_email: 'vic@example.com', thread_id: 'th-w2', subject: 'a floor' });
+    compose(decision);
   } catch (e) {
     refused = /reply_templates is missing a row/.test(e.message);
   }
   check('an empty letter is refused, not sent', refused, true);
-  run(['-c', "INSERT INTO reply_templates (key, body) VALUES ('needs_both',"
-    + " 'Thanks for getting in touch. Two things and I can put a number on it.')"]);
+  // put it back as it was, permission included: the column defaults to false, so a row restored
+  // without it can no longer reach a customer, which is the right default and the wrong test
+  run(['-c', "INSERT INTO reply_templates (key, body, sends_automatically) VALUES ('needs_both',"
+    + " 'Thanks for getting in touch. Two things and I can put a number on it.', true)"]);
 }
 
 console.log('\na customer who answers half of it gets asked for the rest');
@@ -785,7 +784,38 @@ console.log('\nand a customer who really is accepting one');
   check('marked for the owner now', yes.decision.gate_color, 'red');
 }
 
-console.log('\nnothing leaked between any of them');
+console.log('\nwhere a letter goes is the sentence\'s decision');
+{
+  const a = arrive({
+    id: 'x1', thread: 'th-send', from: 'nora@example.com',
+    text: 'hi, engineered wood please, in manor tx',
+    extracted: { intent: 'new_quote', material: 'engineered wood', city: 'manor',
+      evidence: { material: 'engineered wood', city: 'manor' } },
+  });
+  const decision = askAbout('x1', a.order_id);
+  check('only the area is missing, so it is that sentence', decision.template_key, 'needs_area');
+  check('which may go out alone', decision.may_go_alone, true);
+  const letter = compose(decision);
+  check('so it goes to the customer', letter.to, 'nora@example.com');
+  check('in her thread', letter.thread_id, 'th-send');
+  check('and it says it reaches her', letter.reaches_the_customer, true);
+  check('and needs no subject of its own, being a reply', letter.subject, null);
+
+  run(['-c', "UPDATE reply_templates SET sends_automatically = false WHERE key = 'needs_area'"]);
+  const held = askAbout('x1', a.order_id);
+  check('the same sentence now may not', held.may_go_alone, false);
+  const draft = compose(held);
+  check('so it goes to the owner instead', draft.to, 'flooring.demo.austin@gmail.com');
+  check('not into the customer thread', draft.thread_id, null);
+  check('the subject says it was not sent, and for whom',
+    draft.subject, 'Not sent -- a question for nora@example.com');
+  check('the body names who it was for', /composed for nora@example\.com and not sent/.test(draft.body), true);
+  check('and still carries the words themselves', /roughly how many square feet/.test(draft.body), true);
+  check('it does not claim to have reached her', draft.reaches_the_customer, false);
+  run(['-c', "UPDATE reply_templates SET sends_automatically = true WHERE key = 'needs_area'"]);
+}
+
+
 {
   // not "one order per thread" — a thread whose job was booked may carry new work, and one
   // above does. The rule the unique index actually holds is that only one of them is open.
