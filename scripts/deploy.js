@@ -106,7 +106,17 @@ for (const file of readdirSync(join(root, 'workflows')).filter((f) => f.endsWith
   if (brought.length) Object.assign(connections, exported.connections);
 
   let touched = brought.length;
+  const inExport = new Map(exported.nodes.map((n) => [n.name, n]));
   for (const node of nodes) {
+    // A sticky note is the only documentation a person reads while looking at the canvas, and it
+    // has no file of its own, so the export is its source. Without this it was the one thing here
+    // that could not be corrected from the repository -- and the note on this very lane went on
+    // saying nothing was sent from it after the sending was built.
+    if (node.type === 'n8n-nodes-base.stickyNote') {
+      const said = inExport.get(node.name)?.parameters?.content;
+      if (said && said !== node.parameters.content) { node.parameters.content = said; touched++; }
+      continue;
+    }
     if (node.parameters?.jsCode) {
       const src = localFile(join('src', scope, `${slug(node.name)}.js`));
       if (src !== null && src !== node.parameters.jsCode) { node.parameters.jsCode = src; touched++; }
