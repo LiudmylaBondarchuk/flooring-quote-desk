@@ -8,3 +8,9 @@ secrets/
 node_modules/
 .DS_Store
 docs/
+
+# The global ignore file on this machine excludes .githooks/, which silently kept every guard in
+# this repository out of git: three files on one laptop, no fresh clone had them, and nobody
+# else's push was ever checked. This repository disagrees.
+!.githooks/
+!.githooks/*

@@ -1,0 +1,9 @@
+#!/bin/sh
+branch=$(git rev-parse --abbrev-ref HEAD)
+case "$branch" in main|master) exit 0 ;; esac
+
+# The rules live in scripts/guards.mjs, which CI runs against the same commits. Anything added
+# there is enforced here and in the build at once, rather than only on this machine.
+base=origin/main
+git rev-parse --verify --quiet "$base" >/dev/null || base=main
+exec node scripts/guards.mjs "$base"
