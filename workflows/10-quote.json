@@ -558,7 +558,8 @@
           "id": null,
           "name": "Gmail account"
         }
-      }
+      },
+      "webhookId": "a7bfc2fe-8e12-4f2b-a787-4bf71fb7693c"
     },
     {
       "parameters": {
@@ -790,8 +791,7 @@
             "type": "main",
             "index": 0
           }
-        ],
-        []
+        ]
       ]
     },
     "Answer the question": {
