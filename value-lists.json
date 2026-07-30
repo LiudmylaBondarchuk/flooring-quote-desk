@@ -76,6 +76,7 @@
         "support",
         "operations",
         "review",
+        "approval",
         "log"
       ],
       "sql": [

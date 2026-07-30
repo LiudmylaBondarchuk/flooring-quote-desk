@@ -298,7 +298,7 @@
     }
   },
   {
-    "name": "the owner's own outgoing mail is never a lead",
+    "name": "the owner's own outgoing mail is never a lead, but it may be an answer",
     "row": {
       "is_outbound": true,
       "source_text": "hi mike, your lvp quote for 320 sq ft comes to about 2100 dollars",
@@ -309,7 +309,7 @@
     },
     "expect": {
       "category": "owner_reply",
-      "route": "log",
+      "route": "approval",
       "handling": "none"
     }
   },
@@ -620,7 +620,7 @@
     "name": "an area given in metric units is converted, not thrown away",
     "row": {
       "zone_by_city": "core",
-      "source_text": "hi, i need about 32 m² of lvp in austin tx",
+      "source_text": "hi, i need about 32 m\u00b2 of lvp in austin tx",
       "extracted": {
         "intent": "new_quote",
         "material": "lvp",
@@ -628,7 +628,7 @@
         "city": "austin",
         "evidence": {
           "material": "lvp",
-          "area_sqft": "32 m²",
+          "area_sqft": "32 m\u00b2",
           "city": "austin"
         }
       }
@@ -739,7 +739,7 @@
     "name": "metric units are caught even when the model quotes only the number",
     "row": {
       "zone_by_city": "core",
-      "source_text": "hi, i need about 32 m² of lvp in austin tx",
+      "source_text": "hi, i need about 32 m\u00b2 of lvp in austin tx",
       "extracted": {
         "intent": "new_quote",
         "material": "lvp",
@@ -976,7 +976,7 @@
           "label": "tile and stone",
           "we_do": false,
           "match_words": "tile|porcelain|ceramic|mosaic|thinset|mortar|grout",
-          "answer": "We do not install tile or stone — happy to recommend a tile setter."
+          "answer": "We do not install tile or stone \u2014 happy to recommend a tile setter."
         },
         {
           "label": "epoxy and garage coatings",
@@ -1010,7 +1010,7 @@
           "label": "tile and stone",
           "we_do": false,
           "match_words": "tile|porcelain|ceramic|mosaic|thinset|mortar|grout",
-          "answer": "We do not install tile or stone — happy to recommend a tile setter."
+          "answer": "We do not install tile or stone \u2014 happy to recommend a tile setter."
         },
         {
           "label": "epoxy and garage coatings",
@@ -1040,7 +1040,7 @@
           "label": "tile and stone",
           "we_do": false,
           "match_words": "tile|porcelain|ceramic|mosaic|thinset|mortar|grout",
-          "answer": "We do not install tile or stone — happy to recommend a tile setter."
+          "answer": "We do not install tile or stone \u2014 happy to recommend a tile setter."
         },
         {
           "label": "epoxy and garage coatings",
@@ -1089,7 +1089,7 @@
           "label": "tile and stone",
           "we_do": false,
           "match_words": "tile|porcelain|ceramic|mosaic|thinset|mortar|grout",
-          "answer": "We do not install tile or stone — happy to recommend a tile setter."
+          "answer": "We do not install tile or stone \u2014 happy to recommend a tile setter."
         },
         {
           "label": "epoxy and garage coatings",
@@ -1137,7 +1137,7 @@
           "label": "tile and stone",
           "we_do": false,
           "match_words": "tile|porcelain|ceramic|mosaic|thinset|mortar|grout",
-          "answer": "We do not install tile or stone — happy to recommend a tile setter."
+          "answer": "We do not install tile or stone \u2014 happy to recommend a tile setter."
         },
         {
           "label": "epoxy and garage coatings",
@@ -1179,7 +1179,7 @@
           "label": "tile and stone",
           "we_do": false,
           "match_words": "tile|porcelain|ceramic|mosaic|thinset|mortar|grout",
-          "answer": "We do not install tile or stone — happy to recommend a tile setter."
+          "answer": "We do not install tile or stone \u2014 happy to recommend a tile setter."
         },
         {
           "label": "epoxy and garage coatings",
@@ -1221,7 +1221,7 @@
           "label": "tile and stone",
           "we_do": false,
           "match_words": "tile|porcelain|ceramic|mosaic|thinset|mortar|grout",
-          "answer": "We do not install tile or stone — happy to recommend a tile setter."
+          "answer": "We do not install tile or stone \u2014 happy to recommend a tile setter."
         },
         {
           "label": "epoxy and garage coatings",
@@ -1815,7 +1815,7 @@
   },
   {
     "name": "mortar-set is tile work and is not in the price book",
-    "why": "Mortar-set is how tile goes down and the firm does not do tile, but the material asked for is one it does. That contradiction is for a person to resolve — not a job to refuse outright, and not one to price.",
+    "why": "Mortar-set is how tile goes down and the firm does not do tile, but the material asked for is one it does. That contradiction is for a person to resolve \u2014 not a job to refuse outright, and not one to price.",
     "row": {
       "zone_by_city": "core",
       "source_text": "lvp 300 sq ft austin tx, mortar set",
@@ -1949,7 +1949,7 @@
     "why": "When the email writes the unit out, the unit is a fact like any other and carries its own evidence. 32 m2 is 344 sq ft; storing 32 would price a tenth of the job.",
     "row": {
       "zone_by_city": "core",
-      "source_text": "i need about 32 m² of lvp in austin tx",
+      "source_text": "i need about 32 m\u00b2 of lvp in austin tx",
       "extracted": {
         "intent": "new_quote",
         "material": "lvp",
@@ -1959,7 +1959,7 @@
         "evidence": {
           "material": "lvp",
           "area_sqft": "32",
-          "area_unit": "m²",
+          "area_unit": "m\u00b2",
           "city": "austin"
         }
       }
@@ -2001,7 +2001,7 @@
     "why": "Asking the model to copy a unit verbatim invites non-ASCII: it answered m2 as a byte sequence carrying a NUL. Postgres refuses NUL in text, so anything the model produces must be stripped of control characters before it crosses into the database, and a unit whose quote cannot be verified is a question rather than a conversion.",
     "row": {
       "zone_by_city": "core",
-      "source_text": "i need about 32 m² of lvp in austin tx",
+      "source_text": "i need about 32 m\u00b2 of lvp in austin tx",
       "extracted": {
         "intent": "new_quote",
         "material": "lvp",
@@ -2025,8 +2025,8 @@
     }
   },
   {
-    "name": "a quote that spans a line break is still the customer’s own words",
-    "why": "Email wraps. A fragment the model copied across a line break is the same words the customer wrote, so it must ground. Deleting the newline instead of replacing it glues the words together and the gate accuses an honest quote of being invented — the worst way to be wrong, because a fabrication flag blocks the whole email.",
+    "name": "a quote that spans a line break is still the customer\u2019s own words",
+    "why": "Email wraps. A fragment the model copied across a line break is the same words the customer wrote, so it must ground. Deleting the newline instead of replacing it glues the words together and the gate accuses an honest quote of being invented \u2014 the worst way to be wrong, because a fabrication flag blocks the whole email.",
     "row": {
       "zone_by_city": "core",
       "source_text": "need lvp 320 sq ft in round\nrock, tx",
@@ -2074,10 +2074,10 @@
   },
   {
     "name": "a unit that does not match the words quoted for it is not a unit",
-    "why": "Grounding proves the quoted words are in the email; it cannot prove the value means them. A model that answers sqft while quoting m2 would have the gate store the metric number unconverted — the tenfold error the unit field exists to prevent, arriving through the field itself.",
+    "why": "Grounding proves the quoted words are in the email; it cannot prove the value means them. A model that answers sqft while quoting m2 would have the gate store the metric number unconverted \u2014 the tenfold error the unit field exists to prevent, arriving through the field itself.",
     "row": {
       "zone_by_city": "core",
-      "source_text": "lvp, about 32 m² in austin tx",
+      "source_text": "lvp, about 32 m\u00b2 in austin tx",
       "extracted": {
         "intent": "new_quote",
         "material": "lvp",
@@ -2087,7 +2087,7 @@
         "evidence": {
           "material": "lvp",
           "area_sqft": "32",
-          "area_unit": "m²",
+          "area_unit": "m\u00b2",
           "city": "austin"
         }
       }
@@ -2102,7 +2102,7 @@
   },
   {
     "name": "the unit is read as the customer spells it, not as the schema names it",
-    "why": "The model answers in the words of the email, and a person writes sq ft, not sqft. Demanding the schema's own spelling threw away a perfectly grounded unit and asked the customer for something they had already given — which is the failure the order layer exists to stop.",
+    "why": "The model answers in the words of the email, and a person writes sq ft, not sqft. Demanding the schema's own spelling threw away a perfectly grounded unit and asked the customer for something they had already given \u2014 which is the failure the order layer exists to stop.",
     "row": {
       "zone_by_city": "core",
       "source_text": "lvp in the living room, about 320 sq ft, austin tx",

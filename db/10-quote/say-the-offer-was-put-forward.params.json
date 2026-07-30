@@ -1,3 +1,3 @@
 {
-  "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('What the quote letter needs').item.json.offer_id] }}"
+  "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('What the quote letter needs').item.json.offer_id, $json.threadId, $('Compose the quote').item.json.the_letter_itself] }}"
 }

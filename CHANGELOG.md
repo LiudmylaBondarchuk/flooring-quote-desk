@@ -108,6 +108,20 @@ way that sentence appears in a letter. Which offer matters is now the one in thi
 exchange rather than any this contact has ever had: a customer quoted for a
 bathroom last spring is not agreeing to that when they write about a bedroom now.
 
+**The owner says send it, and the customer gets the price.** Her answer arrives as an ordinary
+email from the desk's own address, which the router had always filed as *ours* and dropped. That
+category has a lane now. Nearly everything reaching it is the desk reading its own letters, and
+that is fine: it finds no offer waiting in that thread and stops. Two things must hold before a
+figure reaches anybody — an offer is waiting in this very thread, and an assent was typed into
+this very message, read from the body with quoted history stripped, because the letter she is
+answering carries the whole quote underneath it.
+
+What goes out is **the letter she read**, stored on the offer when it was put in front of her,
+never a fresh calculation: the price list can move between the two moments and the wording is a
+row somebody can edit. She approves a text, not a recipe for one. A refusal is recognised and
+stops everything; the offer stays where it is. A second reply in the same thread sends nothing
+twice.
+
 **A price becomes a letter, and it only ever reaches the owner.** An offer had been a draft that
 nothing did anything with. It is written out now — the job, every priced line with the rate it came
 from, the range, wrapped in words a person wrote and stored — and it goes to the owner with the

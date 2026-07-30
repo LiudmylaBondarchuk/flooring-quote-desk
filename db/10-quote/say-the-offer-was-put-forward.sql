@@ -8,7 +8,12 @@
 
 WITH moved AS (
   UPDATE offers
-     SET status = 'awaiting_approval'
+     SET status = 'awaiting_approval',
+         -- the thread Gmail put the letter in, and the letter as she will read it. Without the
+         -- first her answer cannot be matched to anything; without the second what reaches the
+         -- customer would be a fresh calculation rather than the text she approved.
+         approval_thread_id = $3::text,
+         letter_text = $4::text
    WHERE id = $2::int AND status = 'draft'
   RETURNING id, order_id
 ),
@@ -20,5 +25,6 @@ noted AS (
 )
 SELECT
   $2::int                                  AS offer_id,
+  $3::text                                 AS approval_thread_id,
   (SELECT count(*) FROM moved)::int = 1    AS now_waiting,
   (SELECT count(*) FROM noted)::int = 1    AS change_recorded;
