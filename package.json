@@ -20,6 +20,7 @@
     "db:check:live": "sh scripts/db-check.sh --live",
     "db:round-trip": "node scripts/db-round-trip.mjs",
     "catalogue:round-trip": "node scripts/catalogue-round-trip.mjs",
-    "conversation:round-trip": "node scripts/conversation-round-trip.mjs"
+    "conversation:round-trip": "node scripts/conversation-round-trip.mjs",
+    "errors:round-trip": "node scripts/errors-round-trip.mjs"
   }
 }

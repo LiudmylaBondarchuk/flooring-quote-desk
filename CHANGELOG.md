@@ -108,6 +108,17 @@ way that sentence appears in a letter. Which offer matters is now the one in thi
 exchange rather than any this contact has ever had: a customer quoted for a
 bathroom last spring is not agreeing to that when they write about a bedroom now.
 
+**A failure reaches a person.** Failures have been recorded since the first schema and the node
+at the end of that lane was called *TODO notify the maintainer* and did nothing, so every other
+guarantee here quietly depended on somebody thinking to look at a table. The owner is written to
+now — but one letter per quiet window rather than one per failure, because a workflow failing in
+a loop would otherwise send a hundred, and a hundred is the same as none. The letter carries
+everything still untold, grouped by workflow, node and message, so twelve identical timeouts are
+one line with a count. A failure is marked as told only after Gmail returns; if sending fails the
+rows stay untold and the next letter carries them. The gap, stated rather than hidden: the letter
+goes when a failure arrives, so if failures stop inside the quiet window the last of them wait for
+the next one — that sweep is the watchman's job, and the watchman is parked.
+
 **The build notices when the repository disagrees with itself.** The drift check compared every
 node to its file and never asked the question the other way round, so a query written for a node
 nobody had created reported *in sync* -- which is how a finished-looking set of files sat in the
