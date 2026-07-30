@@ -156,7 +156,19 @@ const composeQuotes = (...needs) => new Function('$input', '$', quoteLetterSourc
   { all: () => needs.map((json) => ({ json })) },
   (name) => { throw new Error(`the quote letter reached back to ${name} instead of reading its input`); },
 ).map((r) => r.json);
-const putForward = (id, offerId) => rowOf(quoteSql('say-the-offer-was-put-forward'), [id, offerId]);
+const putForward = (id, offerId, thread, letter) =>
+  rowOf(quoteSql('say-the-offer-was-put-forward'), [id, offerId, thread, letter]);
+
+const approvalSql = (n) => read('db', '60-approval', `${n}.sql`).replace(/;\s*$/, '');
+const readSource = read('src', '60-approval', 'did-she-say-send-it.js');
+const whatItAnswers = (id, thread) => JSON.parse(ask(
+  `SELECT row_to_json(t) FROM (${fill(approvalSql('what-this-reply-answers'), [id, thread])}) t`));
+const didSheSaySendIt = (...answers) => new Function('$input', '$', readSource)(
+  { all: () => answers.map((json) => ({ json })) },
+  (name) => { throw new Error(`the reading reached back to ${name} instead of its input`); },
+).map((r) => r.json);
+const sayItWentOut = (id, offerId) =>
+  rowOf(approvalSql('say-the-quote-went-out'), [id, offerId]);
 const recordAsk = (id, orderId, asking) => rowOf(quoteSql('say-we-asked'), [id, orderId, asking]);
 
 const orderOf = (id) => JSON.parse(ask(
@@ -724,7 +736,11 @@ console.log('\nour own letter coming back into the mailbox');
     labels: ['SENT', 'INBOX'],
   });
   check('the gate knows it is ours', ourOwn.decision.category, 'owner_reply');
-  check('it is logged, not routed into a lane', ourOwn.decision.route, 'log');
+  check('it goes to the lane that reads answers', ourOwn.decision.route, 'approval');
+  // which is where it stops: that lane looks for an offer waiting in this very thread, and the
+  // desk's own words are not an assent to anything
+  const [readOurs] = didSheSaySendIt(whatItAnswers('l2', 'th-loop'));
+  check('and our own letter is not read as an approval', readOurs.approved, false);
   check('and nothing is handled', ourOwn.decision.handling, 'none');
   // It is linked to the conversation's order, which is right: our own letter belongs to that
   // exchange and a person reading the thread should see it. What matters is that it carries nothing
@@ -868,13 +884,15 @@ console.log('\na price becomes a letter, and it only ever reaches the owner');
   check('and the closing explains the spread it actually has',
     /options listed above/.test(letter.the_letter_itself), true);
 
-  const said = putForward('quote1', priced.written.offer_id);
+  const said = putForward('quote1', priced.written.offer_id, 'th-approve-1',
+    letter.the_letter_itself);
   check('the offer is now waiting for her', said.now_waiting, 't');
   check('and the order remembers it moved', said.change_recorded, 't');
   check('the offer says so itself',
     ask(`SELECT status FROM offers WHERE id = ${priced.written.offer_id}`), 'awaiting_approval');
 
-  const again = putForward('quote1', priced.written.offer_id);
+  const again = putForward('quote1', priced.written.offer_id, 'th-approve-1',
+    letter.the_letter_itself);
   check('telling her twice about one figure does not happen', again.now_waiting, 'f');
   const reread = whatTheQuoteNeeds('quote1', priced.written.offer_id);
   check('and a second run has no letter to write', reread.ready_to_write, false);
@@ -904,6 +922,86 @@ console.log('\ntwo quotes in one poll are both written');
     [letters[0].for_whom, letters[1].for_whom], ['walt@example.com', 'xena@example.com']);
   check('and neither carries the other\'s figure',
     letters[0].the_letter_itself === letters[1].the_letter_itself, false);
+}
+
+console.log('\nthe owner says send it, and only then does the customer get a price');
+{
+  const a = arrive({
+    id: 'appr1', thread: 'th-appr1', from: 'yuri@example.com',
+    text: 'lvp, 350 sq ft, in kyle tx',
+    extracted: { intent: 'new_quote', material: 'lvp', area_sqft: 350, area_unit: 'sqft',
+      city: 'kyle', evidence: { material: 'lvp', area_sqft: '350', area_unit: 'sq ft', city: 'kyle' } },
+  });
+  const priced = priceIt('appr1');
+  const [letter] = composeQuotes(whatTheQuoteNeeds('appr1', priced.written.offer_id));
+  putForward('appr1', priced.written.offer_id, 'th-owner-1', letter.the_letter_itself);
+
+  // her answer arrives like any other email, from the desk's own address, in the thread the
+  // letter went out in
+  arrive({ id: 'yes1', thread: 'th-owner-1', from: 'flooring.demo.austin@gmail.com',
+    text: 'send it', extracted: { intent: 'other', evidence: {} } });
+  const answers = whatItAnswers('yes1', 'th-owner-1');
+  check('the offer waiting in that thread is found', Number(answers.offer_id), Number(priced.written.offer_id));
+  check('and it knows who it is for', answers.contact_email, 'yuri@example.com');
+  check('with a message of theirs to reply to', answers.reply_to, 'appr1');
+
+  const [read1] = didSheSaySendIt(answers);
+  check('she said send it', read1.approved, true);
+  check('what goes out is the letter she read', read1.body, letter.the_letter_itself);
+  check('to the customer, not to her', read1.to, 'yuri@example.com');
+
+  const went = sayItWentOut('yes1', priced.written.offer_id);
+  check('the offer is sent', went.now_sent, 't');
+  check('and the order records the move', went.change_recorded, 't');
+  check('the offer says so itself',
+    ask(`SELECT status FROM offers WHERE id = ${priced.written.offer_id}`), 'sent');
+
+  const twice = sayItWentOut('yes1', priced.written.offer_id);
+  check('a second reply in the thread sends nothing again', twice.now_sent, 'f');
+  const after = whatItAnswers('yes1', 'th-owner-1');
+  check('and there is nothing left waiting there', after.an_offer_is_waiting, false);
+}
+
+console.log('\nanything short of yes sends nothing');
+{
+  const a = arrive({
+    id: 'appr2', thread: 'th-appr2', from: 'zoe@example.com',
+    text: 'laminate, 260 sq ft, buda tx',
+    extracted: { intent: 'new_quote', material: 'laminate', area_sqft: 260, area_unit: 'sqft',
+      city: 'buda', evidence: { material: 'laminate', area_sqft: '260', area_unit: 'sq ft', city: 'buda' } },
+  });
+  const priced = priceIt('appr2');
+  const [letter] = composeQuotes(whatTheQuoteNeeds('appr2', priced.written.offer_id));
+  putForward('appr2', priced.written.offer_id, 'th-owner-2', letter.the_letter_itself);
+
+  const readOf = (id, text) => {
+    arrive({ id, thread: 'th-owner-2', from: 'flooring.demo.austin@gmail.com',
+      text, extracted: { intent: 'other', evidence: {} } });
+    return didSheSaySendIt(whatItAnswers(id, 'th-owner-2'))[0];
+  };
+
+  check('"not yet" is not a yes', readOf('no1', 'not yet, change the removal line').approved, false);
+  check('and it is recognised as a refusal', readOf('no2', 'no, hold off').refused, true);
+  check('"hold on" is not a yes', readOf('no3', 'hold on').approved, false);
+  check('a bare thanks is not a yes', readOf('no4', 'thanks').approved, false);
+  check('and the letter the desk itself sent is not a yes',
+    readOf('no5', 'This quote is ready and has not been sent. For: zoe@example.com').approved, false);
+  check('the offer is still waiting after all of that',
+    ask(`SELECT status FROM offers WHERE id = ${priced.written.offer_id}`), 'awaiting_approval');
+
+  check('but yes still works', readOf('yes2', 'yes').approved, true);
+  check('and so does go ahead', readOf('yes3', 'go ahead').approved, true);
+}
+
+console.log('\na reply in a thread with nothing waiting answers nothing');
+{
+  arrive({ id: 'stray1', thread: 'th-nothing', from: 'flooring.demo.austin@gmail.com',
+    text: 'send it', extracted: { intent: 'other', evidence: {} } });
+  const answers = whatItAnswers('stray1', 'th-nothing');
+  check('no offer is found', answers.an_offer_is_waiting, false);
+  const [readIt] = didSheSaySendIt(answers);
+  check('so the words do not matter', readIt.approved, false);
+  check('and there is nobody to write to', readIt.to, null);
 }
 
 console.log('\nthe gate can hold a letter the wording would have allowed');

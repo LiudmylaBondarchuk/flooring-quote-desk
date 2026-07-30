@@ -1,0 +1,244 @@
+{
+  "name": "60 Approval — Flooring",
+  "nodes": [
+    {
+      "parameters": {
+        "width": 520,
+        "height": 220,
+        "content": "### 60 Approval — Flooring\n\nThe owner reads a quote and answers. Everything the desk sends to itself arrives here as an\nowner_reply, so most of what reaches this lane is answering nothing at all -- that is normal\nand it stops quietly.\n\nTwo things must hold before a figure reaches a customer: an offer is waiting in this very\nthread, and an assent was typed into this very message. The text examined has quoted history\nstripped, because the letter being replied to carries the whole quote underneath it.\n\nWhat goes out is the letter she read, stored on the offer, never a fresh calculation. A refusal\nis recognised and stops everything; saying so back to her is not built yet."
+      },
+      "id": "aaaa6000-0000-4000-8000-000000000000",
+      "name": "Purpose",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        240,
+        100
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "aaaa6000-0000-4000-8000-000000000001",
+      "name": "Called by router",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        260,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE messages SET\n  status     = $2,\n  handled_by = $3,\n  handoff_at = now()\nWHERE gmail_message_id = $1\nRETURNING gmail_message_id, thread_id, body, category, status, handled_by;",
+        "options": {
+          "queryReplacement": "={{ [$json.gmail_message_id, 'awaiting_approval_reply', '60 Approval — Flooring'] }}"
+        }
+      },
+      "id": "aaaa6000-0000-4000-8000-000000000002",
+      "name": "Accept handoff",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        500,
+        380
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Which offer, if any, this letter is an answer to.\n--\n-- Everything the desk sends to itself arrives back as an owner_reply, including the letters it\n-- sent, so most of what reaches this lane is answering nothing. The only thing that ties an answer\n-- to an offer is the thread the letter went out in, and only an offer still waiting can be\n-- answered -- one already sent has been decided.\n--\n-- The customer's address and the message to reply to come from the order rather than from the\n-- offer, because a reply belongs in the customer's own thread and the last thing they wrote is\n-- what Gmail continues.\n\nWITH waiting AS (\n  SELECT o.id, o.order_id, o.letter_text, o.total_low, o.total_high\n    FROM offers o\n   WHERE o.status = 'awaiting_approval'\n     AND o.approval_thread_id = $2::text\n   ORDER BY o.created_at DESC\n   LIMIT 1\n),\nher_words AS (\n  -- the body with quoted history already stripped by the router. The letter she is replying to\n  -- carries the whole quote underneath it, so reading the raw message would find the desk's own\n  -- words and take them for her answer.\n  SELECT body FROM messages WHERE gmail_message_id = $1::text\n),\ntheir_last_word AS (\n  SELECT m.gmail_message_id, m.contact_email, m.thread_id\n    FROM messages m\n   WHERE m.order_id = (SELECT order_id FROM waiting)\n     AND m.is_outbound = false\n   ORDER BY m.created_at DESC\n   LIMIT 1\n)\nSELECT\n  $1::text                                        AS gmail_message_id,\n  h.body                                          AS said,\n  w.id                                            AS offer_id,\n  w.order_id,\n  w.letter_text,\n  w.total_low, w.total_high,\n  t.gmail_message_id                              AS reply_to,\n  t.contact_email,\n  t.thread_id                                     AS customer_thread_id,\n  w.id IS NOT NULL\n    AND w.letter_text IS NOT NULL\n    AND t.gmail_message_id IS NOT NULL            AS an_offer_is_waiting\n  FROM (SELECT 1) AS always\n  LEFT JOIN her_words        h ON true\n  LEFT JOIN waiting          w ON true\n  LEFT JOIN their_last_word  t ON true;",
+        "options": {
+          "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('Accept handoff').item.json.thread_id] }}"
+        }
+      },
+      "id": "aaaa6000-0000-4000-8000-000000000003",
+      "name": "What this reply answers",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        740,
+        380
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Whether this letter is the owner saying yes, and what goes out if it is.\n//\n// Every letter the desk sends to itself comes back through here, so most of what arrives is the\n// desk reading its own words. Two things have to hold before anything reaches a customer: an offer\n// is waiting in this thread, and somebody typed an assent into this particular message.\n//\n// The text examined is the body with quoted history already stripped by the router. That matters\n// more here than anywhere else: the letter she is replying to contains the whole quote underneath,\n// and looking at the raw message would find the desk's own words and read them as her answer.\n\nconst YES = /^(?:\\s*(?:yes|yep|yeah|ok|okay|sure|approved?|confirmed?)\\b[\\s.!,]*)+$/i;\nconst SEND = /\\b(?:send it|send that|send them|go ahead|fire away|ship it|send to (?:the )?(?:customer|client)|looks good,? send|approved,? send)\\b/i;\n\n// A refusal is not silence. Saying so is not this branch's job, but reading it as a yes would be\n// the worst thing this file could do, so it is named and stopped here.\nconst NO = /\\b(?:no|not yet|hold(?: off| on)?|don'?t send|do not send|wait|stop|cancel|change|amend|fix)\\b/i;\n\nreturn $input.all().map((item, i) => {\n  const answer = item.json || {};\n  const said = String(answer.said || '').trim();\n  const waiting = answer.an_offer_is_waiting === true || answer.an_offer_is_waiting === 't';\n\n  const assented = waiting && !NO.test(said) && (YES.test(said) || SEND.test(said));\n\n  return {\n    json: {\n      gmail_message_id: answer.gmail_message_id,\n      offer_id: answer.offer_id,\n      order_id: answer.order_id,\n      an_offer_is_waiting: waiting,\n      // what was actually read, so a letter that went nowhere can be explained without guessing\n      said: said.slice(0, 200),\n      approved: assented,\n      refused: waiting && NO.test(said),\n      to: answer.contact_email,\n      reply_to: answer.reply_to,\n      thread_id: answer.customer_thread_id,\n      body: answer.letter_text,\n    },\n    pairedItem: { item: i },\n  };\n});\n"
+      },
+      "id": "aaaa6000-0000-4000-8000-000000000004",
+      "name": "Did she say send it",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        980,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "approved",
+              "leftValue": "={{ $json.approved }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "aaaa6000-0000-4000-8000-000000000005",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1220,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $json.reply_to }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "aaaa6000-0000-4000-8000-000000000006",
+      "name": "Send the quote to the customer",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1460,
+        320
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": null,
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Written after the customer's copy has gone, never before. One statement, so an offer cannot read\n-- as sent to somebody who was never written to.\n--\n-- Only an offer still waiting moves. A second reply in the same thread -- \"thanks\", \"did that go?\"\n-- -- finds it already sent and changes nothing rather than sending the quote twice.\n\nWITH moved AS (\n  UPDATE offers\n     SET status = 'sent'\n   WHERE id = $2::int AND status = 'awaiting_approval'\n  RETURNING id, order_id\n),\nnoted AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT order_id, $1::text, 'state_change', 'offer_status', 'awaiting_approval', 'sent'\n    FROM moved\n  RETURNING 1\n)\nSELECT\n  $2::int                                  AS offer_id,\n  (SELECT count(*) FROM moved)::int = 1    AS now_sent,\n  (SELECT count(*) FROM noted)::int = 1    AS change_recorded;",
+        "options": {
+          "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('What this reply answers').item.json.offer_id] }}"
+        }
+      },
+      "id": "aaaa6000-0000-4000-8000-000000000007",
+      "name": "Say the quote went out",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1700,
+        320
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Called by router": {
+      "main": [
+        [
+          {
+            "node": "Accept handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accept handoff": {
+      "main": [
+        [
+          {
+            "node": "What this reply answers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What this reply answers": {
+      "main": [
+        [
+          {
+            "node": "Did she say send it",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Did she say send it": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Send the quote to the customer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Send the quote to the customer": {
+      "main": [
+        [
+          {
+            "node": "Say the quote went out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

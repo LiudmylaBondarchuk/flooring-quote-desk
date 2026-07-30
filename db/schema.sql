@@ -86,6 +86,8 @@ CREATE TABLE offers (
     total_high      numeric(10, 2),
     breakdown       jsonb,
     doc_url         text,
+    approval_thread_id text,
+    letter_text     text,
     pricing_version text,
     status          text        NOT NULL DEFAULT 'draft',
     outcome         text,
@@ -98,6 +100,9 @@ CREATE TABLE offers (
                                         AND (total_high IS NULL OR total_high >= 0)),
     CONSTRAINT offers_total_ordered CHECK (total_high IS NULL OR total_low IS NULL OR total_high >= total_low)
 );
+
+CREATE INDEX offers_awaiting_approval_idx ON offers (approval_thread_id)
+    WHERE status = 'awaiting_approval';
 
 CREATE TABLE messages (
     id                        integer     GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -180,7 +185,7 @@ CREATE TABLE messages (
         'same_job_signature', 'thread_continuation', 'not_a_customer', 'capability_question',
         'wants_a_price', 'unclassified')),
     CONSTRAINT messages_route_known    CHECK (route IN (
-        'quote', 'project', 'support', 'operations', 'review', 'log')),
+        'quote', 'project', 'support', 'operations', 'review', 'approval', 'log')),
     CONSTRAINT messages_handling_known CHECK (handling IN ('auto', 'manual_review', 'none')),
     CONSTRAINT messages_intent_known   CHECK (intent IS NULL OR intent IN (
         'new_quote', 'pre_sales_question', 'follow_up', 'offer_response',
@@ -348,6 +353,10 @@ COMMENT ON COLUMN services.priority IS
     'Order within one side of the catalogue. What the firm does is always checked before what it refuses, in code.';
 COMMENT ON COLUMN messages.matched_rule IS
     'Which of the classification rules fired. The only record of why this email went where it went.';
+COMMENT ON COLUMN offers.approval_thread_id IS
+    'The Gmail thread the owner was asked in. Her reply arrives in it, and it is the only thing tying an answer to the offer it answers.';
+COMMENT ON COLUMN offers.letter_text IS
+    'The letter as she read it. What reaches the customer is this, never a fresh calculation: she approves a text, not a recipe for one.';
 COMMENT ON COLUMN offers.total_low IS
     'A quote for this work is a range, not a number. final_amount holds what was actually agreed.';
 COMMENT ON COLUMN price_bands.min_charge IS

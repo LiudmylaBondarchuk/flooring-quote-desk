@@ -155,7 +155,7 @@ const ROUTE_OF = {
   existing_project: 'project', scheduling: 'project', offer_response: 'project', billing: 'project',
   complaint: 'support',
   operations: 'operations',
-  ignore_auto: 'log', owner_reply: 'log',
+  ignore_auto: 'log', owner_reply: 'approval',
   unknown: 'review',
 };
 const HANDLING_OF = {
