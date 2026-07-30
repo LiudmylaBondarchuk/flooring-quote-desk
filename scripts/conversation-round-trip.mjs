@@ -160,6 +160,11 @@ const putForward = (id, offerId, thread, letter) =>
   rowOf(quoteSql('say-the-offer-was-put-forward'), [id, offerId, thread, letter]);
 
 const approvalSql = (n) => read('db', '60-approval', `${n}.sql`).replace(/;\s*$/, '');
+// the lane's own first statement, run for real: it writes a status the database has to allow, and
+// an invented one is refused at the moment a live email is being handled and nowhere before
+const approvalHandoff = params(join('db', '60-approval', 'accept-handoff.params.json'));
+const takeItOn = (id) => rowOf(approvalSql('accept-handoff'),
+  approvalHandoff({ gmail_message_id: id }));
 const readSource = read('src', '60-approval', 'did-she-say-send-it.js');
 const whatItAnswers = (id, thread) => JSON.parse(ask(
   `SELECT row_to_json(t) FROM (${fill(approvalSql('what-this-reply-answers'), [id, thread])}) t`));
@@ -452,12 +457,14 @@ console.log('\na complete order is priced and the price is written down');
   [{ from: 'new', to: 'quoted' }]);
 }
 
-console.log('\nasking for the old floor to be taken away stops the price');
+console.log('\nasking for the old floor to be taken away no longer stops the price');
 {
-  // Not an approval of this. The arithmetic has a removal line and a rate for it, and cannot
-  // reach either: any reason at all turns the message yellow, pricing_allowed needs green, and
-  // "the old floor comes out" is a note about what will be charged, not a doubt about anything.
-  // Recorded so it is visible rather than discovered again from a customer who never got a quote.
+  // This was open for weeks and is closed by the change above rather than on its own. Taking the
+  // old floor away is a note about what will be charged, not a doubt about anything, but it put a
+  // reason on the message, the message went yellow, and pricing wanted green -- so the arithmetic
+  // had a removal line and a rate for it and could reach neither. Now that the permission asks the
+  // job, a note no longer blocks a price. Being incomplete, being outside the area, and being held
+  // for a person still do.
   arrive({
     id: 'p3', thread: 'th-p3', from: 'nadia@example.com',
     text: 'laminate, 300 sq ft, buda tx, and please take the old floor away',
@@ -470,9 +477,11 @@ console.log('\nasking for the old floor to be taken away stops the price');
   check('the order knows the old floor is coming out', priced.gathered.old_floor_removal, true);
   check('the catalogue and the removal rate are both there',
     [priced.gathered.bands.length > 0, 'old_floor_removal' in priced.gathered.rules], [true, true]);
-  check('and still no price is allowed', priced.gathered.pricing_allowed, false);
-  check('refused for the colour, not for anything missing',
-    priced.quote.refusals, ['pricing_not_allowed', 'not_green']);
+  check('the job may now be priced', priced.gathered.pricing_allowed, true);
+  check('and it is', priced.quote.priceable, true);
+  check('with the removal charged as its own line',
+    (priced.quote.breakdown?.lines || []).some((l) => l.kind === 'removal'), true);
+  check('and nothing is refused', priced.quote.refusals, []);
 }
 
 console.log('\nan order still missing its area is not priced');
@@ -551,9 +560,20 @@ console.log('\nan order that has already been booked');
   });
   run(['-c', `UPDATE orders SET state = 'booked', closed_at = now() WHERE id = ${a.order_id}`]);
   const priced = priceIt('p7');
-  check('no offer is written against finished work', priced.written.offer_id, '');
+  // refused at the permission now rather than at the write. Finished work is not a job that may be
+  // priced, so the arithmetic is never reached and there is nothing to refuse to write down. The
+  // statement that writes an offer still guards it too, and that guard is exercised below.
+  check('finished work may not be priced', priced.gathered.pricing_allowed, false);
+  check('so no price is produced', priced.quote.priceable, false);
+  check('and nothing is written', priced.written, null);
   check('the booked order is untouched', orderOf(a.order_id).state, 'booked');
-  check('and nothing was linked to the message', priced.written.message_linked, 'f');
+
+  // the write's own guard, reached directly: it must refuse even when something hands it a price
+  const forced = rowOf(quoteSql('write-the-offer'),
+    ['p7', a.order_id, 100, 200, 100, 200, JSON.stringify({ lines: [] }), 'quote-v1']);
+  check('and the statement that writes offers refuses finished work by itself',
+    forced.offer_id, '');
+  check('with nothing linked to the message', forced.message_linked, 'f');
 }
 
 console.log('\nthe system asks for what is missing, once');
@@ -924,6 +944,60 @@ console.log('\ntwo quotes in one poll are both written');
     letters[0].the_letter_itself === letters[1].the_letter_itself, false);
 }
 
+console.log('\nfacts given across two letters still reach a price');
+{
+  // the conversation this whole system exists for, and the one a live run found could never
+  // finish: the second letter names no town, so the gate colours it red and asks for one, while
+  // the order it belongs to has had the town since the first
+  const first = arrive({
+    id: 'pair1', thread: 'th-pair', from: 'ada@example.com',
+    text: 'hi, laminate in the living room, kyle tx',
+    extracted: { intent: 'new_quote', material: 'laminate', city: 'kyle',
+      evidence: { material: 'laminate', city: 'kyle' } },
+  });
+  check('the first letter cannot be priced yet', priceIt('pair1').quote.priceable, false);
+
+  const second = arrive({
+    id: 'pair2', thread: 'th-pair', from: 'ada@example.com',
+    text: 'about 400 sq ft',
+    extracted: { intent: 'new_quote', area_sqft: 400, area_unit: 'sqft',
+      evidence: { area_sqft: '400', area_unit: 'sq ft' } },
+  });
+  check('the second letter joins the same order', second.order_id, first.order_id);
+  // what matters is not which shade: under the old rule pricing wanted green, and this letter --
+  // which names no town, because the first one did -- is not green on its own
+  check('that letter on its own is not green', second.decision.gate_color !== 'green', true);
+  check('but the order is missing nothing', Number(orderOf(first.order_id).area_sqft), 400);
+
+  const priced = priceIt('pair2');
+  check('so the job is priced', priced.quote.priceable, true);
+  check('with nothing refused', priced.quote.refusals, []);
+  check('and the offer is written down', Number(priced.written?.offer_id) > 0, true);
+  check('the letter can be composed from it',
+    priced.written ? whatTheQuoteNeeds('pair2', priced.written.offer_id).ready_to_write : false, true);
+}
+
+console.log('\na job a person must see is still not priced, whatever the last letter says');
+{
+  const first = arrive({
+    id: 'held1', thread: 'th-held', from: 'bea@example.com',
+    text: 'property management here, laminate for a unit in kyle tx',
+    extracted: { intent: 'new_quote', material: 'laminate', city: 'kyle',
+      evidence: { material: 'laminate', city: 'kyle' } },
+  });
+  check('the first letter is held back', first.decision.auto_blocked, true);
+  arrive({
+    id: 'held2', thread: 'th-held', from: 'bea@example.com',
+    text: 'it is about 400 sq ft',
+    extracted: { intent: 'new_quote', area_sqft: 400, area_unit: 'sqft',
+      evidence: { area_sqft: '400', area_unit: 'sq ft' } },
+  });
+  const priced = priceIt('held2');
+  check('the order now has everything', Number(orderOf(first.order_id).area_sqft), 400);
+  check('and it is still not priced', priced.quote.priceable, false);
+  check('because the job, not this letter, was held', priced.gathered.pricing_allowed, false);
+}
+
 console.log('\nthe owner says send it, and only then does the customer get a price');
 {
   const a = arrive({
@@ -940,6 +1014,9 @@ console.log('\nthe owner says send it, and only then does the customer get a pri
   // letter went out in
   arrive({ id: 'yes1', thread: 'th-owner-1', from: 'flooring.demo.austin@gmail.com',
     text: 'send it', extracted: { intent: 'other', evidence: {} } });
+  const taken = takeItOn('yes1');
+  check('the lane takes the message on', taken.handled_by, '60 Approval — Flooring');
+  check('into a status the database allows', taken.status, 'closed');
   const answers = whatItAnswers('yes1', 'th-owner-1');
   check('the offer waiting in that thread is found', Number(answers.offer_id), Number(priced.written.offer_id));
   check('and it knows who it is for', answers.contact_email, 'yuri@example.com');
@@ -977,6 +1054,7 @@ console.log('\nanything short of yes sends nothing');
   const readOf = (id, text) => {
     arrive({ id, thread: 'th-owner-2', from: 'flooring.demo.austin@gmail.com',
       text, extracted: { intent: 'other', evidence: {} } });
+    takeItOn(id);
     return didSheSaySendIt(whatItAnswers(id, 'th-owner-2'))[0];
   };
 
@@ -997,6 +1075,7 @@ console.log('\na reply in a thread with nothing waiting answers nothing');
 {
   arrive({ id: 'stray1', thread: 'th-nothing', from: 'flooring.demo.austin@gmail.com',
     text: 'send it', extracted: { intent: 'other', evidence: {} } });
+  takeItOn('stray1');
   const answers = whatItAnswers('stray1', 'th-nothing');
   check('no offer is found', answers.an_offer_is_waiting, false);
   const [readIt] = didSheSaySendIt(answers);
