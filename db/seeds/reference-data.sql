@@ -154,7 +154,15 @@ INSERT INTO reply_templates (key, body, sends_automatically, notes) VALUES
     ('signature',
      E'\n\nBest,\nthe flooring desk',
      true,
-     'appended to every reply')
+     'appended to every reply'),
+    ('quote_opening',
+     'Thanks for the details. Here is what this job comes to, based on the price list as it stands today.',
+     false,
+     'the first line of a letter carrying a price -- never sent without a person, and the code will not send it to a customer at all'),
+    ('quote_closing',
+     E'The spread covers the options listed above and what the floor turns out to look like once the old covering is up. Tell me which one you have in mind and I can narrow it down, or I can firm it up on site. The price holds for 30 days.\n\nHappy to answer anything before you decide.',
+     false,
+     'the last paragraph of a letter carrying a price')
 ON CONFLICT (key) DO NOTHING;
 
 INSERT INTO services (priority, label, we_do, match_words, answer, notes) VALUES

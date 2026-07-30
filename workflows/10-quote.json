@@ -152,7 +152,7 @@
       "parameters": {
         "width": 560,
         "height": 200,
-        "content": "### No number ever leaves this lane\n\nA price is computed and written down as a draft. Nothing here sends a figure to anyone: the only\nletter this lane can send asks for what the order is still missing, in words a person wrote and\nstored in reply_templates.\n\nWhether that letter may go out unread is the stored sentence's own decision. One marked as needing\na person first is still composed — it goes to the owner, headed as not sent, and the ask is not\nrecorded, so the next email asks again.\n\nThe three fields that decide whether a price may be quoted come from the message being handled.\nEverything the price is made of comes from the order, because the email that named the material\nmay be weeks behind the one that gave the area."
+        "content": "### A figure only ever reaches the owner\n\nTwo letters leave this lane. The question about what an order is missing may reach a customer:\nit carries no number, and whether it goes unread is the stored sentence's own decision, refused\noutright when the gate says a person must see that email first.\n\nThe letter carrying a price does not. It goes to the owner, always, and that is written in the\ncomposing code rather than left to a row in reply_templates -- a figure must not be one edit in\na table away from leaving unread. The offer waits at awaiting_approval until somebody answers.\n\nThe three fields that decide whether a price may be quoted come from the message being handled.\nEverything the price is made of comes from the order, because the email that named the material\nmay be weeks behind the one that gave the area."
       },
       "id": "aaaa2222-0000-4000-8000-000000000005",
       "name": "What this lane does not do",
@@ -343,6 +343,126 @@
         }
       },
       "webhookId": "ed618926-facf-4aff-98df-e32fdcd87a12"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Everything a letter carrying a price is made of, in one statement: the figures as they were\n-- written down, the job they belong to, who asked, and the words a person wrote to wrap around\n-- them. Nothing downstream asks the database a second question.\n--\n-- The offer is read rather than recomputed. A quote given today has to still be explainable after\n-- the price list has moved, and the only way that stays true is if the letter says what the offer\n-- says -- not what the arithmetic would produce if it ran again now.\n\nWITH the_offer AS (\n  SELECT o.id, o.order_id, o.total_low, o.total_high, o.subtotal_low, o.subtotal_high,\n         o.breakdown, o.status, o.pricing_version\n    FROM offers o\n   WHERE o.id = $2::int\n),\nthe_job AS (\n  SELECT j.id, j.material_category, j.area_sqft, j.area_unit, j.city, j.zone, j.state\n    FROM orders j\n   WHERE j.id = (SELECT order_id FROM the_offer)\n),\nthe_letter AS (\n  SELECT contact_email, thread_id, from_name, auto_blocked\n    FROM messages\n   WHERE gmail_message_id = $1::text\n),\nwords AS (\n  SELECT max(body) FILTER (WHERE key = 'quote_opening') AS opening,\n         max(body) FILTER (WHERE key = 'quote_closing') AS closing,\n         max(body) FILTER (WHERE key = 'signature')     AS signature\n    FROM reply_templates\n   WHERE key IN ('quote_opening', 'quote_closing', 'signature')\n)\nSELECT\n  $1::text                                  AS gmail_message_id,\n  f.id                                      AS offer_id,\n  f.order_id,\n  f.total_low, f.total_high,\n  f.breakdown,\n  f.pricing_version,\n  j.material_category, j.area_sqft, j.city,\n  l.contact_email, l.thread_id, l.from_name,\n  coalesce(l.auto_blocked, false)           AS auto_blocked,\n  w.opening, w.closing, w.signature,\n  f.id IS NOT NULL\n    AND f.total_low IS NOT NULL\n    AND f.status = 'draft'\n    AND w.opening IS NOT NULL\n    AND w.closing IS NOT NULL                AS ready_to_write\n  FROM the_offer f\n  LEFT JOIN the_job    j ON true\n  LEFT JOIN the_letter l ON true\n  LEFT JOIN words      w ON true;",
+        "options": {
+          "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('Write the offer').item.json.offer_id] }}"
+        }
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000020",
+      "name": "What the quote letter needs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1720,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ready_to_write",
+              "leftValue": "={{ $json.ready_to_write }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000021",
+      "name": "Is the quote ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1940,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// A letter carrying a price, and the one address it is allowed to reach.\n//\n// Every other letter in this system decides its destination from the stored wording. This one does\n// not, and that is the point: a figure must not be one edit in a table away from leaving unread. It\n// goes to the owner, always, until there is an approval to authorise anything else.\nconst OWNER = 'flooring.demo.austin@gmail.com';\n\nconst money = (n) => `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;\n\n// The breakdown as a person reads it, not as it is stored. Each line already knows what it is, what\n// it was worked out from and at what rate, because the arithmetic wrote all three down when it ran.\nconst readable = (lines) => (lines || []).map((line) => {\n  if (line.kind === 'minimum') {\n    return `  ${line.label}: minimum charge ${money(line.amount)} applies`;\n  }\n  const rate = line.rate_low === line.rate_high\n    ? `${money(line.rate_low)}/${line.unit}`\n    : `${money(line.rate_low)}-${money(line.rate_high)}/${line.unit}`;\n  const waste = line.wastage_pct ? ` (incl. ${line.wastage_pct}% waste)` : '';\n  return `  ${line.label}: ${Number(line.quantity).toLocaleString('en-US')} ${line.unit}${waste} at ${rate}`\n    + `\\n      ${money(line.low)} to ${money(line.high)}`;\n}).join('\\n');\n\nreturn $input.all().map((item, i) => {\n  const q = item.json || {};\n\n  if (q.ready_to_write !== true && q.ready_to_write !== 't') {\n    throw new Error('there is no offer to write about, or no wording stored for one: '\n      + `offer ${q.offer_id || 'unknown'} with total ${q.total_low === null ? 'nothing' : q.total_low}`);\n  }\n\n  const breakdown = typeof q.breakdown === 'string' ? JSON.parse(q.breakdown) : (q.breakdown || {});\n  const range = `${money(q.total_low)} to ${money(q.total_high)}`;\n  const who = q.contact_email || 'a customer with no address on file';\n  // the town is stored the way the customer wrote it, lowercased for matching. A letter is not a\n  // lookup key.\n  const town = q.city ? String(q.city).replace(/\\b[a-z]/g, (c) => c.toUpperCase()) : null;\n  const job = [q.material_category, q.area_sqft ? `${Number(q.area_sqft).toLocaleString('en-US')} sq ft` : null,\n    town].filter(Boolean).join(', ');\n\n  // What the owner reads: the letter as the customer would receive it, and above it the few facts\n  // she needs to decide -- who it is for, what the job is, and where the figures came from.\n  const forTheCustomer = `${q.opening}\\n\\n${job}\\n\\n${readable(breakdown.lines)}\\n\\n`\n    + `All in: ${range}.\\n\\n${q.closing}${q.signature || ''}`;\n\n  const body = `This quote is ready and has not been sent. Nothing carrying a figure leaves without you.\\n\\n`\n    + `For:     ${who}\\n`\n    + `Job:     ${job || 'not described'}\\n`\n    + `Range:   ${range}\\n`\n    + `Priced by: ${q.pricing_version || 'unknown version'}\\n`\n    + `${q.auto_blocked ? '\\nThe gate held this email for a person before anything automatic: read it before you send.\\n' : ''}`\n    + `\\n--- the letter as it stands ---\\n\\n${forTheCustomer}`;\n\n  return {\n    json: {\n      gmail_message_id: q.gmail_message_id,\n      offer_id: q.offer_id,\n      order_id: q.order_id,\n      to: OWNER,\n      reaches_the_customer: false,\n      for_whom: who,\n      subject: `Quote ready for ${who} — ${range}`,\n      body,\n      the_letter_itself: forTheCustomer,\n    },\n    pairedItem: { item: i },\n  };\n});\n"
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000022",
+      "name": "Compose the quote",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000023",
+      "name": "Show the quote to the owner",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2380,
+        100
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": null,
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Written after the letter has gone, never before. One statement, so an offer cannot read as\n-- waiting for somebody who was never written to, and the order's history cannot show a quote that\n-- the offer does not know about.\n--\n-- Only a draft moves. A second run over the same offer -- a redelivered email, a retry -- finds it\n-- already awaiting_approval and changes nothing, rather than telling the owner twice about the\n-- same figure.\n\nWITH moved AS (\n  UPDATE offers\n     SET status = 'awaiting_approval'\n   WHERE id = $2::int AND status = 'draft'\n  RETURNING id, order_id\n),\nnoted AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT order_id, $1::text, 'state_change', 'offer_status', 'draft', 'awaiting_approval'\n    FROM moved\n  RETURNING 1\n)\nSELECT\n  $2::int                                  AS offer_id,\n  (SELECT count(*) FROM moved)::int = 1    AS now_waiting,\n  (SELECT count(*) FROM noted)::int = 1    AS change_recorded;",
+        "options": {
+          "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('What the quote letter needs').item.json.offer_id] }}"
+        }
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000024",
+      "name": "Say the offer was put forward",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2600,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
     }
   ],
   "connections": {
@@ -410,7 +530,13 @@
     },
     "Write the offer": {
       "main": [
-        []
+        [
+          {
+            "node": "What the quote letter needs",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Should we ask, and for what": {
@@ -470,6 +596,51 @@
         [
           {
             "node": "Say we asked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What the quote letter needs": {
+      "main": [
+        [
+          {
+            "node": "Is the quote ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is the quote ready?": {
+      "main": [
+        [
+          {
+            "node": "Compose the quote",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Compose the quote": {
+      "main": [
+        [
+          {
+            "node": "Show the quote to the owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Show the quote to the owner": {
+      "main": [
+        [
+          {
+            "node": "Say the offer was put forward",
             "type": "main",
             "index": 0
           }
