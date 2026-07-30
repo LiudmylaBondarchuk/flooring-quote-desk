@@ -27,6 +27,32 @@ const api = async (path, init = {}) => {
 
 const localFile = (path) => (existsSync(join(root, path)) ? readFileSync(join(root, path), 'utf8') : null);
 
+// Deploying carries four kinds of node body and nothing else: code, a statement with its
+// parameters, an input schema, a system message. Everything else a node is made of -- which rule a
+// switch matches on, what a branch tests, who an email goes to, what a trigger accepts -- lives
+// only where somebody typed it. An export can therefore describe a node the instance does not have
+// and no check notices, because the drift check compares the same four fields.
+//
+// This does not push those. Deciding to would mean deploying could quietly rewire a canvas. It
+// says they differ, which is the part that was missing.
+const CARRIED = new Set(['jsCode', 'query', 'inputSchema', 'content',
+  'options.queryReplacement', 'options.systemMessage']);
+
+const differences = (mine, theirs, trail = '') => {
+  const out = [];
+  const keys = new Set([...Object.keys(mine || {}), ...Object.keys(theirs || {})]);
+  for (const key of keys) {
+    const path = trail ? `${trail}.${key}` : key;
+    if (CARRIED.has(path)) continue;
+    const a = (mine || {})[key];
+    const b = (theirs || {})[key];
+    const both = (v) => v && typeof v === 'object' && !Array.isArray(v);
+    if (both(a) && both(b)) { out.push(...differences(a, b, path)); continue; }
+    if (JSON.stringify(a) !== JSON.stringify(b)) out.push(path);
+  }
+  return out;
+};
+
 // The exports carry credential names and no ids, on purpose. A node being created here therefore
 // has to be told which stored credential it means, and the instance is the only place that knows:
 // whichever node is already using that name has the id. Read once, and only if something asks.
@@ -55,6 +81,7 @@ const promptBody = (path) => {
 const only = process.argv.slice(2).filter((a) => !a.startsWith('-'));
 
 let changed = 0;
+const outOfReach = [];
 for (const file of readdirSync(join(root, 'workflows')).filter((f) => f.endsWith('.json'))) {
   if (only.length && !only.some((want) => file.startsWith(want))) continue;
   const exported = JSON.parse(readFileSync(join(root, 'workflows', file), 'utf8'));
@@ -136,6 +163,16 @@ for (const file of readdirSync(join(root, 'workflows')).filter((f) => f.endsWith
 
   let touched = brought.length;
   const inExport = new Map(exported.nodes.map((n) => [n.name, n]));
+
+  // what this run will leave behind, said out loud rather than left to be discovered live
+  const stranded = [];
+  for (const node of nodes) {
+    const mine = inExport.get(node.name);
+    if (!mine || brought.includes(node)) continue;
+    const apart = differences(mine.parameters, node.parameters);
+    if (apart.length) stranded.push(`${node.name}: ${apart.join(', ')}`);
+  }
+  if (stranded.length) outOfReach.push({ file, stranded });
   for (const node of nodes) {
     // A sticky note is the only documentation a person reads while looking at the canvas, and it
     // has no file of its own, so the export is its source. Without this it was the one thing here
@@ -211,5 +248,19 @@ for (const file of readdirSync(join(root, 'workflows')).filter((f) => f.endsWith
 }
 
 console.log(changed ? `done, ${changed} node(s) updated` : 'nothing to deploy');
+
+// Last, so it is the thing still on the screen. These are differences this run could not push and
+// did not push: change them in n8n, or take them out of the export, but do not assume deploying
+// has dealt with them. A switch rule that stayed here and never reached the instance sent every
+// owner reply to the error lane for as long as it took to notice.
+if (outOfReach.length) {
+  console.error('\nThese differ between the export and the instance in ways deploying cannot carry:');
+  for (const { file, stranded } of outOfReach) {
+    console.error(`  ${file}`);
+    for (const line of stranded) console.error(`    ${line}`);
+  }
+  console.error('\nDeploying pushes node bodies only. Anything above was left as the instance has it.');
+  process.exitCode = 1;
+}
 
 
