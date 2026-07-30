@@ -156,7 +156,7 @@ INSERT INTO reply_templates (key, body, sends_automatically, notes) VALUES
      true,
      'appended to every reply'),
     ('nudge',
-     E'Just checking this is still on your mind. If you would like me to pick it up, reply and I will carry on from where we left off.\n\nIf the timing has changed, no reply needed -- I will close it off and you can write again whenever suits.',
+     E'Just checking this is still on your mind. If you would like me to pick it up, reply and I will carry on from where we left off.\n\nIf the timing has changed, no reply needed, I will close it off and you can write again whenever suits.',
      true,
      'sent once to an order that has gone quiet; carries no figure and repeats no question'),
     ('quote_opening',
