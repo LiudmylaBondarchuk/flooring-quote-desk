@@ -86,8 +86,8 @@ for (const file of readdirSync(join(root, 'workflows')).filter((f) => f.endsWith
   if (only.length && !only.some((want) => file.startsWith(want))) continue;
   const exported = JSON.parse(readFileSync(join(root, 'workflows', file), 'utf8'));
   const id = process.env[`WF_${file.replace(/\W/g, '_').toUpperCase()}`];
-  const live = await api(`/workflows?limit=100`).then((r) =>
-    r.data.find((w) => w.name === exported.name));
+  const all = await api('/workflows?limit=100').then((r) => r.data);
+  const live = all.find((w) => w.name === exported.name);
   if (!live) {
     console.log(`skipped ${file} — no workflow named "${exported.name}" on the instance`);
     continue;
@@ -223,10 +223,26 @@ for (const file of readdirSync(join(root, 'workflows')).filter((f) => f.endsWith
     }
   }
 
-  if (!touched) { console.log(`unchanged ${file}`); continue; }
-
   const settings = Object.fromEntries(
     Object.entries(full.settings || {}).filter(([k]) => SETTINGS_ALLOWED.includes(k)));
+
+  // Which workflow catches this one's failures is part of what the lane is, not a preference
+  // somebody set once in a browser. It lived only on the instance, and 70 Catalogue quietly had
+  // none: everything that lane could fail at was recorded nowhere and told nobody. The export
+  // names it rather than holding an id, the same way it names a credential.
+  const catcher = exported.settings?.errorWorkflow;
+  if (catcher) {
+    const caught = live.name === catcher ? live : all.find((w) => w.name === catcher);
+    if (!caught) {
+      console.error(`refused ${file} — its failures are meant to reach "${catcher}", `
+        + 'and no workflow on this instance has that name.');
+      process.exit(1);
+    }
+    if (settings.errorWorkflow !== caught.id) { settings.errorWorkflow = caught.id; touched++; }
+  }
+
+  if (!touched) { console.log(`unchanged ${file}`); continue; }
+
   await api(`/workflows/${full.id}`, {
     method: 'PUT',
     body: JSON.stringify({ name: full.name, nodes, connections, settings }),
@@ -236,11 +252,16 @@ for (const file of readdirSync(join(root, 'workflows')).filter((f) => f.endsWith
   for (const node of freshVersion.nodes) {
     if (node.credentials) for (const k of Object.keys(node.credentials)) node.credentials[k].id = null;
   }
+  const keptSettings = { ...(fresh.settings || { executionOrder: 'v1' }) };
+  if (keptSettings.errorWorkflow) {
+    const named = all.find((w) => w.id === keptSettings.errorWorkflow);
+    if (named) keptSettings.errorWorkflow = named.name;
+  }
   writeFileSync(join(root, 'workflows', file), JSON.stringify({
     name: fresh.name,
     nodes: freshVersion.nodes,
     connections: freshVersion.connections,
-    settings: fresh.settings || { executionOrder: 'v1' },
+    settings: keptSettings,
   }, null, 2) + '\n');
 
   console.log(`deployed ${file} — ${touched} node(s), export refreshed`);
