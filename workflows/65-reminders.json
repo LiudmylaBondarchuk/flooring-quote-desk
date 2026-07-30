@@ -1,0 +1,281 @@
+{
+  "name": "65 Reminders — Flooring",
+  "nodes": [
+    {
+      "parameters": {
+        "width": 520,
+        "height": 200,
+        "content": "### 65 Reminders — Flooring\n\nOnce a day: who has gone quiet, and what to do about each.\n\nSilence is measured on the order, not the inbox -- an order touched by a merge, a quote or\nan approval is a live conversation whatever arrived. Past the first mark it gets one nudge,\never. Past the second it is let go, and nothing is sent: closing the books is not a message\nto a customer, and \"we assume you are not interested\" is the letter that arrives the day\nsomebody finally replies.\n\nOff until somebody turns it on. It writes to customers."
+      },
+      "id": "aaaa6500-0000-4000-8000-000000000000",
+      "name": "Purpose",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        240,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "aaaa6500-0000-4000-8000-000000000001",
+      "name": "Once a day",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        260,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Orders nobody has heard from, and what to do about each.\n--\n-- Two ages, one pass. An order that has been silent past the first mark gets one nudge; one that\n-- has been silent past the second is let go. The marks are arguments rather than numbers written\n-- here, because how long is too long is the firm's judgement and not the query's.\n--\n-- Quiet means nothing has happened to the order, not that no email arrived: an order updated by a\n-- merge, a quote, or an approval is a live conversation whatever the inbox looks like.\n--\n-- A nudge is sent once. The event is written after it goes, so an order with one already is past\n-- nudging and waits for the second mark instead.\n\nWITH live AS (\n  SELECT o.id, o.contact_email, o.thread_id, o.state, o.updated_at,\n         EXISTS (SELECT 1 FROM order_events e\n                  WHERE e.order_id = o.id AND e.kind = 'asked' AND e.field = 'reminder') AS nudged,\n         (SELECT m.gmail_message_id FROM messages m\n           WHERE m.order_id = o.id AND m.is_outbound = false\n           ORDER BY m.created_at DESC LIMIT 1)                                           AS reply_to\n    FROM orders o\n   WHERE o.state NOT IN ('booked', 'done', 'lost')\n     AND o.closed_at IS NULL\n)\nSELECT\n  l.id                                      AS order_id,\n  l.contact_email,\n  l.thread_id,\n  l.reply_to,\n  l.state,\n  l.updated_at,\n  l.nudged,\n  (SELECT body FROM reply_templates WHERE key = 'nudge')      AS nudge,\n  (SELECT body FROM reply_templates WHERE key = 'signature')  AS signature,\n  CASE\n    WHEN l.updated_at < now() - ($2::int * interval '1 day') THEN 'let go'\n    WHEN l.nudged                                            THEN 'waiting'\n    WHEN l.updated_at < now() - ($1::int * interval '1 day') THEN 'nudge'\n    ELSE 'live'\n  END                                                        AS what_now\n  FROM live l\n WHERE l.reply_to IS NOT NULL\n ORDER BY l.updated_at;",
+        "options": {
+          "queryReplacement": "={{ [5, 21] }}"
+        }
+      },
+      "id": "aaaa6500-0000-4000-8000-000000000002",
+      "name": "Who has gone quiet",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        500,
+        360
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "nudge",
+                    "leftValue": "={{ $json.what_now }}",
+                    "rightValue": "nudge",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "nudge"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "letgo",
+                    "leftValue": "={{ $json.what_now }}",
+                    "rightValue": "let go",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "let go"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aaaa6500-0000-4000-8000-000000000003",
+      "name": "Nudge or let go?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        740,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One short letter to somebody who has gone quiet, in words a person wrote.\n//\n// It carries no figure and repeats no question. A customer who did not answer is not helped by\n// being asked the same thing again in the same words; they are helped by being reminded that the\n// desk is still here and by being told it will stop.\n\nreturn $input.all()\n  .filter((item) => (item.json || {}).what_now === 'nudge')\n  .map((item, i) => {\n    const row = item.json;\n    const words = String(row.nudge || '').trim();\n\n    if (!words) {\n      throw new Error('no wording is stored for a nudge, and a reminder that says nothing is '\n        + 'worse than none: reply_templates is missing the row \"nudge\"');\n    }\n    if (!row.reply_to) {\n      throw new Error(`order ${row.order_id} has nobody to reply to: no inbound message of theirs `\n        + 'is on file, so there is no letter to continue');\n    }\n\n    return {\n      json: {\n        order_id: row.order_id,\n        to: row.contact_email,\n        reply_to: row.reply_to,\n        thread_id: row.thread_id,\n        body: words + String(row.signature || ''),\n      },\n      pairedItem: { item: i },\n    };\n  });\n"
+      },
+      "id": "aaaa6500-0000-4000-8000-000000000004",
+      "name": "Write the nudge",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        980,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $json.reply_to }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "aaaa6500-0000-4000-8000-000000000005",
+      "name": "Send the nudge",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1220,
+        260
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": null,
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Written after the nudge has gone. One per order, ever: the statement refuses a second because\n-- the order it belongs to already has one, and a customer who ignored the first will not be helped\n-- by a third.\n\nINSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\nSELECT $1::int, $2::text, 'asked', 'reminder', NULL, 'nudged after silence'\n WHERE NOT EXISTS (SELECT 1 FROM order_events e\n                    WHERE e.order_id = $1::int AND e.kind = 'asked' AND e.field = 'reminder')\nRETURNING order_id, new_value;",
+        "options": {
+          "queryReplacement": "={{ [$json.order_id, $json.reply_to] }}"
+        }
+      },
+      "id": "aaaa6500-0000-4000-8000-000000000006",
+      "name": "Say we nudged",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1460,
+        260
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- An order nobody has answered for long enough stops being open. Nothing is sent: letting go is a\n-- decision about the desk's own books, not a message to a customer, and a letter saying \"we assume\n-- you are not interested\" is the kind that arrives the day somebody finally replies.\n--\n-- The change is recorded with what it moved from, so a quote that went cold and one that was never\n-- answered at all read differently afterwards.\n\nWITH before AS (\n  SELECT id, state FROM orders WHERE id = $1::int FOR UPDATE\n),\nmoved AS (\n  UPDATE orders o\n     SET state = 'lost', closed_at = now(), updated_at = now()\n   WHERE o.id = (SELECT id FROM before)\n     AND (SELECT state FROM before) NOT IN ('booked', 'done', 'lost')\n  RETURNING o.id\n),\nnoted AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT id, NULL, 'state_change', 'state', (SELECT state FROM before), 'lost' FROM moved\n  RETURNING 1\n)\nSELECT\n  $1::int                                 AS order_id,\n  (SELECT state FROM before)              AS was,\n  (SELECT count(*) FROM moved)::int = 1   AS let_go,\n  (SELECT count(*) FROM noted)::int = 1   AS change_recorded;",
+        "options": {
+          "queryReplacement": "={{ [$json.order_id] }}"
+        }
+      },
+      "id": "aaaa6500-0000-4000-8000-000000000007",
+      "name": "Let it go",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        980,
+        460
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Once a day": {
+      "main": [
+        [
+          {
+            "node": "Who has gone quiet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Who has gone quiet": {
+      "main": [
+        [
+          {
+            "node": "Nudge or let go?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nudge or let go?": {
+      "main": [
+        [
+          {
+            "node": "Write the nudge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Let it go",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Write the nudge": {
+      "main": [
+        [
+          {
+            "node": "Send the nudge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send the nudge": {
+      "main": [
+        [
+          {
+            "node": "Say we nudged",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "90 Errors — Flooring"
+  }
+}

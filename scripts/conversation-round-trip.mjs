@@ -944,6 +944,60 @@ console.log('\ntwo quotes in one poll are both written');
     letters[0].the_letter_itself === letters[1].the_letter_itself, false);
 }
 
+console.log('\nan order that has gone quiet is chased once, then let go');
+{
+  const quietSql = (n) => read('db', '65-reminders', `${n}.sql`).replace(/;\s*$/, '');
+  const nudgeSource = read('src', '65-reminders', 'write-the-nudge.js');
+  // as json: the stored nudge has line breaks in it, and a column split cannot survive those
+  const survey = (nudgeAfter, letGoAfter) => JSON.parse(ask(
+    `SELECT coalesce(json_agg(t), '[]'::json) FROM (${fill(quietSql('who-has-gone-quiet'),
+      [nudgeAfter, letGoAfter])}) t`));
+  const writeNudges = (rows) => new Function('$input', '$', nudgeSource)(
+    { all: () => rows.map((json) => ({ json })) },
+    (name) => { throw new Error(`the nudge reached back to ${name}`) },
+  ).map((r) => r.json);
+
+  const a = arrive({
+    id: 'quiet1', thread: 'th-quiet', from: 'fay@example.com',
+    text: 'laminate in the hallway, kyle tx',
+    extracted: { intent: 'new_quote', material: 'laminate', city: 'kyle',
+      evidence: { material: 'laminate', city: 'kyle' } },
+  });
+
+  const fresh = survey(5, 21).find((r) => r.order_id === a.order_id);
+  check('a conversation from today is left alone', fresh.what_now, 'live');
+
+  run(['-c', `UPDATE orders SET updated_at = now() - interval '9 days' WHERE id = ${a.order_id}`]);
+  const stale = survey(5, 21).find((r) => r.order_id === a.order_id);
+  check('past the first mark it is due a nudge', stale.what_now, 'nudge');
+  check('and there is a letter of theirs to continue', stale.reply_to, 'quiet1');
+
+  const [nudge] = writeNudges([stale]);
+  check('the nudge goes to whoever wrote in', nudge.to, 'fay@example.com');
+  check('in the words a person wrote', /still on your mind/.test(nudge.body), true);
+  check('it carries no figure', /\$|[0-9]{3,}/.test(nudge.body), false);
+  check('and it does not repeat the question',
+    /how many square feet/.test(nudge.body), false);
+
+  rowOf(quietSql('say-we-nudged'), [a.order_id, 'quiet1']);
+  const after = survey(5, 21).find((r) => r.order_id === a.order_id);
+  check('once nudged it waits rather than being nudged again', after.what_now, 'waiting');
+  check('and a second recording writes nothing',
+    ask(fill(quietSql('say-we-nudged'), [a.order_id, 'quiet1'])), 'INSERT 0 0');
+
+  run(['-c', `UPDATE orders SET updated_at = now() - interval '30 days' WHERE id = ${a.order_id}`]);
+  const cold = survey(5, 21).find((r) => r.order_id === a.order_id);
+  check('past the second mark it is let go', cold.what_now, 'let go');
+  const gone = rowOf(quietSql('let-it-go'), [a.order_id]);
+  check('the order is closed', gone.let_go, 't');
+  check('and it remembers what it was', gone.was, 'new');
+  check('the order says so itself', orderOf(a.order_id).state, 'lost');
+  check('nothing is written to the customer about it',
+    writeNudges([cold]).length, 0);
+  check('and it is gone from the survey',
+    survey(5, 21).some((r) => r.order_id === a.order_id), false);
+}
+
 console.log('\na question about what the firm does gets an answer');
 {
   const answerSource = read('src', '10-quote', 'answer-the-question.js');
@@ -1218,8 +1272,17 @@ console.log('\ntwo customers in one poll are both answered');
   [{ thread: 'th-t', orders: 2 }]);
   check('no order holds an area from a message the gate refused',
     Number(ask('SELECT count(*) FROM orders WHERE area_sqft >= 20000')), 0);
-  check('every event names the message it came from',
-    Number(ask('SELECT count(*) FROM order_events WHERE gmail_message_id IS NULL')), 0);
+  // Every event names the message it came from, except the ones no message caused. Letting an
+  // order go is the work of time passing, and attaching whichever letter happened to be last would
+  // be a tidier record of something that did not happen.
+  check('every event caused by a letter names it',
+    Number(ask(`SELECT count(*) FROM order_events
+                 WHERE gmail_message_id IS NULL
+                   AND NOT (kind = 'state_change' AND field = 'state' AND new_value = 'lost')`)), 0);
+  check('and the ones that name none are only the orders time closed', JSON.parse(ask(
+    `SELECT coalesce(json_agg(DISTINCT kind || '/' || field || ' -> ' || new_value), '[]'::json)
+       FROM order_events WHERE gmail_message_id IS NULL`)),
+  ['state_change/state -> lost']);
 }
 
 console.log(`\n${failed === 0 ? 'all checks passed' : `${failed} check(s) FAILED`}`);
