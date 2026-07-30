@@ -108,6 +108,15 @@ way that sentence appears in a letter. Which offer matters is now the one in thi
 exchange rather than any this contact has ever had: a customer quoted for a
 bathroom last spring is not agreeing to that when they write about a bedroom now.
 
+**The build notices when the repository disagrees with itself.** The drift check compared every
+node to its file and never asked the question the other way round, so a query written for a node
+nobody had created reported *in sync* -- which is how a finished-looking set of files sat in the
+repository while the lane had no step to say them. A file under a workflow's folder with no node
+behind it now fails the build. So does a statement whose `$1..$N` disagrees with the number of
+arguments its parameters supply: those are bound by position, and when the two drift the database
+is handed values for the wrong columns without anything raising an error. Both run in CI, and the
+first was tried against the commit where the gap actually existed -- it names all five files.
+
 **Checks, and what they are worth.** Four harnesses run against a real Postgres on
 every push, one of them driving whole conversations — several customers at once with
 interleaved threads, a returning customer whose first job was booked, a refused

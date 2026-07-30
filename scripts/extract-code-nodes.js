@@ -40,6 +40,58 @@ for (const file of readdirSync(join(root, 'workflows')).filter((f) => f.endsWith
   }
 }
 
+// Every file this would write, and therefore every file that has a node behind it. Anything under
+// src/ or db/ that is not in here describes a step the workflow does not have.
+const accountedFor = new Set(targets.map((t) => t.path));
+
+// A file with nothing behind it. The check above compares each node to its file and never asks the
+// question the other way round, so a query written for a node nobody had created reported "in
+// sync" -- and the words sat in the repository looking finished while the lane had no step to say
+// them. Deploying can create the node now; this is what says the file is waiting for one.
+const orphans = [];
+for (const dir of ['src', 'db']) {
+  const base = join(root, dir);
+  if (!existsSync(base)) continue;
+  for (const scope of readdirSync(base, { withFileTypes: true })) {
+    if (!scope.isDirectory()) continue;
+    // only the folders named after a workflow: db/history, db/seeds and the like are hand-written
+    if (!existsSync(join(root, 'workflows', `${scope.name}.json`))) continue;
+    for (const f of readdirSync(join(base, scope.name))) {
+      const path = join(dir, scope.name, f);
+      if (!accountedFor.has(path)) orphans.push(path);
+    }
+  }
+}
+
+// A statement binds its arguments by position, and the list of them lives in a second file. When
+// the two disagree the database is handed values for the wrong columns, silently, and every test
+// reading the same two files agrees with itself. Counting is the whole check: $1..$N against the
+// length of the array the params file supplies.
+const miscounted = [];
+const onDisk = (path, fallback) => {
+  const full = join(root, path);
+  return existsSync(full) ? readFileSync(full, 'utf8') : fallback;
+};
+for (const { path, content } of targets) {
+  if (!path.endsWith('.params.json')) continue;
+  const sqlPath = path.replace(/\.params\.json$/, '.sql');
+  const sql = targets.find((t) => t.path === sqlPath);
+  if (!sql) continue;
+  // the files rather than the export, so an edit is caught before it is deployed rather than after
+  const statement = onDisk(sqlPath, sql.content);
+  const wanted = Math.max(0, ...[...statement.matchAll(/\$(\d+)/g)].map((m) => Number(m[1])));
+  const expression = JSON.parse(onDisk(path, content)).queryReplacement || '';
+  const list = expression.match(/\[[\s\S]*\]/);
+  if (!list) continue;
+  let depth = 0, given = list[0].trim() === '[]' ? 0 : 1;
+  for (const ch of list[0].slice(1, -1)) {
+    if ('([{'.includes(ch)) depth += 1;
+    else if (')]}'.includes(ch)) depth -= 1;
+    else if (ch === ',' && depth === 0) given += 1;
+  }
+  if (given !== wanted) miscounted.push(`${path}: the statement uses $1..$${wanted}, the parameters supply ${given}`);
+}
+
 const drifted = [];
 const refused = [];
 for (const { path, content } of targets) {
@@ -58,6 +110,20 @@ if (refused.length) {
   for (const p of refused) console.error(`  ${p}`);
   console.error('\nIf the local edit is the newer one, run `npm run deploy`.');
   console.error('If the instance is the newer one, run `npm run extract -- --force`.');
+  process.exit(1);
+}
+
+if (orphans.length) {
+  console.error('These files have no node behind them -- the workflow has no such step:');
+  for (const p of orphans) console.error(`  ${p}`);
+  console.error('\nEither add the node and run `npm run deploy`, or delete the file.');
+  process.exit(1);
+}
+
+if (miscounted.length) {
+  console.error('A statement and its parameters disagree about how many arguments there are:');
+  for (const m of miscounted) console.error(`  ${m}`);
+  console.error('\nValues bound by position go into the wrong columns when these two drift apart.');
   process.exit(1);
 }
 
