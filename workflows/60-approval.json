@@ -34,7 +34,7 @@
         "operation": "executeQuery",
         "query": "UPDATE messages SET\n  status     = $2,\n  handled_by = $3,\n  handoff_at = now()\nWHERE gmail_message_id = $1\nRETURNING gmail_message_id, thread_id, body, category, status, handled_by;",
         "options": {
-          "queryReplacement": "={{ [$json.gmail_message_id, 'awaiting_approval_reply', '60 Approval — Flooring'] }}"
+          "queryReplacement": "={{ [$json.gmail_message_id, 'closed', '60 Approval — Flooring'] }}"
         }
       },
       "id": "aaaa6000-0000-4000-8000-000000000002",
@@ -145,7 +145,8 @@
           "id": null,
           "name": "Gmail account"
         }
-      }
+      },
+      "webhookId": "61b15e4a-7d8f-4436-b113-8cc228028087"
     },
     {
       "parameters": {
@@ -241,6 +242,7 @@
     }
   },
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "errorWorkflow": "ASVUDhxc7e4KgBgq"
   }
 }
