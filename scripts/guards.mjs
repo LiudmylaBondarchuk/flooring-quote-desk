@@ -196,8 +196,8 @@ for (const sha of commits) {
   const short = sha.slice(0, 7);
   aboutTheMessage(messageOnly(git('log', '-1', '--format=%B', sha)), short);
 
-  const shouldNotBeHere = ignoredAmong(git('diff-tree', '--no-commit-id', '--name-only', '-r', sha)
-    .split('\n'));
+  const shouldNotBeHere = ignoredAmong(
+    git('diff-tree', '--no-commit-id', '--name-only', '-r', '--diff-filter=d', sha).split('\n'));
   if (shouldNotBeHere.length) {
     complain(`${short} commits ${shouldNotBeHere.join(', ')}, which this repository ignores`,
       'the ignore file lists it for a reason', 'take it out of that commit');
