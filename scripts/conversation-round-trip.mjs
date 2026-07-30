@@ -944,6 +944,130 @@ console.log('\ntwo quotes in one poll are both written');
     letters[0].the_letter_itself === letters[1].the_letter_itself, false);
 }
 
+console.log('\na customer says yes, and the job is won');
+{
+  const projectSql = (n) => read('db', '20-project', `${n}.sql`).replace(/;\s*$/, '');
+  const confirmSource = read('src', '20-project', 'write-the-confirmation.js');
+  const projectHandoff = params(join('db', '20-project', 'accept-handoff.params.json'));
+  const takeItOn = (id) => rowOf(projectSql('accept-handoff'), projectHandoff({ gmail_message_id: id }));
+  const whatItAccepts = (id) => JSON.parse(ask(
+    `SELECT row_to_json(t) FROM (${fill(projectSql('what-this-reply-accepts'), [id])}) t`));
+  const closeIt = (id, orderId, offerId) =>
+    rowOf(projectSql('close-the-job'), [id, orderId, offerId]);
+  const confirm = (...rows) => new Function('$input', '$', confirmSource)(
+    { all: () => rows.map((json) => ({ json })) },
+    (name) => { throw new Error(`the confirmation reached back to ${name}`) },
+  ).map((r) => r.json);
+
+  // a job all the way to a quote the customer has
+  const a = arrive({
+    id: 'won1', thread: 'th-won', from: 'ivy@example.com',
+    text: 'laminate, 420 sq ft, in kyle tx',
+    extracted: { intent: 'new_quote', material: 'laminate', area_sqft: 420, area_unit: 'sqft',
+      city: 'kyle', evidence: { material: 'laminate', area_sqft: '420', area_unit: 'sq ft', city: 'kyle' } },
+  });
+  const priced = priceIt('won1');
+  const [letter] = composeQuotes(whatTheQuoteNeeds('won1', priced.written.offer_id));
+  putForward('won1', priced.written.offer_id, 'th-owner-won', letter.the_letter_itself);
+  run(['-c', `UPDATE offers SET status = 'sent' WHERE id = ${priced.written.offer_id}`]);
+
+  const yes = arrive({
+    id: 'won2', thread: 'th-won', from: 'ivy@example.com',
+    text: 'go ahead, book us in',
+    extracted: { intent: 'offer_response', evidence: {} },
+  });
+  check('the gate reads it as a reply to a quote', yes.decision.category, 'offer_response');
+  check('and says which way it went', yes.decision.offer_answer, 'accepted');
+
+  takeItOn('won2');
+  const accepts = whatItAccepts('won2');
+  check('the offer they actually have is found', Number(accepts.offer_id), Number(priced.written.offer_id));
+  check('and it counts as accepted', accepts.accepted, true);
+
+  const closed = closeIt('won2', accepts.order_id, accepts.offer_id);
+  check('the offer is accepted', closed.offer_accepted, 't');
+  check('the job is booked', closed.job_booked, 't');
+  check('both changes are recorded', [closed.acceptance_recorded, closed.state_recorded], ['t', 't']);
+  check('the order says so itself', orderOf(a.order_id).state, 'booked');
+  check('and the offer says won',
+    ask(`SELECT status || '/' || outcome FROM offers WHERE id = ${priced.written.offer_id}`),
+    'accepted/won');
+
+  const [toCustomer, toOwner] = confirm({ ...accepts, ...closed,
+    total_low: closed.total_low, total_high: closed.total_high });
+  check('the customer is told it is theirs', toCustomer.to, 'ivy@example.com');
+  check('in the words a person wrote', /That is booked, thank you/.test(toCustomer.body), true);
+  check('with no date promised, because nothing here knows the diary',
+    /next week|monday|tuesday|on the [0-9]/i.test(toCustomer.body), false);
+  check('the owner is told it is won', toOwner.to, 'flooring.demo.austin@gmail.com');
+  check('with the figure in the subject', /\$/.test(toOwner.subject), true);
+
+  const twice = closeIt('won2', accepts.order_id, accepts.offer_id);
+  check('a second reply wins nothing again', twice.offer_accepted, 'f');
+}
+
+console.log('\na yes to a quote nobody has sent wins nothing');
+{
+  const projectSql = (n) => read('db', '20-project', `${n}.sql`).replace(/;\s*$/, '');
+  const whatItAccepts = (id) => JSON.parse(ask(
+    `SELECT row_to_json(t) FROM (${fill(projectSql('what-this-reply-accepts'), [id])}) t`));
+
+  // the quote is written and sitting with the owner. The customer, still on the old thread, says
+  // go ahead -- to the question they were asked, not to a price they have never seen.
+  const a = arrive({
+    id: 'early1', thread: 'th-early', from: 'kit@example.com',
+    text: 'carpet, 250 sq ft, kyle tx',
+    extracted: { intent: 'new_quote', material: 'carpet', area_sqft: 250, area_unit: 'sqft',
+      city: 'kyle', evidence: { material: 'carpet', area_sqft: '250', area_unit: 'sq ft', city: 'kyle' } },
+  });
+  const priced = priceIt('early1');
+  const [letter] = composeQuotes(whatTheQuoteNeeds('early1', priced.written.offer_id));
+  putForward('early1', priced.written.offer_id, 'th-owner-early', letter.the_letter_itself);
+  check('the offer is with the owner, not the customer',
+    ask(`SELECT status FROM offers WHERE id = ${priced.written.offer_id}`), 'awaiting_approval');
+
+  arrive({
+    id: 'early2', thread: 'th-early', from: 'kit@example.com',
+    text: 'go ahead',
+    extracted: { intent: 'offer_response', evidence: {} },
+  });
+  const accepts = whatItAccepts('early2');
+  check('there is no offer they have', accepts.offer_id, null);
+  check('so it is not an acceptance', accepts.accepted, false);
+  check('and the job is untouched', orderOf(a.order_id).state, 'quoted');
+}
+
+console.log('\nhaggling is a conversation, not a state change');
+{
+  const projectSql = (n) => read('db', '20-project', `${n}.sql`).replace(/;\s*$/, '');
+  const whatItAccepts = (id) => JSON.parse(ask(
+    `SELECT row_to_json(t) FROM (${fill(projectSql('what-this-reply-accepts'), [id])}) t`));
+
+  const a = arrive({
+    id: 'hag1', thread: 'th-hag', from: 'jed@example.com',
+    text: 'lvp, 300 sq ft, buda tx',
+    extracted: { intent: 'new_quote', material: 'lvp', area_sqft: 300, area_unit: 'sqft',
+      city: 'buda', evidence: { material: 'lvp', area_sqft: '300', area_unit: 'sq ft', city: 'buda' } },
+  });
+  const priced = priceIt('hag1');
+  const [letter] = composeQuotes(whatTheQuoteNeeds('hag1', priced.written.offer_id));
+  putForward('hag1', priced.written.offer_id, 'th-owner-hag', letter.the_letter_itself);
+  run(['-c', `UPDATE offers SET status = 'sent' WHERE id = ${priced.written.offer_id}`]);
+
+  const no = arrive({
+    id: 'hag2', thread: 'th-hag', from: 'jed@example.com',
+    text: 'that is more than we expected, can you do better?',
+    extracted: { intent: 'offer_response', evidence: {} },
+  });
+  check('the gate calls it a push back', no.decision.offer_answer, 'pushed_back');
+  const accepts = whatItAccepts('hag2');
+  check('it is not an acceptance', accepts.accepted, false);
+  check('it is recognised as haggling', accepts.pushed_back, true);
+  check('and the job is untouched', orderOf(a.order_id).state, 'quoted');
+  check('the offer is still just sent',
+    ask(`SELECT status FROM offers WHERE id = ${priced.written.offer_id}`), 'sent');
+}
+
 console.log('\nan order that has gone quiet is chased once, then let go');
 {
   const quietSql = (n) => read('db', '65-reminders', `${n}.sql`).replace(/;\s*$/, '');

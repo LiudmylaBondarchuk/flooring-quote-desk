@@ -1,0 +1,3 @@
+{
+  "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('What this reply accepts').item.json.order_id, $('What this reply accepts').item.json.offer_id] }}"
+}

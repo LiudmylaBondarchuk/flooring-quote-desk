@@ -118,6 +118,26 @@ until it was noticed. Deploying now compares the whole of each node and names, l
 difference it left behind, and the run reports itself as failed. It still does not push them:
 deciding to would mean deploying could quietly rewire a canvas.
 
+**A customer can say yes, and the job is won.** The most valuable letter in the whole funnel used
+to arrive at a lane with two nodes in it and stop. A reply to a quote now closes the offer as
+accepted and won, books the order, tells the customer it is theirs, and tells the owner what was
+won and for how much.
+
+Which way the reply went is the gate's verdict, said out loud instead of only appearing in the
+sentence a person reads — otherwise the lane would need a second copy of the vocabulary, and the
+first thing a second copy does is disagree. Only an offer the customer actually has can be
+answered: one still sitting with the owner has not reached them, so *go ahead* said to an earlier
+question wins nothing.
+
+The record is written **before** the customer is told, which reverses the order used everywhere
+else here, and deliberately. A question that never arrived must not read as asked. But a customer
+holding a confirmation for a job the desk has forgotten is a job lost, while a desk that remembers
+and failed to write is a letter somebody sends by hand.
+
+Anything that is not a plain yes goes to the owner untouched. Haggling is a conversation, not a
+state change. The confirmation promises no date: nothing here knows the diary, and inventing one
+would be the first lie the desk ever told.
+
 **An order that goes quiet is chased once, and then let go.** Silence is measured on the order
 rather than on the inbox: one touched by a merge, a quote or an approval is a live conversation
 whatever arrived. Past the first mark it gets one nudge, ever — in words a person wrote, carrying

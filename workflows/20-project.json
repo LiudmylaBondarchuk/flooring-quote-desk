@@ -51,6 +51,236 @@
           "queryReplacement": "={{ [$json.gmail_message_id, 'awaiting_owner', '20 Project — Flooring'] }}"
         }
       }
+    },
+    {
+      "parameters": {
+        "width": 520,
+        "height": 200,
+        "content": "### 20 Project — Flooring\n\nA reply to a quote lands here. Which way it went was decided by the gate and is read, not\nworked out again.\n\nA yes closes the job first and writes to the customer second, which is the opposite of\neverywhere else here. The costs are not symmetrical: a customer holding a confirmation for a\njob the desk forgot is a job lost; a desk that remembers and failed to write is a letter\nsomebody sends by hand.\n\nAnything that is not a yes goes to the owner untouched. Haggling is a conversation, not a\nstate change."
+      },
+      "id": "aaaa2000-0000-4000-8000-000000000000",
+      "name": "Purpose",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        240,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- What a reply to a quote is answering, and which way it went.\n--\n-- Which way is the gate's verdict, read here rather than worked out again: one place decides, and\n-- a second copy of the vocabulary would drift from the first.\n--\n-- The offer has to be one the customer actually has. An offer still waiting for the owner has not\n-- reached them, and nothing they wrote can be an answer to it.\n\nWITH this_message AS (\n  SELECT gmail_message_id, thread_id, contact_email, offer_answer, order_id,\n         coalesce(auto_blocked, false) AS auto_blocked\n    FROM messages\n   WHERE gmail_message_id = $1::text\n),\nthe_job AS (\n  SELECT o.id, o.state, o.material_category, o.area_sqft, o.city\n    FROM orders o\n   WHERE o.thread_id = (SELECT thread_id FROM this_message)\n     AND o.state NOT IN ('booked', 'done', 'lost')\n   ORDER BY o.created_at DESC\n   LIMIT 1\n),\nthe_offer AS (\n  SELECT f.id, f.total_low, f.total_high, f.status\n    FROM offers f\n   WHERE f.order_id = (SELECT id FROM the_job)\n     AND f.status = 'sent'\n   ORDER BY f.created_at DESC\n   LIMIT 1\n)\nSELECT\n  m.gmail_message_id,\n  m.contact_email,\n  m.offer_answer,\n  m.auto_blocked,\n  j.id                                     AS order_id,\n  j.material_category, j.area_sqft, j.city,\n  f.id                                     AS offer_id,\n  f.total_low, f.total_high,\n  (SELECT body FROM reply_templates WHERE key = 'booked_confirmation') AS confirmation,\n  (SELECT body FROM reply_templates WHERE key = 'signature')           AS signature,\n  f.id IS NOT NULL AND m.offer_answer = 'accepted'                     AS accepted,\n  f.id IS NOT NULL AND m.offer_answer = 'pushed_back'                  AS pushed_back\n  FROM this_message m\n  LEFT JOIN the_job   j ON true\n  LEFT JOIN the_offer f ON true;",
+        "options": {
+          "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id] }}"
+        }
+      },
+      "id": "aaaa2000-0000-4000-8000-000000000001",
+      "name": "What this reply accepts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        760,
+        380
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "accepted",
+                    "leftValue": "={{ $json.accepted }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "accepted"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "aaaa2000-0000-4000-8000-000000000002",
+      "name": "A yes, or something a person reads?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1000,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- The moment a job is won, in one statement: the offer accepted, the order booked, and both\n-- changes recorded with the letter that caused them.\n--\n-- Written BEFORE the customer is told, which reverses the order used everywhere else here. The\n-- costs are not symmetrical. A question that never arrived must not read as asked, so that one is\n-- recorded after the send. But a customer who has seen a confirmation and a desk that has\n-- forgotten the job is a job lost, while a desk that remembers and failed to write is a letter\n-- somebody can send by hand. So this goes first.\n--\n-- Only an offer the customer has, and only a job still open. A second reply in the thread finds\n-- the offer already accepted and changes nothing.\n\nWITH before AS (\n  SELECT id, state FROM orders WHERE id = $2::int FOR UPDATE\n),\ntaken AS (\n  UPDATE offers\n     SET status = 'accepted', outcome = 'won'\n   WHERE id = $3::int AND status = 'sent'\n  RETURNING id, order_id, total_low, total_high\n),\nbooked AS (\n  UPDATE orders o\n     -- both stamps, because they answer different questions and the database insists on the\n     -- second: confirmed_at is when the customer agreed, closed_at is when the order stopped\n     -- being one of the open ones. For a booking they happen to be the same moment.\n     SET state = 'booked', confirmed_at = now(), closed_at = now(), updated_at = now()\n   WHERE o.id = (SELECT order_id FROM taken)\n     AND (SELECT state FROM before) NOT IN ('booked', 'done', 'lost')\n  RETURNING o.id\n),\nnoted_offer AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT order_id, $1::text, 'approved', 'offer_status', 'sent', 'accepted' FROM taken\n  RETURNING 1\n),\nnoted_state AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT id, $1::text, 'state_change', 'state', (SELECT state FROM before), 'booked' FROM booked\n  RETURNING 1\n)\nSELECT\n  $3::int                                       AS offer_id,\n  $2::int                                       AS order_id,\n  (SELECT state FROM before)                    AS was,\n  (SELECT count(*) FROM taken)::int = 1         AS offer_accepted,\n  (SELECT count(*) FROM booked)::int = 1        AS job_booked,\n  (SELECT count(*) FROM noted_offer)::int = 1   AS acceptance_recorded,\n  (SELECT count(*) FROM noted_state)::int = 1   AS state_recorded,\n  (SELECT total_low FROM taken)                 AS total_low,\n  (SELECT total_high FROM taken)                AS total_high;",
+        "options": {
+          "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('What this reply accepts').item.json.order_id, $('What this reply accepts').item.json.offer_id] }}"
+        }
+      },
+      "id": "aaaa2000-0000-4000-8000-000000000003",
+      "name": "Close the job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1240,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Two letters at the moment a job is won: one to the customer, one to the owner.\n//\n// The customer's carries no date and no promise of one, because nothing here knows the diary. It\n// says the job is theirs and that a person will be in touch to arrange it. Inventing \"we will start\n// next week\" would be the first lie the desk ever told.\n//\n// The owner's is the only one in this system that exists purely to be read: a job was won, for\n// whom, and for how much.\n\nconst OWNER = 'flooring.demo.austin@gmail.com';\n\nconst money = (n) => (n === null || n === undefined\n  ? 'no figure on file'\n  : `$${Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 })}`);\n\nreturn $input.all().flatMap((item, i) => {\n  const won = item.json || {};\n\n  if (won.offer_accepted !== true && won.offer_accepted !== 't') {\n    throw new Error(`offer ${won.offer_id || 'unknown'} was not accepted by this statement: `\n      + 'something else had already answered it, and writing to the customer as though this reply '\n      + 'won the job would be telling them twice');\n  }\n\n  const words = String(won.confirmation || '').trim();\n  if (!words) {\n    throw new Error('no wording is stored for a confirmation, and a customer who has just said yes '\n      + 'must not be met with silence: reply_templates is missing the row \"booked_confirmation\"');\n  }\n\n  const range = `${money(won.total_low)} to ${money(won.total_high)}`;\n  const job = [won.material_category,\n    won.area_sqft ? `${Number(won.area_sqft).toLocaleString('en-US')} sq ft` : null,\n    won.city ? String(won.city).replace(/\\b[a-z]/g, (c) => c.toUpperCase()) : null,\n  ].filter(Boolean).join(', ');\n\n  return [\n    {\n      json: {\n        for_whom: 'customer',\n        order_id: won.order_id,\n        offer_id: won.offer_id,\n        to: won.contact_email,\n        reply_to: won.gmail_message_id,\n        body: words + String(won.signature || ''),\n      },\n      pairedItem: { item: i },\n    },\n    {\n      json: {\n        for_whom: 'owner',\n        order_id: won.order_id,\n        offer_id: won.offer_id,\n        to: OWNER,\n        subject: `Booked — ${won.contact_email || 'a customer'} — ${range}`,\n        body: `${won.contact_email || 'A customer'} has accepted.\\n\\n`\n          + `Job:     ${job || 'not described'}\\n`\n          + `Range:   ${range}\\n`\n          + `Order:   ${won.order_id}\\n\\n`\n          + 'They have been told it is theirs and that you will be in touch to arrange a time. '\n          + 'Nothing here knows the diary, so that part is yours.',\n      },\n      pairedItem: { item: i },\n    },\n  ];\n});\n"
+      },
+      "id": "aaaa2000-0000-4000-8000-000000000004",
+      "name": "Write the confirmation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "to_customer",
+              "leftValue": "={{ $json.for_whom }}",
+              "rightValue": "customer",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "aaaa2000-0000-4000-8000-000000000005",
+      "name": "Which letter is this?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $json.reply_to }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "aaaa2000-0000-4000-8000-000000000006",
+      "name": "Tell the customer it is theirs",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1960,
+        220
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": null,
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "aaaa2000-0000-4000-8000-000000000007",
+      "name": "Tell the owner it is won",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1960,
+        380
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": null,
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "flooring.demo.austin@gmail.com",
+        "subject": "={{ \"Needs you — \" + ($json.contact_email || \"a customer\") + \" replied to a quote\" }}",
+        "emailType": "text",
+        "message": "={{ \"This is a reply to a quote and it is not a plain yes, so nothing has changed.\\n\\nThey said it was: \" + ($json.offer_answer || \"neither one thing nor the other\") + \"\\nOrder: \" + ($json.order_id || \"none found\") + \"\\nOffer: \" + ($json.offer_id || \"none they have\") + \"\\n\\nHaggling is a conversation, not a state change. Read the thread and answer them yourself.\" }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "aaaa2000-0000-4000-8000-000000000008",
+      "name": "Show it to the owner",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1240,
+        480
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": null,
+          "name": "Gmail account"
+        }
+      }
     }
   ],
   "connections": {
@@ -59,6 +289,86 @@
         [
           {
             "node": "Accept handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accept handoff": {
+      "main": [
+        [
+          {
+            "node": "What this reply accepts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What this reply accepts": {
+      "main": [
+        [
+          {
+            "node": "A yes, or something a person reads?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A yes, or something a person reads?": {
+      "main": [
+        [
+          {
+            "node": "Close the job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Show it to the owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Close the job": {
+      "main": [
+        [
+          {
+            "node": "Write the confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the confirmation": {
+      "main": [
+        [
+          {
+            "node": "Which letter is this?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which letter is this?": {
+      "main": [
+        [
+          {
+            "node": "Tell the customer it is theirs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Tell the owner it is won",
             "type": "main",
             "index": 0
           }

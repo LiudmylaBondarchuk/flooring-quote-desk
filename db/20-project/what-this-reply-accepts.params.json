@@ -1,0 +1,3 @@
+{
+  "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id] }}"
+}

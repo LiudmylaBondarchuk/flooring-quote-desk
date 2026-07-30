@@ -157,6 +157,7 @@ CREATE TABLE messages (
     pricing_allowed             boolean     NOT NULL DEFAULT false,
     auto_blocked              boolean,
     service_asked_about       text,
+    offer_answer              text,
     is_returning              boolean     NOT NULL DEFAULT false,
     same_signature            boolean     NOT NULL DEFAULT false,
     material_category         text,
@@ -185,6 +186,8 @@ CREATE TABLE messages (
         'complaint_signal', 'offer_response', 'money_known_contact', 'scheduling_signal',
         'same_job_signature', 'thread_continuation', 'not_a_customer', 'capability_question',
         'wants_a_price', 'unclassified')),
+    CONSTRAINT messages_offer_answer_known CHECK (offer_answer IS NULL
+        OR offer_answer IN ('accepted', 'pushed_back')),
     CONSTRAINT messages_route_known    CHECK (route IN (
         'quote', 'project', 'support', 'operations', 'review', 'approval', 'log')),
     CONSTRAINT messages_handling_known CHECK (handling IN ('auto', 'manual_review', 'none')),
@@ -366,6 +369,10 @@ COMMENT ON COLUMN price_bands.component IS
     'Floors are priced per square foot, stairs per step. The component decides which unit applies.';
 COMMENT ON COLUMN messages.pricing_allowed IS
     'Nothing blocks putting a price in front of this customer. Says nothing about who sends it.';
+COMMENT ON COLUMN messages.service_asked_about IS
+    'Which row of services this email was asking about, by label. The answer itself stays in that table so there is one place to edit what the firm says.';
+COMMENT ON COLUMN messages.offer_answer IS
+    'Which way a reply to a quote went: accepted, pushed_back, or NULL when it was neither. Decided by the gate, so no other place has to read the words again.';
 COMMENT ON COLUMN messages.auto_blocked IS
     'True when the gate says a person must see this email before anything automatic happens to it. Distinct from gate_color: an enquiry missing the area is red and not blocked, because asking for it is the right automatic answer.';
 COMMENT ON COLUMN messages.handling IS
