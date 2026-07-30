@@ -118,6 +118,15 @@ until it was noticed. Deploying now compares the whole of each node and names, l
 difference it left behind, and the run reports itself as failed. It still does not push them:
 deciding to would mean deploying could quietly rewire a canvas.
 
+**A question about what the firm does gets an answer.** The gate had always worked out which
+service an email was asking about and thrown the answer away, so *do you install laminate?* was
+understood, categorised, routed — and never replied to. The message remembers the label now, one
+column, and the answer stays in the services table where it can be edited: copying it onto the
+message would make a second place for it to be wrong. A service the firm offers is answered and
+then asked what a price would need; one it does not offer is answered and left there, because
+asking for the square footage of a job just declined reads as not having listened. A question the
+gate held for a person is not answered by itself.
+
 **Whether a price may be quoted is a question about the job, not about the last email.** It was
 read off the message being handled, and that made the conversation this system exists for
 impossible to finish. A customer writes *laminate, kyle tx*, then *about 400 sq ft*; the second

@@ -156,6 +156,7 @@ CREATE TABLE messages (
     danger                    boolean     NOT NULL DEFAULT false,
     pricing_allowed             boolean     NOT NULL DEFAULT false,
     auto_blocked              boolean,
+    service_asked_about       text,
     is_returning              boolean     NOT NULL DEFAULT false,
     same_signature            boolean     NOT NULL DEFAULT false,
     material_category         text,

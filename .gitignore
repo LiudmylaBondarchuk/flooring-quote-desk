@@ -17,3 +17,8 @@ docs/
 
 # notes written for one reader, and never for this repository
 CLAUDE.md
+
+# parked, never deployed: it has a workflow file and no generated statements, which a
+# fresh clone reads as five missing files. Two commits have swept it in by adding a directory.
+workflows/80-watchman.json
+db/80-watchman/

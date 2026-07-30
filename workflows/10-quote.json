@@ -464,6 +464,125 @@
           "name": "Postgres account -- flooring"
         }
       }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Whether this email asked something the firm can answer, and the words to answer it with.\n--\n-- The answer is read from services rather than from the message, so editing what the firm says\n-- about tile is one edit in one table. The message only remembers which row it was asking about.\n--\n-- Only when there is nothing else to do with the email. An enquiry that names a floor, a size and a\n-- town happens to mention laminate too, and it deserves a price, not a leaflet.\n\nWITH asked AS (\n  SELECT m.gmail_message_id, m.contact_email, m.thread_id, m.category,\n         m.service_asked_about, m.order_id,\n         coalesce(m.auto_blocked, false) AS auto_blocked\n    FROM messages m\n   WHERE m.gmail_message_id = $1::text\n),\nwhat_we_said AS (\n  SELECT s.label, s.we_do, s.answer\n    FROM services s\n   WHERE lower(s.label) = lower((SELECT service_asked_about FROM asked))\n),\nnext_words AS (\n  SELECT body FROM reply_templates WHERE key = 'after_a_service_answer'\n),\nsignature AS (\n  SELECT body FROM reply_templates WHERE key = 'signature'\n)\nSELECT\n  a.gmail_message_id,\n  a.contact_email,\n  a.thread_id,\n  a.service_asked_about,\n  w.we_do,\n  w.answer,\n  (SELECT body FROM next_words)                       AS what_next,\n  (SELECT body FROM signature)                        AS signature,\n  a.auto_blocked,\n  a.service_asked_about IS NOT NULL\n    AND w.answer IS NOT NULL\n    AND a.contact_email IS NOT NULL\n    AND NOT a.auto_blocked                            AS worth_answering\n  FROM asked a\n  LEFT JOIN what_we_said w ON true;",
+        "options": {
+          "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id] }}"
+        }
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000030",
+      "name": "What a question deserves",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1480,
+        700
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "worth_answering",
+              "leftValue": "={{ $json.worth_answering }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000031",
+      "name": "Is it worth answering?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1720,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// A letter that answers what somebody asked, and then asks for what a price would need.\n//\n// Two sentences a person wrote: the answer, which lives in the services table so that changing what\n// the firm says about tile is one edit in one place, and a closing that asks for the parameters.\n// Nothing here decides what the firm does or does not install.\n\nconst OWNER = 'flooring.demo.austin@gmail.com';\n\nreturn $input.all().map((item, i) => {\n  const q = item.json || {};\n  const worth = q.worth_answering === true || q.worth_answering === 't';\n\n  if (!worth) {\n    throw new Error('there is nothing to answer here: '\n      + `asked about ${q.service_asked_about || 'nothing recognised'}, `\n      + `${q.answer ? 'with' : 'without'} an answer stored, `\n      + `${q.contact_email ? 'with' : 'without'} an address to reply to`);\n  }\n\n  const weDo = q.we_do === true || q.we_do === 't';\n  const answer = String(q.answer).trim();\n  const closing = String(q.what_next || '').trim();\n  const signature = String(q.signature || '');\n\n  // Only a service the firm actually offers is followed by a request for the parameters. Asking a\n  // customer for the square footage of a job that was just declined reads as not having listened.\n  const body = weDo && closing ? `${answer}\\n\\n${closing}${signature}` : `${answer}${signature}`;\n\n  return {\n    json: {\n      gmail_message_id: q.gmail_message_id,\n      service_asked_about: q.service_asked_about,\n      we_do: weDo,\n      to: q.contact_email,\n      reply_to: q.gmail_message_id,\n      thread_id: q.thread_id,\n      asks_for_more: weDo && Boolean(closing),\n      body,\n    },\n    pairedItem: { item: i },\n  };\n});\n"
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000032",
+      "name": "Answer the question",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1960,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $json.reply_to }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000033",
+      "name": "Reply to the question",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2200,
+        700
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": null,
+          "name": "Gmail account"
+        }
+      },
+      "webhookId": "a7bfc2fe-8e12-4f2b-a787-4bf71fb7693c"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Recorded after the letter has gone. Without an order there is nowhere to put an event, so this\n-- marks the message itself: the desk answered this question, and a redelivery will not answer it\n-- twice.\n\nUPDATE messages\n   SET handled_by = '10 Quote — Flooring (answered a question)',\n       handoff_at = now(),\n       status = 'closed'\n WHERE gmail_message_id = $1::text\n   AND handled_by IS DISTINCT FROM '10 Quote — Flooring (answered a question)'\nRETURNING gmail_message_id, status, handled_by;",
+        "options": {
+          "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id] }}"
+        }
+      },
+      "id": "aaaa2222-0000-4000-8000-000000000034",
+      "name": "Say we answered",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2440,
+        700
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
     }
   ],
   "connections": {
@@ -560,7 +679,13 @@
             "index": 0
           }
         ],
-        []
+        [
+          {
+            "node": "What a question deserves",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Compose the reply": {
@@ -641,6 +766,50 @@
         [
           {
             "node": "Say the offer was put forward",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What a question deserves": {
+      "main": [
+        [
+          {
+            "node": "Is it worth answering?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is it worth answering?": {
+      "main": [
+        [
+          {
+            "node": "Answer the question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer the question": {
+      "main": [
+        [
+          {
+            "node": "Reply to the question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply to the question": {
+      "main": [
+        [
+          {
+            "node": "Say we answered",
             "type": "main",
             "index": 0
           }
