@@ -118,6 +118,24 @@ until it was noticed. Deploying now compares the whole of each node and names, l
 difference it left behind, and the run reports itself as failed. It still does not push them:
 deciding to would mean deploying could quietly rewire a canvas.
 
+**Whether a price may be quoted is a question about the job, not about the last email.** It was
+read off the message being handled, and that made the conversation this system exists for
+impossible to finish. A customer writes *laminate, kyle tx*, then *about 400 sq ft*; the second
+letter names no town, so the gate colours it red and asks for one — while the order it belongs to
+has had the town since the first. The order was complete and nothing could ever be priced. A live
+run found it on the first real two-letter conversation, minutes after the approval round went in.
+
+The permission is assembled from the order and from every message that has touched it: is the job
+fully described, is it somewhere the firm works, is it still open, has nothing about it been held
+for a person. One email being held holds the whole job — a commercial property does not stop being
+one because the next letter is ordinary.
+
+**And it closes the removal question**, which had been open for weeks: taking the old floor away is
+a note about what will be charged, not a doubt about anything, but it put a reason on the message,
+the message went yellow, pricing wanted green, and the arithmetic had a removal line and a rate it
+could never reach. A note no longer blocks a price. Being incomplete, being out of area, and being
+held for a person still do.
+
 **The owner says send it, and the customer gets the price.** Her answer arrives as an ordinary
 email from the desk's own address, which the router had always filed as *ours* and dropped. That
 category has a lane now. Nearly everything reaching it is the desk reading its own letters, and

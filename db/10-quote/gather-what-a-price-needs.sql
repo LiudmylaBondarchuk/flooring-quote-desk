@@ -1,8 +1,16 @@
 -- Everything the arithmetic needs, in one row, assembled where the facts actually live.
 --
--- The three fields that decide whether a price may be quoted at all come from the message being
--- handled: whether pricing is allowed, what colour the gate gave it, and whether the enquiry is
--- residential. They belong to this email and to no other.
+-- Whether a price may be quoted is a question about the JOB, not about the last email. It used to
+-- be read off the message being handled, and that made the conversation this system exists for
+-- impossible to finish: a customer who writes "laminate, kyle tx" and then "about 400 sq ft" sends
+-- a second email that names no town, so the gate colours it red and asks for one -- while the order
+-- it belongs to has had the town since the first letter. The order was complete and nothing could
+-- ever be priced.
+--
+-- So the permission is assembled here from the order and from every message that has touched it: is
+-- the job fully described, is it somewhere the firm works, has nothing about it been held back for
+-- a person. The names are the ones the arithmetic already reads, because what it needed all along
+-- was a verdict about the job.
 --
 -- Everything the price is computed from comes from the order, because that is what the
 -- conversation has accumulated. The email that named the material may be three weeks and four
@@ -12,11 +20,29 @@
 -- offers, and quoting it because it is still in the table is how a customer is sold something
 -- that cannot be delivered.
 
+WITH job AS (
+  SELECT o.id,
+         o.material_category IS NOT NULL
+           AND o.area_sqft IS NOT NULL
+           AND o.zone IS NOT NULL
+           AND o.zone <> 'out'
+           AND o.state NOT IN ('booked', 'done', 'lost')                        AS fully_described,
+         -- one email in the conversation being held for a person holds the whole job: a commercial
+         -- property does not stop being one because the next letter is ordinary
+         NOT EXISTS (SELECT 1 FROM messages x
+                      WHERE x.order_id = o.id
+                        AND (x.danger OR coalesce(x.auto_blocked, false)))       AS nobody_looking,
+         EXISTS (SELECT 1 FROM messages x
+                  WHERE x.order_id = o.id AND x.segment = 'commercial')          AS commercial
+    FROM orders o
+)
 SELECT
   m.gmail_message_id,
-  m.pricing_allowed,
-  m.gate_color,
-  m.segment,
+  coalesce(j.fully_described AND j.nobody_looking AND NOT j.commercial, false)   AS pricing_allowed,
+  CASE WHEN coalesce(j.fully_described AND j.nobody_looking AND NOT j.commercial, false)
+       THEN 'green' ELSE m.gate_color END                                        AS gate_color,
+  CASE WHEN j.commercial THEN 'commercial' ELSE m.segment END                    AS segment,
+  m.gate_color                                                                   AS this_email_was,
   o.id                                  AS order_id,
   o.material_category,
   o.area_sqft,
@@ -39,4 +65,5 @@ SELECT
               FROM pricing_rules r), '{}'::json)                  AS rules
   FROM messages m
   LEFT JOIN orders o ON o.id = m.order_id
+  LEFT JOIN job    j ON j.id = o.id
  WHERE m.gmail_message_id = $1;
