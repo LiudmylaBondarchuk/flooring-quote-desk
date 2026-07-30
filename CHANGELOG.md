@@ -42,6 +42,18 @@ the customer wrote and converted, so a job given in square metres is priced. Job
 records spanning several emails are the orders layer above. Both were listed in
 0.1.0 as things left undone.
 
+**The gate says when a person must look first, and the lane listens.** It had always worked out
+whether an email may be acted on unread, used the answer to decide whether a price could be
+quoted, and then dropped it. Harmless while nothing was sent; not harmless once the desk began
+answering, because the only permission the sending step could see was the one on the wording, and
+a sentence is the same sentence whoever receives it. A commercial enquiry, which the gate marks
+never-auto, and an email changing payment details, which it says to verify by phone, both got an
+automatic reply. Nothing leaked — the letter asks for square footage and carries no figure — but
+the verdict was being ignored. The message now carries `auto_blocked`, both permissions must hold
+before a letter goes out alone, and the database refuses a row that is priced and held at once.
+Deliberately narrower than red: an enquiry that has simply not given the area yet is red and is
+exactly the one worth answering, because asking is the point.
+
 **Still true, and deliberate.** No figure reaches a customer. Four of the six lanes
 accept the handoff and stop. An enquiry asking for the old floor to be taken away
 cannot be priced automatically, because the note about it colours the message and

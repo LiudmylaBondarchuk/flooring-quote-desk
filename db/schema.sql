@@ -150,6 +150,7 @@ CREATE TABLE messages (
     geo_zone                  text,
     danger                    boolean     NOT NULL DEFAULT false,
     pricing_allowed             boolean     NOT NULL DEFAULT false,
+    auto_blocked              boolean,
     is_returning              boolean     NOT NULL DEFAULT false,
     same_signature            boolean     NOT NULL DEFAULT false,
     material_category         text,
@@ -209,6 +210,7 @@ CREATE TABLE messages (
         OR (category = 'quote_request' AND gate_color = 'green')),
     CONSTRAINT messages_pricing_never_dangerous CHECK (pricing_allowed = false OR danger = false),
     CONSTRAINT messages_pricing_needs_known_area CHECK (pricing_allowed = false OR area_status = 'known'),
+    CONSTRAINT messages_pricing_needs_nobody_looking CHECK (pricing_allowed = false OR auto_blocked IS NOT TRUE),
     CONSTRAINT messages_auto_reply_is_safe CHECK (handling <> 'auto'
         OR (danger = false AND category IN ('pre_sales', 'quote_request'))),
     CONSTRAINT messages_queued_work_has_a_colour CHECK (handling <> 'manual_review' OR gate_color IS NOT NULL),
@@ -353,6 +355,8 @@ COMMENT ON COLUMN price_bands.component IS
     'Floors are priced per square foot, stairs per step. The component decides which unit applies.';
 COMMENT ON COLUMN messages.pricing_allowed IS
     'Nothing blocks putting a price in front of this customer. Says nothing about who sends it.';
+COMMENT ON COLUMN messages.auto_blocked IS
+    'True when the gate says a person must see this email before anything automatic happens to it. Distinct from gate_color: an enquiry missing the area is red and not blocked, because asking for it is the right automatic answer.';
 COMMENT ON COLUMN messages.handling IS
     'Who answers: auto means a reply may leave without a human, manual_review means it may not, none means no reply at all.';
 COMMENT ON COLUMN messages.same_signature IS
