@@ -944,6 +944,62 @@ console.log('\ntwo quotes in one poll are both written');
     letters[0].the_letter_itself === letters[1].the_letter_itself, false);
 }
 
+console.log('\na question about what the firm does gets an answer');
+{
+  const answerSource = read('src', '10-quote', 'answer-the-question.js');
+  const deserves = (id) => JSON.parse(ask(
+    `SELECT row_to_json(t) FROM (${fill(quoteSql('what-a-question-deserves'), [id])}) t`));
+  const answerAll = (...rows) => new Function('$input', '$', answerSource)(
+    { all: () => rows.map((json) => ({ json })) },
+    (name) => { throw new Error(`the answer reached back to ${name}`) },
+  ).map((r) => r.json);
+
+  const yes = arrive({
+    id: 'ask1', thread: 'th-ask1', from: 'cal@example.com',
+    text: 'do you install laminate?',
+    extracted: { intent: 'pre_sales_question', evidence: {} },
+  });
+  check('it opens no order', yes.order_id, null);
+  const d1 = deserves('ask1');
+  check('the desk knows what was asked about', d1.service_asked_about, 'laminate');
+  check('and that it is worth answering', d1.worth_answering, true);
+  const [a1] = answerAll(d1);
+  check('the answer is the one stored in services',
+    a1.body.startsWith('Yes, we install laminate.'), true);
+  check('and it asks what a price would need', a1.asks_for_more, true);
+  check('in the words a person wrote',
+    /roughly how many square feet/.test(a1.body), true);
+  check('it goes back to whoever asked', a1.to, 'cal@example.com');
+  check('with no figure in it', /\$|[0-9]{3,}/.test(a1.body), false);
+
+  const no = arrive({
+    id: 'ask2', thread: 'th-ask2', from: 'dot@example.com',
+    text: 'do you do tile in the bathroom?',
+    extracted: { intent: 'pre_sales_question', evidence: {} },
+  });
+  const [a2] = answerAll(deserves('ask2'));
+  check('a service the firm does not offer is answered too',
+    /do not install tile/.test(a2.body), true);
+  check('and is not followed by asking for the size', a2.asks_for_more, false);
+
+  const held = arrive({
+    id: 'ask3', thread: 'th-ask3', from: 'eve@example.com',
+    text: 'property management here — do you install laminate across our units?',
+    extracted: { intent: 'pre_sales_question', evidence: {} },
+  });
+  check('a question from a commercial property is held', held.decision.auto_blocked, true);
+  const d3 = deserves('ask3');
+  check('the desk still knows what was asked', d3.service_asked_about, 'laminate');
+  check('but it is not answered by itself', d3.worth_answering, false);
+
+  const said = rowOf(quoteSql('say-we-answered'), ['ask1']);
+  check('the message records that it was answered',
+    said.handled_by, '10 Quote — Flooring (answered a question)');
+  // psql reports the tag when a statement returns nothing at all, which is the point here
+  check('and a redelivery does not answer it twice',
+    ask(fill(quoteSql('say-we-answered'), ['ask1'])), 'UPDATE 0');
+}
+
 console.log('\nfacts given across two letters still reach a price');
 {
   // the conversation this whole system exists for, and the one a live run found could never
