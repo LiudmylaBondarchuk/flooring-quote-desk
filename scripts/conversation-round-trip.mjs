@@ -148,6 +148,15 @@ const composeAll = (...decisions) => new Function('$input', '$', composeSource)(
   (name) => { throw new Error(`the reply reached back to ${name} instead of reading its input`); },
 ).map((r) => r.json);
 const compose = (decision) => composeAll(decision)[0];
+
+const quoteLetterSource = read('src', '10-quote', 'compose-the-quote.js');
+const whatTheQuoteNeeds = (id, offerId) => JSON.parse(ask(
+  `SELECT row_to_json(t) FROM (${fill(quoteSql('what-the-quote-letter-needs'), [id, offerId])}) t`));
+const composeQuotes = (...needs) => new Function('$input', '$', quoteLetterSource)(
+  { all: () => needs.map((json) => ({ json })) },
+  (name) => { throw new Error(`the quote letter reached back to ${name} instead of reading its input`); },
+).map((r) => r.json);
+const putForward = (id, offerId) => rowOf(quoteSql('say-the-offer-was-put-forward'), [id, offerId]);
 const recordAsk = (id, orderId, asking) => rowOf(quoteSql('say-we-asked'), [id, orderId, asking]);
 
 const orderOf = (id) => JSON.parse(ask(
@@ -820,6 +829,81 @@ console.log('\nwhere a letter goes is the sentence\'s decision');
   check('and still carries the words themselves', /roughly how many square feet/.test(draft.body), true);
   check('it does not claim to have reached her', draft.reaches_the_customer, false);
   run(['-c', "UPDATE reply_templates SET sends_automatically = true WHERE key = 'needs_area'"]);
+}
+
+console.log('\na price becomes a letter, and it only ever reaches the owner');
+{
+  const a = arrive({
+    id: 'quote1', thread: 'th-quote1', from: 'vera@example.com',
+    text: 'laminate, 400 sq ft, in kyle tx please',
+    extracted: { intent: 'new_quote', material: 'laminate', area_sqft: 400, area_unit: 'sqft',
+      city: 'kyle',
+      evidence: { material: 'laminate', area_sqft: '400', area_unit: 'sq ft', city: 'kyle' } },
+  });
+  const priced = priceIt('quote1');
+  check('the job was priced', priced.quote.priceable, true);
+  check('and the offer was written down', Number(priced.written.offer_id) > 0, true);
+
+  const needs = whatTheQuoteNeeds('quote1', priced.written.offer_id);
+  check('the letter has everything it needs', needs.ready_to_write, true);
+  check('it reads the offer rather than pricing again',
+    Number(needs.total_low), Number(priced.quote.total_low));
+
+  const [letter] = composeQuotes(needs);
+  check('it goes to the owner', letter.to, 'flooring.demo.austin@gmail.com');
+  check('and says so plainly', letter.reaches_the_customer, false);
+  check('the subject names who it is for', /vera@example\.com/.test(letter.subject), true);
+  check('the owner is told it has not been sent',
+    /has not been sent/.test(letter.body), true);
+  check('the letter for the customer is in there, whole',
+    letter.body.includes(letter.the_letter_itself), true);
+  check('with the words a person wrote, not the code',
+    /Thanks for the details/.test(letter.the_letter_itself), true);
+  check('and it is signed', letter.the_letter_itself.trimEnd().endsWith('the flooring desk'), true);
+  check('the figures are in it', /\$/.test(letter.the_letter_itself), true);
+  check('every priced line shows the rate it came from',
+    /at \$[\d,]+(-\$[\d,]+)?\/sqft/.test(letter.the_letter_itself), true);
+  check('the town is written as a town, not as a lookup key',
+    /Kyle/.test(letter.the_letter_itself), true);
+  check('and the closing explains the spread it actually has',
+    /options listed above/.test(letter.the_letter_itself), true);
+
+  const said = putForward('quote1', priced.written.offer_id);
+  check('the offer is now waiting for her', said.now_waiting, 't');
+  check('and the order remembers it moved', said.change_recorded, 't');
+  check('the offer says so itself',
+    ask(`SELECT status FROM offers WHERE id = ${priced.written.offer_id}`), 'awaiting_approval');
+
+  const again = putForward('quote1', priced.written.offer_id);
+  check('telling her twice about one figure does not happen', again.now_waiting, 'f');
+  const reread = whatTheQuoteNeeds('quote1', priced.written.offer_id);
+  check('and a second run has no letter to write', reread.ready_to_write, false);
+}
+
+console.log('\ntwo quotes in one poll are both written');
+{
+  const a = arrive({
+    id: 'quote2', thread: 'th-quote2', from: 'walt@example.com',
+    text: 'lvp, 300 sq ft, buda tx',
+    extracted: { intent: 'new_quote', material: 'lvp', area_sqft: 300, area_unit: 'sqft',
+      city: 'buda', evidence: { material: 'lvp', area_sqft: '300', area_unit: 'sq ft', city: 'buda' } },
+  });
+  const b = arrive({
+    id: 'quote3', thread: 'th-quote3', from: 'xena@example.com',
+    text: 'laminate, 500 sq ft, leander tx',
+    extracted: { intent: 'new_quote', material: 'laminate', area_sqft: 500, area_unit: 'sqft',
+      city: 'leander',
+      evidence: { material: 'laminate', area_sqft: '500', area_unit: 'sq ft', city: 'leander' } },
+  });
+  const one = priceIt('quote2');
+  const two = priceIt('quote3');
+  const letters = composeQuotes(whatTheQuoteNeeds('quote2', one.written.offer_id),
+                                whatTheQuoteNeeds('quote3', two.written.offer_id));
+  check('both were written', letters.length, 2);
+  check('each names its own customer',
+    [letters[0].for_whom, letters[1].for_whom], ['walt@example.com', 'xena@example.com']);
+  check('and neither carries the other\'s figure',
+    letters[0].the_letter_itself === letters[1].the_letter_itself, false);
 }
 
 console.log('\nthe gate can hold a letter the wording would have allowed');

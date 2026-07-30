@@ -108,6 +108,17 @@ way that sentence appears in a letter. Which offer matters is now the one in thi
 exchange rather than any this contact has ever had: a customer quoted for a
 bathroom last spring is not agreeing to that when they write about a bedroom now.
 
+**A price becomes a letter, and it only ever reaches the owner.** An offer had been a draft that
+nothing did anything with. It is written out now — the job, every priced line with the rate it came
+from, the range, wrapped in words a person wrote and stored — and it goes to the owner with the
+customer's copy inside it, ready to read. The offer waits at `awaiting_approval` until somebody
+answers, and telling her twice about the same figure cannot happen: only a draft moves.
+
+Where it goes is not configurable. Every other letter here decides its destination from the stored
+wording; this one is fixed in code, because a figure must not be one edit in a table away from
+leaving unread. The customer's copy exists and is not sent. What sends it is an approval, and that
+is the next thing to build.
+
 **A failure reaches a person.** Failures have been recorded since the first schema and the node
 at the end of that lane was called *TODO notify the maintainer* and did nothing, so every other
 guarantee here quietly depended on somebody thinking to look at a table. The owner is written to

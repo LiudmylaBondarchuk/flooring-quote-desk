@@ -92,7 +92,7 @@ CREATE TABLE offers (
     final_amount    numeric(10, 2),
     created_at      timestamptz NOT NULL DEFAULT now(),
 
-    CONSTRAINT offers_status_known  CHECK (status IN ('draft', 'sent', 'accepted', 'declined', 'expired')),
+    CONSTRAINT offers_status_known  CHECK (status IN ('draft', 'awaiting_approval', 'sent', 'accepted', 'declined', 'expired')),
     CONSTRAINT offers_outcome_known CHECK (outcome IS NULL OR outcome IN ('won', 'lost')),
     CONSTRAINT offers_total_sane    CHECK ((total_low  IS NULL OR total_low  >= 0)
                                         AND (total_high IS NULL OR total_high >= 0)),
