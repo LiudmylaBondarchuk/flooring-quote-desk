@@ -108,6 +108,16 @@ way that sentence appears in a letter. Which offer matters is now the one in thi
 exchange rather than any this contact has ever had: a customer quoted for a
 bathroom last spring is not agreeing to that when they write about a bedroom now.
 
+**Deploying says what it cannot carry.** It pushes four kinds of node body — code, a statement
+with its parameters, an input schema, a system message — and nothing else. Which rule a switch
+matches on, what a branch tests, who an email goes to, what a sub-workflow trigger accepts: those
+live only where somebody typed them, and an export could describe a node the instance did not have
+while the drift check called it *in sync*, because it compares the same four fields. That is not
+theoretical — a routing rule that stayed in the repository sent every owner reply to the error lane
+until it was noticed. Deploying now compares the whole of each node and names, last of all, every
+difference it left behind, and the run reports itself as failed. It still does not push them:
+deciding to would mean deploying could quietly rewire a canvas.
+
 **The owner says send it, and the customer gets the price.** Her answer arrives as an ordinary
 email from the desk's own address, which the router had always filed as *ours* and dropped. That
 category has a lane now. Nearly everything reaching it is the desk reading its own letters, and
