@@ -102,7 +102,9 @@ if (argv[0] === '--message') {
   const message = messageOnly(readFileSync(argv[1], 'utf8'));
   aboutTheMessage(message, 'this message');
 
-  const staged = git('diff', '--cached', '--name-only').split('\n').filter(Boolean);
+  // Deletions excluded: taking an ignored file back out of the index stages its removal, and a
+  // rule that refuses that leaves no way to undo the mistake it exists to catch.
+  const staged = git('diff', '--cached', '--name-only', '--diff-filter=d').split('\n').filter(Boolean);
   const shouldNotBeHere = ignoredAmong(staged);
   if (shouldNotBeHere.length) {
     complain(`${shouldNotBeHere.join(', ')} is ignored by this repository and is being committed`,
