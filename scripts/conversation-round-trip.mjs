@@ -80,7 +80,12 @@ const TOUCHES = ['quote_request', 'existing_project', 'scheduling', 'offer_respo
 // One email, all the way through the router as the workflow wires it: prepared, logged, looked
 // up, decided, stored, attached to an order, merged. Nothing here is a stand-in — every step is
 // the file the instance runs.
+// Two scenarios reaching for the same message id read each other's rows and pass anyway -- which
+// is how a check on one customer's address came back with another's. An id is used once here.
+const idsUsed = new Set();
 const arrive = ({ id, thread, from, text, extracted, headers, labels }) => {
+  if (idsUsed.has(id)) throw new Error(`the message id ${id} is already used by another scenario`);
+  idsUsed.add(id);
   const [prepared] = node(prepareSource, [{
     id, threadId: thread, labelIds: labels || ['INBOX'],
     from: { value: [{ address: from, name: from.split('@')[0] }] },
@@ -815,6 +820,44 @@ console.log('\nwhere a letter goes is the sentence\'s decision');
   check('and still carries the words themselves', /roughly how many square feet/.test(draft.body), true);
   check('it does not claim to have reached her', draft.reaches_the_customer, false);
   run(['-c', "UPDATE reply_templates SET sends_automatically = true WHERE key = 'needs_area'"]);
+}
+
+console.log('\nthe gate can hold a letter the wording would have allowed');
+{
+  // the words are the same in all three: only the reason the gate stopped the email differs
+  const plain = arrive({
+    id: 'gate1', thread: 'th-gate1', from: 'pia@example.com',
+    text: 'laminate for the hallway, kyle tx',
+    extracted: { intent: 'new_quote', material: 'laminate', city: 'kyle',
+      evidence: { material: 'laminate', city: 'kyle' } },
+  });
+  check('an enquiry that has merely not given the area is red', plain.decision.gate_color, 'red');
+  check('and is not held back', plain.decision.auto_blocked, false);
+  const plainLetter = compose(askAbout('gate1', plain.order_id));
+  check('so the customer is answered', plainLetter.to, 'pia@example.com');
+  check('and the letter says it reaches her', plainLetter.reaches_the_customer, true);
+
+  const trade = arrive({
+    id: 'gate2', thread: 'th-gate2', from: 'rex@example.com',
+    text: 'property management here, laminate for a unit in kyle tx',
+    extracted: { intent: 'new_quote', material: 'laminate', city: 'kyle',
+      evidence: { material: 'laminate', city: 'kyle' } },
+  });
+  check('a commercial enquiry is held back', trade.decision.auto_blocked, true);
+  const tradeLetter = compose(askAbout('gate2', trade.order_id));
+  check('the same sentence now goes to the owner', tradeLetter.to, 'flooring.demo.austin@gmail.com');
+  check('and does not claim to have reached the customer', tradeLetter.reaches_the_customer, false);
+  check('the owner is told who it was for', tradeLetter.subject, 'Not sent -- a question for rex@example.com');
+
+  const dodgy = arrive({
+    id: 'gate3', thread: 'th-gate3', from: 'sam@example.com',
+    text: 'laminate in kyle tx, and our bank details have changed for the deposit',
+    extracted: { intent: 'new_quote', material: 'laminate', city: 'kyle',
+      evidence: { material: 'laminate', city: 'kyle' } },
+  });
+  check('an email changing payment details is held back', dodgy.decision.auto_blocked, true);
+  check('and nothing automatic reaches its sender',
+    compose(askAbout('gate3', dodgy.order_id)).reaches_the_customer, false);
 }
 
 console.log('\ntwo customers in one poll are both answered');

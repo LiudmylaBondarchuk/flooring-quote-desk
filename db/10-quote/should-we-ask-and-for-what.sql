@@ -38,7 +38,7 @@ letter AS (
   -- who wrote in, and which thread it belongs to. Whatever composes the reply used to reach back
   -- to an earlier node for this, and that node returns neither -- so a real run had nobody to
   -- write to while a test that handed the fields in passed. One query answers the whole question.
-  SELECT contact_email, thread_id
+  SELECT contact_email, thread_id, auto_blocked
     FROM messages
    WHERE gmail_message_id = $1::text
 ),
@@ -62,7 +62,12 @@ SELECT
   coalesce(d.should_ask, false)                               AS should_ask,
   chosen.key                                                  AS template_key,
   chosen.body                                                 AS body,
-  coalesce(chosen.sends_automatically, false)                 AS may_go_alone,
+  -- two permissions, and both must hold. The wording says what may be said with nobody reading
+  -- it; the gate says whether THIS email may be answered at all. A commercial property or an
+  -- email changing payment details is held whatever sentence was chosen -- and an enquiry that has
+  -- merely not given the area yet is not held, because asking for it is the point.
+  coalesce(chosen.sends_automatically AND NOT coalesce(l.auto_blocked, false), false)
+                                                              AS may_go_alone,
   (SELECT body FROM reply_templates WHERE key = 'signature')  AS signature,
   l.contact_email,
   l.thread_id

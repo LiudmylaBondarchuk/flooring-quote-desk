@@ -520,6 +520,10 @@ for (const item of $input.all()) {
     route,
     handling,
     pricing_allowed: pricingAllowed,
+    // Separate from colour and from pricing: whether a person must see this email before anything
+    // automatic happens to it. An enquiry that has simply not given the area yet is red and not
+    // blocked -- asking for the area is the right automatic answer to it.
+    auto_blocked: autoBlocked,
     segment,
     is_returning: isReturning,
     same_signature: sameSignature,

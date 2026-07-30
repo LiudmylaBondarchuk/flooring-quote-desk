@@ -10,6 +10,7 @@ UPDATE messages SET
   is_returning              = $6,
   same_signature            = $16,
   pricing_allowed             = $7,
+  auto_blocked              = $28,
   danger                    = $8,
   intent                    = $9,
   geo_zone                  = $10,
