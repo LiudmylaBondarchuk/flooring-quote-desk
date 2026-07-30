@@ -1,0 +1,3 @@
+{
+  "queryReplacement": "={{ [$('What has not been told').item.json.ids] }}"
+}

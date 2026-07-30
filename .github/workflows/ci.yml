@@ -43,6 +43,8 @@ jobs:
         run: npm run catalogue:round-trip
       - name: a conversation that runs for days keeps one order and one set of facts
         run: npm run conversation:round-trip
+      - name: a failure reaches a person, and a loop of them is still one letter
+        run: npm run errors:round-trip
 
   guards:
     runs-on: ubuntu-latest

@@ -123,6 +123,17 @@ for (const file of readdirSync(join(root, 'workflows')).filter((f) => f.endsWith
     }
   }
 
+  // The other direction, which deploying deliberately does not act on: removing a node is a
+  // decision somebody makes, not a side effect of pushing a file. But it must not be invisible
+  // either -- a placeholder left behind after its replacement was deployed sits on the canvas
+  // looking like part of the lane, and the next export quietly copies it back into the repository.
+  const inTheExport = new Set(exported.nodes.map((n) => n.name));
+  const onlyLive = nodes.filter((n) => !inTheExport.has(n.name)).map((n) => n.name);
+  if (onlyLive.length) {
+    console.log(`note ${file} — the instance has ${onlyLive.length} node(s) this export does not: `
+      + `${onlyLive.join(', ')}. Nothing was removed; delete them in n8n if they are finished with.`);
+  }
+
   let touched = brought.length;
   const inExport = new Map(exported.nodes.map((n) => [n.name, n]));
   for (const node of nodes) {

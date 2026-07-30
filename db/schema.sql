@@ -321,6 +321,7 @@ CREATE TABLE failures (
     gmail_message_id  text,
     payload           jsonb,
     notified          boolean     NOT NULL DEFAULT false,
+    notified_at       timestamptz,
     resolved_at       timestamptz,
     created_at        timestamptz NOT NULL DEFAULT now()
 );

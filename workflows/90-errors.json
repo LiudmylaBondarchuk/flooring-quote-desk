@@ -37,7 +37,7 @@
       "parameters": {
         "width": 520,
         "height": 140,
-        "content": "### 90 Errors\nTwo ways in: n8n hands over an uncaught crash, or a router lane hands over a failure it caught.\nBoth land in the same failures table.\nTechnical detail goes to whoever maintains this; the owner is told consequences, not causes."
+        "content": "### 90 Errors — Flooring\n\nEvery failure from every lane lands here, is normalised, and is written down. Since this\nweek it also reaches a person: one letter per quiet window rather than one per failure,\ncarrying everything still untold and grouped so twelve identical timeouts read as one line\nwith a count.\n\nA failure is marked as told only after Gmail returns. If sending fails the rows stay untold\nand the next letter carries them.\n\nThe gap worth knowing: the letter goes when a failure arrives. If failures stop inside the\nquiet window, the last of them wait for the next one. Sweeping those up is the watchman's\njob, and the watchman is parked."
       }
     },
     {
@@ -77,15 +77,112 @@
       }
     },
     {
-      "id": "todo",
-      "name": "TODO notify the maintainer",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Whether to write to the owner, and what the letter says. One statement, so the decision and the\n-- words cannot disagree with each other, and so nothing downstream has to ask a second question.\n--\n-- The rule is one letter per quiet window rather than one per failure. A workflow failing in a loop\n-- produces a failure a second; a hundred letters is the same as none, because nobody reads the\n-- hundredth. So: if somebody was written to inside the window, stay quiet -- they already know\n-- something is wrong and the next letter will carry these too.\n--\n-- Grouped by what actually distinguishes one failure from another to a person reading at seven in\n-- the morning: which workflow, which node, and what it said. Twelve identical timeouts are one line\n-- with a count, not twelve lines.\n\nWITH untold AS (\n  SELECT id, workflow_name, node_name, message, gmail_message_id, created_at\n    FROM failures\n   WHERE NOT notified\n     AND resolved_at IS NULL\n),\nrecently AS (\n  SELECT count(*) AS n\n    FROM failures\n   WHERE notified_at > now() - ($1::int * interval '1 minute')\n),\ngrouped AS (\n  SELECT coalesce(workflow_name, 'unknown workflow') AS workflow_name,\n         coalesce(node_name, 'no node named')        AS node_name,\n         message,\n         count(*)                                    AS times,\n         max(created_at)                             AS last_seen,\n         min(gmail_message_id)                       AS an_email\n    FROM untold\n   GROUP BY 1, 2, 3\n   ORDER BY max(created_at) DESC\n)\nSELECT\n  (SELECT count(*) FROM untold)::int                          AS untold,\n  (SELECT n FROM recently)::int                                AS told_recently,\n  (SELECT count(*) FROM untold) > 0\n    AND (SELECT n FROM recently) = 0                           AS should_tell,\n  coalesce((SELECT array_agg(id) FROM untold), ARRAY[]::int[]) AS ids,\n  coalesce((SELECT string_agg(\n      format('%s x%s  %s -> %s%s%s',\n             to_char(last_seen, 'HH24:MI'), times, workflow_name, node_name,\n             E'\\n      ' || message,\n             CASE WHEN an_email IS NULL THEN '' ELSE E'\\n      email ' || an_email END),\n      E'\\n\\n' ORDER BY last_seen DESC)\n    FROM grouped), '') AS what_broke;",
+        "options": {
+          "queryReplacement": "={{ [15] }}"
+        }
+      },
+      "id": "aaaa9000-0000-4000-8000-000000000001",
+      "name": "What has not been told",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
       "position": [
         1000,
         300
       ],
-      "parameters": {}
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "should_tell",
+              "leftValue": "={{ $json.should_tell }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "aaaa9000-0000-4000-8000-000000000002",
+      "name": "Is anyone owed a letter?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "flooring.demo.austin@gmail.com",
+        "subject": "={{ \"Flooring: \" + $json.untold + \" failure(s) nobody has looked at\" }}",
+        "emailType": "text",
+        "message": "={{ $json.what_broke + \"\\n\\nNothing here has been dealt with. Times are UTC, and the count after the x is how often that same failure happened.\" }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "aaaa9000-0000-4000-8000-000000000003",
+      "name": "Tell the owner",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1440,
+        240
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": null,
+          "name": "Gmail account"
+        }
+      },
+      "webhookId": "22f08512-ecb2-4b3b-a7fb-f5763c7c0023"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Written after the letter has gone, never before. If sending fails nothing here runs, the rows\n-- stay untold, and the next failure's letter carries them -- which is the right way round: a\n-- failure nobody was told about must not be marked as told.\n\nUPDATE failures\n   SET notified = true, notified_at = now()\n WHERE id = ANY($1::int[])\n   AND NOT notified\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [$('What has not been told').item.json.ids] }}"
+        }
+      },
+      "id": "aaaa9000-0000-4000-8000-000000000004",
+      "name": "Say we told",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1660,
+        240
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
     }
   ],
   "connections": {
@@ -126,7 +223,40 @@
       "main": [
         [
           {
-            "node": "TODO notify the maintainer",
+            "node": "What has not been told",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What has not been told": {
+      "main": [
+        [
+          {
+            "node": "Is anyone owed a letter?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is anyone owed a letter?": {
+      "main": [
+        [
+          {
+            "node": "Tell the owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tell the owner": {
+      "main": [
+        [
+          {
+            "node": "Say we told",
             "type": "main",
             "index": 0
           }
