@@ -439,7 +439,8 @@
           "id": null,
           "name": "Gmail account"
         }
-      }
+      },
+      "webhookId": "2ca2aca0-1a74-4a83-b97b-5b66e7a315c1"
     },
     {
       "parameters": {
@@ -621,8 +622,7 @@
             "type": "main",
             "index": 0
           }
-        ],
-        []
+        ]
       ]
     },
     "Compose the quote": {
