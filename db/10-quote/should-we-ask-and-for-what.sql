@@ -21,9 +21,11 @@ WITH mine AS (
      AND o.state NOT IN ('booked', 'done', 'lost')
 ),
 last_ask AS (
+  -- field, not just kind: a reminder is also an 'asked' event, and without this the nudge sent
+  -- to a customer who went quiet would read as the question having changed
   SELECT created_at, new_value
     FROM order_events
-   WHERE order_id = $2::int AND kind = 'asked'
+   WHERE order_id = $2::int AND kind = 'asked' AND field = 'still_missing'
    ORDER BY created_at DESC
    LIMIT 1
 ),

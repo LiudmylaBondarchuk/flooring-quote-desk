@@ -118,6 +118,14 @@ until it was noticed. Deploying now compares the whole of each node and names, l
 difference it left behind, and the run reports itself as failed. It still does not push them:
 deciding to would mean deploying could quietly rewire a canvas.
 
+**An order that goes quiet is chased once, and then let go.** Silence is measured on the order
+rather than on the inbox: one touched by a merge, a quote or an approval is a live conversation
+whatever arrived. Past the first mark it gets one nudge, ever — in words a person wrote, carrying
+no figure and repeating no question, because a customer who did not answer is not helped by being
+asked the same thing again. Past the second it is closed, and **nothing is sent**: closing the
+books is a decision about the desk's own records, and *we assume you are not interested* is the
+letter that arrives the day somebody finally replies. The lane is off until somebody turns it on.
+
 **A question about what the firm does gets an answer.** The gate had always worked out which
 service an email was asking about and thrown the answer away, so *do you install laminate?* was
 understood, categorised, routed — and never replied to. The message remembers the label now, one
