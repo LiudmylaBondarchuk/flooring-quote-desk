@@ -17,7 +17,9 @@
       ]
     },
     {
-      "parameters": {},
+      "parameters": {
+        "inputSource": "passthrough"
+      },
       "id": "aaaa6000-0000-4000-8000-000000000001",
       "name": "Called by router",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
