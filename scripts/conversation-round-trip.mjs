@@ -627,10 +627,72 @@ console.log('\nthe letter a customer would actually receive');
   check('it stays in their thread', letter.thread_id, 'th-w');
   check('the subject is Gmail\'s to continue, not ours to invent', letter.subject, null);
   check('it asks for the one thing missing, in the words a person wrote',
-    letter.body.startsWith('Thanks for getting in touch. To price this I need one more thing'), true);
+    letter.body.includes('To price this I need one more thing'), true);
   check('it does not ask for what it already knows', /what are you thinking of putting down/.test(letter.body), false);
   check('it is signed', letter.body.trimEnd().endsWith('the flooring desk'), true);
-  check('no number and no price is anywhere in it', /\$|\bsq ft\b|[0-9]{2,}/.test(letter.body), false);
+  // The old promise here was that an asking letter carried no figure at all. That was the pause
+  // this desk exists to remove, and it is deliberately reversed: the rate goes out first. What
+  // survives is the narrower and more important rule -- a TOTAL is only ever worked out from an
+  // area the customer gave, and this letter is asking for that area precisely because it has none.
+  check('it carries the rate for what they named', /Laminate standard: \$4-\$8 per sq ft/.test(letter.body), true);
+  check('but no total, because there is no area to multiply',
+    /comes to roughly/.test(letter.body), false);
+}
+
+console.log('\nthe letter answers with a number before it asks anything');
+{
+  // the material is known and the size is not: the rate for that material, and no total, because
+  // there is no area to multiply and a quantity is never invented
+  const one = arrive({
+    id: 'rate1', thread: 'th-rate1', from: 'ada@example.com',
+    text: 'laminate in the hallway, kyle tx',
+    extracted: { intent: 'new_quote', material: 'laminate', city: 'kyle',
+      evidence: { material: 'laminate', city: 'kyle' } },
+  });
+  const a = compose(askAbout('rate1', one.order_id));
+  check('the rate comes before the question',
+    a.body.indexOf('per sq ft') < a.body.indexOf('how many square feet'), true);
+  check('and it is the rate for what they named',
+    /Laminate standard: \$4-\$8 per sq ft/.test(a.body), true);
+  check('not for everything the firm lays', /Carpet|Engineered wood/.test(a.body), false);
+  check('no total is invented from nothing', /comes to roughly/.test(a.body), false);
+
+  // the size is known and the material is not: every rate, and a total, because the area is real
+  const two = arrive({
+    id: 'rate2', thread: 'th-rate2', from: 'bo@example.com',
+    text: 'about 400 sq ft, buda tx, not sure what to put down',
+    extracted: { intent: 'new_quote', area_sqft: 400, area_unit: 'sqft', city: 'buda',
+      evidence: { area_sqft: '400', area_unit: 'sq ft', city: 'buda' } },
+  });
+  const b = compose(askAbout('rate2', two.order_id));
+  check('every rate is shown when nothing was named',
+    ['Carpet', 'Laminate standard', 'Engineered wood'].every((p) => b.body.includes(p)), true);
+  check('and a total is worked out from the area they gave',
+    /For 400 sq ft that comes to roughly \$800 to \$5,600/.test(b.body), true);
+
+  // outside the service area: a refusal, and not a number in sight
+  const three = arrive({
+    id: 'rate3', thread: 'th-rate3', from: 'cy@example.com',
+    text: 'laminate, 400 sq ft, in dallas tx',
+    extracted: { intent: 'new_quote', material: 'laminate', area_sqft: 400, area_unit: 'sqft',
+      city: 'dallas',
+      evidence: { material: 'laminate', area_sqft: '400', area_unit: 'sq ft', city: 'dallas' } },
+  });
+  // the branch downstream reads should_speak, not should_ask: an out-of-area order is missing
+  // nothing, so nothing is asked -- and before this the customer heard silence
+  const dal = askAbout('rate3', three.order_id);
+  check('nothing is missing from an out-of-area order', dal.still_missing, []);
+  check('so there is no question to ask', dal.should_ask, false);
+  check('but there is still something to say', dal.should_speak, true);
+
+  // reported rather than thrown: without the refusal there is no template for this case at all,
+  // and a harness that dies says less than one that names what went wrong
+  let c = null, threw = null;
+  try { c = compose(askAbout('rate3', three.order_id)); } catch (e) { threw = e.message; }
+  check('a letter for a property out of the area can be written at all', threw, null);
+  check('a property out of the area is told so', /outside what I can reach/.test(c?.body || ''), true);
+  check('and is not asked where it is', /Whereabouts is the property/.test(c?.body || ''), false);
+  check('and is given no figure at all', /\$/.test(c?.body || ''), false);
 }
 
 console.log('\nthe states the letter only claimed to handle');
@@ -1254,8 +1316,13 @@ console.log('\ntwo customers in one poll are both answered');
   check('and the second to the second, not a repeat of the first', letters[1].to, 'otto@example.com');
   check('each stays in its own thread',
     [letters[0].thread_id, letters[1].thread_id], ['th-b1', 'th-b2']);
-  check('neither carries a price',
-    letters.some((l) => /\$|[0-9]{2,}/.test(l.body)), false);
+  // both carry a rate now, deliberately; what neither may carry is a total, because neither
+  // customer has given an area
+  check('each carries the rate for the material it names',
+    [/Luxury vinyl plank/.test(letters[1].body), /Laminate standard/.test(letters[0].body)],
+    [true, true]);
+  check('and neither works out a total from nothing',
+    letters.some((l) => /comes to roughly/.test(l.body)), false);
 }
 
 

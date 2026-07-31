@@ -118,6 +118,23 @@ until it was noticed. Deploying now compares the whole of each node and names, l
 difference it left behind, and the run reports itself as failed. It still does not push them:
 deciding to would mean deploying could quietly rewire a canvas.
 
+**The letter answers with a number before it asks anything.** A customer who wrote *how much for
+laminate?* was told only that we needed to know the size. They learn nothing, and they write to
+whoever answers — which is the pause this desk exists to remove and was causing. The rate now goes
+first, from `price_bands`, and the question follows it.
+
+The rule is that **any refusal beats any number**. A property outside the service area and a service
+the firm does not offer each produce a letter with no figure in it at all. Otherwise the range is
+always given: for the material they named if they named one, across everything the firm lays if they
+did not. A **total** appears only when the order holds an area the customer actually gave — a
+quantity is never invented.
+
+**And somebody in Dallas stops being asked where they are.** The gate marks the message as missing a
+location while the order already knows the zone is one we do not serve, so nothing was missing,
+nothing was asked, and the customer heard silence. There is an honest refusal now, and the branch
+that reaches it asks whether there is anything to *say* rather than anything to *ask* — the two are
+not the same, and only the first is true here.
+
 **An order that goes quiet is chased once, and then let go.** Silence is measured on the order
 rather than on the inbox: one touched by a merge, a quote or an approval is a live conversation
 whatever arrived. Past the first mark it gets one nudge, ever — in words a person wrote, carrying
