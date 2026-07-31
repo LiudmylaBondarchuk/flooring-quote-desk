@@ -2149,5 +2149,59 @@
       "matched_rule": "wants_a_price",
       "category": "quote_request"
     }
+  },
+  {
+    "name": "a job with everything and no quote is priced, whatever the letter says",
+    "row": {
+      "source_text": "can you send me the price?",
+      "prior_in_thread": 2,
+      "prior_from_contact": 2,
+      "offers_in_thread": 0,
+      "open_job": {
+        "id": 7,
+        "state": "new",
+        "material": "Laminate",
+        "area": 400,
+        "area_status": "known",
+        "zone": "core"
+      },
+      "extracted": {
+        "intent": "new_quote",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "quote_request",
+      "matched_rule": "the_job_is_ready",
+      "route": "quote"
+    },
+    "why": "A conversation gives its facts across several letters. This one carries none of them and asks for nothing in particular, but the job behind it has a material, a size and a town, and nobody has quoted it. Sitting on a ready job because the newest letter is short is how a customer is lost to whoever answers first."
+  },
+  {
+    "name": "the same letter, once a quote has gone out, is a conversation to continue",
+    "row": {
+      "source_text": "can you send me the price?",
+      "prior_in_thread": 2,
+      "prior_from_contact": 2,
+      "offers_in_thread": 1,
+      "open_job": {
+        "id": 7,
+        "state": "quoted",
+        "material": "Laminate",
+        "area": 400,
+        "area_status": "known",
+        "zone": "core"
+      },
+      "extracted": {
+        "intent": "new_quote",
+        "evidence": {}
+      }
+    },
+    "expect": {
+      "category": "existing_project",
+      "matched_rule": "thread_continuation",
+      "route": "project"
+    },
+    "why": "The mirror of the case above, and the reason it is written as a pair. Once a price has been sent, the same words mean something else entirely -- a question about a quote they already have -- and quoting them a second time is worse than not answering."
   }
 ]

@@ -274,6 +274,13 @@ for (const item of $input.all()) {
   const intent = norm(ex.intent);
   const said = (re) => re.test(src);
 
+  // What the job already knows, as opposed to what this letter repeats. A conversation gives its
+  // facts across several emails, and every rule below that asks about "material and area" was
+  // asking whether the customer said them again just now.
+  const job = row.open_job && typeof row.open_job === 'object' ? row.open_job : {};
+  const jobReady = Boolean(job.material) && job.area !== null && job.area !== undefined
+    && Boolean(job.zone);
+
   const priorSignatures = Array.isArray(row.prior_signatures) ? row.prior_signatures : [];
   const sameSignature = !!material && areaOk && COMPARABLE_AREA.includes(quantity.status)
     && priorSignatures.some((s) => s && s.m === material
@@ -329,6 +336,13 @@ for (const item of $input.all()) {
     category = 'scheduling';
     matchedRule = 'scheduling_signal';
     reasons.push('about a date or a visit — calendar, not pricing');
+  // Before anything that files a letter as "carry on where we left off". A job with a material, a
+  // size and a town, which nobody has quoted, is not a conversation to be continued -- it is a
+  // price waiting to be worked out, whatever this particular letter happens to say.
+  } else if (isReturning && jobReady && !offerOnTheTable) {
+    category = 'quote_request';
+    matchedRule = 'the_job_is_ready';
+    reasons.push('everything a price needs is already on this job, and nothing has been quoted yet');
   } else if (sameSignature) {
     category = 'existing_project';
     matchedRule = 'same_job_signature';
