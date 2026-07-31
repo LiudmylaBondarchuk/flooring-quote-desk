@@ -40,9 +40,32 @@ letter AS (
   -- who wrote in, and which thread it belongs to. Whatever composes the reply used to reach back
   -- to an earlier node for this, and that node returns neither -- so a real run had nobody to
   -- write to while a test that handed the fields in passed. One query answers the whole question.
-  SELECT contact_email, thread_id, auto_blocked
+  SELECT contact_email, thread_id, auto_blocked, geo_zone
     FROM messages
    WHERE gmail_message_id = $1::text
+),
+-- What the job costs per square foot, which is the one thing a customer always wants and the desk
+-- has never said. Narrowed to the material when the order names one, otherwise everything the firm
+-- lays -- a range is a published rate, not a quote, and withholding it is the pause the desk exists
+-- to remove.
+rates AS (
+  SELECT json_agg(json_build_object('product', b.product,
+                                    'rate_low', b.rate_low,
+                                    'rate_high', b.rate_high) ORDER BY b.rate_low, b.id) AS bands,
+         min(b.rate_low)  AS lowest,
+         max(b.rate_high) AS dearest
+    FROM price_bands b
+   WHERE b.active
+     AND b.component = 'floor'
+     AND (b.category = (SELECT material_category FROM orders WHERE id = $2::int)
+          OR (SELECT material_category FROM orders WHERE id = $2::int) IS NULL)
+),
+-- The area only counts towards an illustration when the desk would actually take the job. A total
+-- shown to somebody in Dallas is an invitation followed by a refusal.
+figures AS (
+  SELECT o.area_sqft, o.zone
+    FROM orders o
+   WHERE o.id = $2::int
 ),
 decided AS (
   SELECT m.still_missing,
@@ -62,6 +85,11 @@ SELECT
   d.asked_before,
   coalesce(d.facts_since, 0)                                  AS facts_since,
   coalesce(d.should_ask, false)                               AS should_ask,
+  -- whether there is anything to say at all, which is not the same as having a question. A
+  -- property outside the service area is missing nothing -- the order knows the zone, it is simply
+  -- one we do not serve -- so nothing was asked and nothing was said, and the customer heard
+  -- silence. The branch downstream reads this, not should_ask.
+  coalesce(d.should_ask, false) OR l.geo_zone = 'out'         AS should_speak,
   chosen.key                                                  AS template_key,
   chosen.body                                                 AS body,
   -- two permissions, and both must hold. The wording says what may be said with nobody reading
@@ -72,10 +100,19 @@ SELECT
                                                               AS may_go_alone,
   (SELECT body FROM reply_templates WHERE key = 'signature')  AS signature,
   l.contact_email,
-  l.thread_id
+  l.thread_id,
+  -- the refusal comes first and beats everything below it: a customer who said Dallas has told us
+  -- where they are, and asking them again is worse than saying no
+  l.geo_zone = 'out'                                          AS out_of_area,
+  (SELECT body FROM reply_templates WHERE key = 'out_of_area') AS out_of_area_words,
+  (SELECT bands FROM rates)                                   AS bands,
+  (SELECT body FROM reply_templates WHERE key = 'rates_preamble') AS rates_preamble,
+  f.area_sqft,
+  f.zone IS NOT NULL AND f.zone <> 'out'                      AS worth_illustrating
   FROM (SELECT 1) AS always
   LEFT JOIN decided d ON true
   LEFT JOIN letter  l ON true
+  LEFT JOIN figures f ON true
   -- the words come back with the decision, so whatever composes the reply is only joining
   -- strings: one query answered whether to speak and what to say, and nothing downstream has to
   -- ask the database a second question to find out

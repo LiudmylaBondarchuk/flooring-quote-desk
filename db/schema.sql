@@ -3,6 +3,16 @@
 
 BEGIN;
 
+-- Which files in db/history this database has run. Written by scripts/migrate.mjs at the moment
+-- it runs one, so nothing has to be remembered by a person. The checksum is what makes an edit to
+-- an already-applied migration visible instead of silent.
+CREATE TABLE schema_migrations (
+    filename    text        PRIMARY KEY,
+    checksum    text        NOT NULL,
+    applied_at  timestamptz NOT NULL DEFAULT now(),
+    watched     boolean     NOT NULL DEFAULT true
+);
+
 CREATE TABLE contacts (
     id          integer     GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     email       text        NOT NULL,
@@ -184,7 +194,8 @@ CREATE TABLE messages (
     CONSTRAINT messages_matched_rule_known CHECK (matched_rule IS NULL OR matched_rule IN (
         'owner_sent', 'automated_headers', 'fraud_unknown_sender', 'nothing_readable',
         'complaint_signal', 'offer_response', 'money_known_contact', 'scheduling_signal',
-        'same_job_signature', 'thread_continuation', 'not_a_customer', 'capability_question',
+        'the_job_is_ready', 'same_job_signature', 'thread_continuation', 'not_a_customer',
+        'capability_question',
         'wants_a_price', 'unclassified')),
     CONSTRAINT messages_offer_answer_known CHECK (offer_answer IS NULL
         OR offer_answer IN ('accepted', 'pushed_back')),

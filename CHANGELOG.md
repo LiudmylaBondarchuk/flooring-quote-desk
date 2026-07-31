@@ -11,6 +11,25 @@ A conversation now outlives the email that started it, the price list is kept by
 owner rather than by a developer, and a price is computed and written down. The desk
 answers a customer for the first time — with a question, never with a figure.
 
+**The database remembers which migrations it has run.** There were twenty-eight files in
+`db/history` and no record anywhere of which of them production had actually seen. One turned out
+never to have arrived: a constraint sat in the canon, sat in a migration, and was absent from the
+live database, and nobody could have said when it went missing or whether anything else had. Each
+file had been pasted into a browser by hand, and that hand-off failed three times in a single day —
+a column typed as `note` for `notes`, a double dash inside a sentence that the editor read as a
+comment and truncated at, and a statement pasted with a `--` in front of it that reported success
+and did nothing.
+
+There is a ledger now, and a runner that reads it: what is pending, and `--apply` to run it. Each
+migration runs inside its own transaction together with the row recording it, because one that
+half-ran and was recorded as done is worse than one that never ran. A file that has already run and
+has been edited since is **refused** — the file says one thing, the database was built from another,
+and guessing which is right is the mistake. So is a row in the ledger with no file behind it.
+
+The ledger starts today rather than claiming to know the past: every existing file is recorded as
+applied-but-unwatched, which is the honest description. What proves the past is `db:check:live`,
+which compares the live schema against a clean build.
+
 **A job is a job, not a piece of paper.** An email joins an open order in its own
 thread, or opens one when it is the kind of email that starts work; the database
 holds one open order per thread through a partial unique index rather than through
@@ -117,6 +136,37 @@ theoretical — a routing rule that stayed in the repository sent every owner re
 until it was noticed. Deploying now compares the whole of each node and names, last of all, every
 difference it left behind, and the run reports itself as failed. It still does not push them:
 deciding to would mean deploying could quietly rewire a canvas.
+
+**The gate can see the job it is deciding about.** Everything it knew about history it counted
+from messages: the statement that feeds it mentions that table five times and `orders` not once. So
+every rule asking *does this email carry a material and a size* was really asking *did they repeat
+themselves in the last letter*. A customer who wrote "laminate, Kyle TX" on Monday, "about 400 sq
+ft" on Tuesday and "can you send me the price?" on Wednesday was filed as continuing a conversation
+and handed to a lane that does nothing. The job had everything a price needs and nobody priced it.
+
+That was the third defect of the same shape found by a real letter in two days, and the shape never
+varies: a rule reading the letter where it should read the job. The lookup hands over the open order
+for the thread now, and one rule sits ahead of everything that files a letter as *carry on where we
+left off* — a job with a material, a size and a town, which nobody has quoted, is a price waiting to
+be worked out, whatever this particular letter happens to say. Once a quote has gone out the same
+words mean something else, and the older rule takes them back.
+
+**The letter answers with a number before it asks anything.** A customer who wrote *how much for
+laminate?* was told only that we needed to know the size. They learn nothing, and they write to
+whoever answers — which is the pause this desk exists to remove and was causing. The rate now goes
+first, from `price_bands`, and the question follows it.
+
+The rule is that **any refusal beats any number**. A property outside the service area and a service
+the firm does not offer each produce a letter with no figure in it at all. Otherwise the range is
+always given: for the material they named if they named one, across everything the firm lays if they
+did not. A **total** appears only when the order holds an area the customer actually gave — a
+quantity is never invented.
+
+**And somebody in Dallas stops being asked where they are.** The gate marks the message as missing a
+location while the order already knows the zone is one we do not serve, so nothing was missing,
+nothing was asked, and the customer heard silence. There is an honest refusal now, and the branch
+that reaches it asks whether there is anything to *say* rather than anything to *ask* — the two are
+not the same, and only the first is true here.
 
 **An order that goes quiet is chased once, and then let go.** Silence is measured on the order
 rather than on the inbox: one touched by a merge, a quote or an approval is a live conversation

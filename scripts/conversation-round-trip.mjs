@@ -639,6 +639,51 @@ console.log('\nthe letter a customer would actually receive');
     /comes to roughly/.test(letter.body), false);
 }
 
+console.log('\na job that has everything is priced, whatever the newest letter says');
+{
+  // the conversation a live letter found on 31 July: three emails, the third carrying nothing at
+  // all, and the job behind it ready to be quoted since the second
+  const first = arrive({
+    id: 'ready1', thread: 'th-ready', from: 'gus@example.com',
+    text: 'hi, laminate in the living room, kyle tx',
+    extracted: { intent: 'new_quote', material: 'laminate', city: 'kyle',
+      evidence: { material: 'laminate', city: 'kyle' } },
+  });
+  arrive({
+    id: 'ready2', thread: 'th-ready', from: 'gus@example.com',
+    text: 'about 400 sq ft',
+    extracted: { intent: 'new_quote', area_sqft: 400, area_unit: 'sqft',
+      evidence: { area_sqft: '400', area_unit: 'sq ft' } },
+  });
+  check('the job is ready after two letters', orderOf(first.order_id).material_category, 'Laminate');
+
+  const third = arrive({
+    id: 'ready3', thread: 'th-ready', from: 'gus@example.com',
+    text: 'can you send me the price?',
+    extracted: { intent: 'new_quote', evidence: {} },
+  });
+  check('the third letter carries nothing of its own', third.decision.settled.material_category, null);
+  check('but it is read as a request for a price', third.decision.category, 'quote_request');
+  check('by the rule that names why', third.decision.matched_rule, 'the_job_is_ready');
+  check('and it goes to the lane that prices', third.decision.route, 'quote');
+
+  const priced = priceIt('ready3');
+  check('and the job is priced', priced.quote.priceable, true);
+
+  // once a quote exists, the same words mean something else
+  const [letter] = composeQuotes(whatTheQuoteNeeds('ready3', priced.written.offer_id));
+  putForward('ready3', priced.written.offer_id, 'th-owner-ready', letter.the_letter_itself);
+  run(['-c', `UPDATE offers SET status = 'sent' WHERE id = ${priced.written.offer_id}`]);
+  const fourth = arrive({
+    id: 'ready4', thread: 'th-ready', from: 'gus@example.com',
+    text: 'can you send me the price?',
+    extracted: { intent: 'new_quote', evidence: {} },
+  });
+  check('now the same letter is a conversation to continue', fourth.decision.matched_rule,
+    'thread_continuation');
+  check('and it is not quoted a second time', fourth.decision.route, 'project');
+}
+
 console.log('\nthe letter answers with a number before it asks anything');
 {
   // the material is known and the size is not: the rate for that material, and no total, because
@@ -678,10 +723,21 @@ console.log('\nthe letter answers with a number before it asks anything');
       city: 'dallas',
       evidence: { material: 'laminate', area_sqft: '400', area_unit: 'sq ft', city: 'dallas' } },
   });
-  const c = compose(askAbout('rate3', three.order_id));
-  check('a property out of the area is told so', /outside what I can reach/.test(c.body), true);
-  check('and is not asked where it is', /Whereabouts is the property/.test(c.body), false);
-  check('and is given no figure at all', /\$/.test(c.body), false);
+  // the branch downstream reads should_speak, not should_ask: an out-of-area order is missing
+  // nothing, so nothing is asked -- and before this the customer heard silence
+  const dal = askAbout('rate3', three.order_id);
+  check('nothing is missing from an out-of-area order', dal.still_missing, []);
+  check('so there is no question to ask', dal.should_ask, false);
+  check('but there is still something to say', dal.should_speak, true);
+
+  // reported rather than thrown: without the refusal there is no template for this case at all,
+  // and a harness that dies says less than one that names what went wrong
+  let c = null, threw = null;
+  try { c = compose(askAbout('rate3', three.order_id)); } catch (e) { threw = e.message; }
+  check('a letter for a property out of the area can be written at all', threw, null);
+  check('a property out of the area is told so', /outside what I can reach/.test(c?.body || ''), true);
+  check('and is not asked where it is', /Whereabouts is the property/.test(c?.body || ''), false);
+  check('and is given no figure at all', /\$/.test(c?.body || ''), false);
 }
 
 console.log('\nthe states the letter only claimed to handle');
@@ -1327,8 +1383,13 @@ console.log('\ntwo customers in one poll are both answered');
   check('and the second to the second, not a repeat of the first', letters[1].to, 'otto@example.com');
   check('each stays in its own thread',
     [letters[0].thread_id, letters[1].thread_id], ['th-b1', 'th-b2']);
-  check('neither carries a price',
-    letters.some((l) => /\$|[0-9]{2,}/.test(l.body)), false);
+  // both carry a rate now, deliberately; what neither may carry is a total, because neither
+  // customer has given an area
+  check('each carries the rate for the material it names',
+    [/Luxury vinyl plank/.test(letters[1].body), /Laminate standard/.test(letters[0].body)],
+    [true, true]);
+  check('and neither works out a total from nothing',
+    letters.some((l) => /comes to roughly/.test(l.body)), false);
 }
 
 
