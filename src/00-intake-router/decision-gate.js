@@ -289,7 +289,7 @@ for (const item of $input.all()) {
 
   const danger = said(RE.phishing);
 
-  let category, matchedRule;
+  let category, matchedRule, offerAnswer = null;
 
   if (row.is_outbound === true) {
     category = 'owner_reply';
@@ -323,7 +323,10 @@ for (const item of $input.all()) {
              || (said(RE.offerYesWeak) && !(material && areaOk)))) {
     category = 'offer_response';
     matchedRule = 'offer_response';
-    reasons.push(said(RE.offerYes) || said(RE.offerYesWeak)
+    // said out loud rather than only in the sentence a person reads: the lane that acts on this
+    // would otherwise need a second copy of the vocabulary to tell the two apart
+    offerAnswer = (said(RE.offerYes) || said(RE.offerYesWeak)) ? 'accepted' : 'pushed_back';
+    reasons.push(offerAnswer === 'accepted'
       ? 'looks like acceptance — changes job state, needs the owner NOW'
       : 'price pushback — negotiation, owner decides');
   } else if (isReturning && said(RE.money)) {
@@ -538,6 +541,7 @@ for (const item of $input.all()) {
     // automatic happens to it. An enquiry that has simply not given the area yet is red and not
     // blocked -- asking for the area is the right automatic answer to it.
     auto_blocked: autoBlocked,
+    offer_answer: offerAnswer,
     segment,
     is_returning: isReturning,
     same_signature: sameSignature,

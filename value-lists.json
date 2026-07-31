@@ -524,6 +524,17 @@
         "const": "COMPARABLE_AREA",
         "part": "array"
       }
+    },
+    "offer_answer": {
+      "means": "which way a reply to a quote went. NULL when it was neither, which is a real thing: a question about timing is not a refusal.",
+      "values": [
+        "accepted",
+        "pushed_back"
+      ],
+      "sql": [
+        "messages.offer_answer"
+      ],
+      "produced_by_gate": "offer_answer"
     }
   }
 }

@@ -941,6 +941,28 @@ console.log('\nand a customer who really is accepting one');
   check('this one is read as accepting', yes.decision.category, 'offer_response');
   check('and goes to a person, not to a price', yes.decision.route, 'project');
   check('marked for the owner now', yes.decision.gate_color, 'red');
+  check('and the gate says which way: accepted', yes.decision.offer_answer, 'accepted');
+}
+
+console.log('\nand a customer who is pushing back on the price');
+{
+  const first = arrive({
+    id: 'r22', thread: 'th-pushback', from: 'noah@example.com',
+    text: 'laminate, 300 sq ft, buda tx, what would it cost?',
+    extracted: { intent: 'new_quote', material: 'laminate', area_sqft: 300, area_unit: 'sqft',
+      city: 'buda',
+      evidence: { material: 'laminate', area_sqft: '300', area_unit: 'sq ft', city: 'buda' } },
+  });
+  priceIt('r22');
+
+  const pushback = arrive({
+    id: 'r23', thread: 'th-pushback', from: 'noah@example.com',
+    text: 'that is more than we expected',
+    extracted: { intent: 'offer_response', evidence: {} },
+  });
+  check('this one is read as haggling, not accepting', pushback.decision.category, 'offer_response');
+  check('the owner decides, not a price', pushback.decision.route, 'project');
+  check('and the gate says which way: pushed back', pushback.decision.offer_answer, 'pushed_back');
 }
 
 console.log('\nwhere a letter goes is the sentence\'s decision');
