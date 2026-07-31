@@ -2,16 +2,61 @@
 // writes to, and the only address in this file that is not the customer's.
 const OWNER = 'flooring.demo.austin@gmail.com';
 
+// A rate reads as $4 or $4.50; a total reads as $5,600 and never as $5600.
+const money = (n) => {
+  const v = Number(n);
+  return `$${v.toLocaleString('en-US', {
+    minimumFractionDigits: Number.isInteger(v) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
+};
+
+// What the job costs per square foot, as a person reads it. The numbers come from price_bands and
+// the sentence around them from reply_templates; this only lays them out. A range is a published
+// rate, not a quote, so it can be said before anything else is known.
+const rateBlock = (asked) => {
+  const bands = typeof asked.bands === 'string' ? JSON.parse(asked.bands) : asked.bands;
+  const preamble = String(asked.rates_preamble || '').trim();
+  if (!Array.isArray(bands) || !bands.length || !preamble) return '';
+
+  const lines = bands
+    .map((b) => `  ${b.product}: ${money(b.rate_low)}-${money(b.rate_high)} per sq ft`)
+    .join('\n');
+
+  // A total only when the area is real and the job is one the firm would take. A quantity is never
+  // invented, and a figure shown to somebody outside the area is an invitation followed by a
+  // refusal.
+  const area = Number(asked.area_sqft);
+  const worth = asked.worth_illustrating === true || asked.worth_illustrating === 't';
+  const totals = (area > 0 && worth && bands.length)
+    ? `\n\nFor ${area.toLocaleString('en-US')} sq ft that comes to roughly `
+      + `${money(Math.round(area * Math.min(...bands.map((b) => Number(b.rate_low)))))} to `
+      + `${money(Math.round(area * Math.max(...bands.map((b) => Number(b.rate_high)))))}.`
+    : '';
+
+  return `${preamble}\n\n${lines}${totals}\n\n`;
+};
+
 const composeOne = (asked) => {
   // Joining strings, nothing else. Every sentence here was written by a person and is stored in
   // reply_templates, so changing how the firm sounds is an edit in the database rather than a
   // deployment -- and nothing in this file decides what the firm says.
-  const body = String(asked.body || '').trim();
   const signature = String(asked.signature || '');
 
+  // A refusal beats a number, and it beats a question. Somebody who wrote "Dallas" has told us
+  // where they are; asking them again is worse than saying no, and quoting them a rate is worse
+  // still -- it is an invitation to a job that will then be turned down.
+  const outOfArea = asked.out_of_area === true || asked.out_of_area === 't';
+  const refusal = String(asked.out_of_area_words || '').trim();
+  const body = outOfArea ? refusal : String(asked.body || '').trim();
+
   if (!body) {
-    throw new Error(`no template is stored for ${asked.template_key || 'this combination'} -- `
-      + 'reply_templates is missing a row, and sending an empty letter is worse than sending none');
+    throw new Error(outOfArea
+      ? 'no wording is stored for a property outside the service area, and asking somebody in '
+        + 'Dallas where they are is worse than saying nothing: reply_templates is missing '
+        + '"out_of_area"'
+      : `no template is stored for ${asked.template_key || 'this combination'} -- `
+        + 'reply_templates is missing a row, and sending an empty letter is worse than sending none');
   }
 
   // A lead forwarded by a platform with no reply-to leaves no address to answer. The router already
@@ -40,9 +85,11 @@ const composeOne = (asked) => {
     reaches_the_customer: alone,
     thread_id: alone ? asked.thread_id : null,
     subject: alone ? null : `Not sent -- a question for ${to}`,
-    body: alone ? body + signature
+    out_of_area: outOfArea,
+    body: alone ? (outOfArea ? body : rateBlock(asked) + body) + signature
       : `This was composed for ${to} and not sent, because the wording it uses is marked as `
-        + `needing a person first.\n\nAsking for: ${asked.asking_for}\n\n---\n\n${body}${signature}`,
+        + `needing a person first.\n\nAsking for: ${asked.asking_for}\n\n---\n\n`
+        + `${outOfArea ? body : rateBlock(asked) + body}${signature}`,
   };
 };
 
