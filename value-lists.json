@@ -49,6 +49,7 @@
         "offer_response",
         "money_known_contact",
         "scheduling_signal",
+        "the_job_is_ready",
         "same_job_signature",
         "thread_continuation",
         "not_a_customer",

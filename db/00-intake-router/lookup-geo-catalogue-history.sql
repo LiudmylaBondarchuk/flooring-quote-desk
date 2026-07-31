@@ -40,4 +40,20 @@ SELECT
       AND m.gmail_message_id <> $2::text
       AND m.created_at > now() - interval '30 days'
       AND m.material_category IS NOT NULL
-      AND m.area_sqft IS NOT NULL) AS prior_signatures;
+      AND m.area_sqft IS NOT NULL) AS prior_signatures,
+  -- The job this thread is about, if one is open. Everything above counts letters; nothing until
+  -- now told the gate what the work already knows, so every rule that asked "does this email carry
+  -- a material and a size" was really asking "did they repeat themselves in the last letter". A
+  -- customer who said laminate on Monday and 400 sq ft on Tuesday and "can you send me the price?"
+  -- on Wednesday was filed as continuing a conversation, and nobody priced a job that was ready.
+  (SELECT json_build_object('id', o.id,
+                            'state', o.state,
+                            'material', o.material_category,
+                            'area', o.area_sqft,
+                            'area_status', o.area_status,
+                            'zone', o.zone)
+     FROM orders o
+    WHERE o.thread_id = $9::text
+      AND o.state NOT IN ('booked', 'done', 'lost')
+    ORDER BY o.created_at DESC
+    LIMIT 1) AS open_job;

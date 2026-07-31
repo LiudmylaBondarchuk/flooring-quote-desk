@@ -118,6 +118,20 @@ until it was noticed. Deploying now compares the whole of each node and names, l
 difference it left behind, and the run reports itself as failed. It still does not push them:
 deciding to would mean deploying could quietly rewire a canvas.
 
+**The gate can see the job it is deciding about.** Everything it knew about history it counted
+from messages: the statement that feeds it mentions that table five times and `orders` not once. So
+every rule asking *does this email carry a material and a size* was really asking *did they repeat
+themselves in the last letter*. A customer who wrote "laminate, Kyle TX" on Monday, "about 400 sq
+ft" on Tuesday and "can you send me the price?" on Wednesday was filed as continuing a conversation
+and handed to a lane that does nothing. The job had everything a price needs and nobody priced it.
+
+That was the third defect of the same shape found by a real letter in two days, and the shape never
+varies: a rule reading the letter where it should read the job. The lookup hands over the open order
+for the thread now, and one rule sits ahead of everything that files a letter as *carry on where we
+left off* — a job with a material, a size and a town, which nobody has quoted, is a price waiting to
+be worked out, whatever this particular letter happens to say. Once a quote has gone out the same
+words mean something else, and the older rule takes them back.
+
 **The letter answers with a number before it asks anything.** A customer who wrote *how much for
 laminate?* was told only that we needed to know the size. They learn nothing, and they write to
 whoever answers — which is the pause this desk exists to remove and was causing. The rate now goes
