@@ -627,10 +627,61 @@ console.log('\nthe letter a customer would actually receive');
   check('it stays in their thread', letter.thread_id, 'th-w');
   check('the subject is Gmail\'s to continue, not ours to invent', letter.subject, null);
   check('it asks for the one thing missing, in the words a person wrote',
-    letter.body.startsWith('Thanks for getting in touch. To price this I need one more thing'), true);
+    letter.body.includes('To price this I need one more thing'), true);
   check('it does not ask for what it already knows', /what are you thinking of putting down/.test(letter.body), false);
   check('it is signed', letter.body.trimEnd().endsWith('the flooring desk'), true);
-  check('no number and no price is anywhere in it', /\$|\bsq ft\b|[0-9]{2,}/.test(letter.body), false);
+  // The old promise here was that an asking letter carried no figure at all. That was the pause
+  // this desk exists to remove, and it is deliberately reversed: the rate goes out first. What
+  // survives is the narrower and more important rule -- a TOTAL is only ever worked out from an
+  // area the customer gave, and this letter is asking for that area precisely because it has none.
+  check('it carries the rate for what they named', /Laminate standard: \$4-\$8 per sq ft/.test(letter.body), true);
+  check('but no total, because there is no area to multiply',
+    /comes to roughly/.test(letter.body), false);
+}
+
+console.log('\nthe letter answers with a number before it asks anything');
+{
+  // the material is known and the size is not: the rate for that material, and no total, because
+  // there is no area to multiply and a quantity is never invented
+  const one = arrive({
+    id: 'rate1', thread: 'th-rate1', from: 'ada@example.com',
+    text: 'laminate in the hallway, kyle tx',
+    extracted: { intent: 'new_quote', material: 'laminate', city: 'kyle',
+      evidence: { material: 'laminate', city: 'kyle' } },
+  });
+  const a = compose(askAbout('rate1', one.order_id));
+  check('the rate comes before the question',
+    a.body.indexOf('per sq ft') < a.body.indexOf('how many square feet'), true);
+  check('and it is the rate for what they named',
+    /Laminate standard: \$4-\$8 per sq ft/.test(a.body), true);
+  check('not for everything the firm lays', /Carpet|Engineered wood/.test(a.body), false);
+  check('no total is invented from nothing', /comes to roughly/.test(a.body), false);
+
+  // the size is known and the material is not: every rate, and a total, because the area is real
+  const two = arrive({
+    id: 'rate2', thread: 'th-rate2', from: 'bo@example.com',
+    text: 'about 400 sq ft, buda tx, not sure what to put down',
+    extracted: { intent: 'new_quote', area_sqft: 400, area_unit: 'sqft', city: 'buda',
+      evidence: { area_sqft: '400', area_unit: 'sq ft', city: 'buda' } },
+  });
+  const b = compose(askAbout('rate2', two.order_id));
+  check('every rate is shown when nothing was named',
+    ['Carpet', 'Laminate standard', 'Engineered wood'].every((p) => b.body.includes(p)), true);
+  check('and a total is worked out from the area they gave',
+    /For 400 sq ft that comes to roughly \$800 to \$5,600/.test(b.body), true);
+
+  // outside the service area: a refusal, and not a number in sight
+  const three = arrive({
+    id: 'rate3', thread: 'th-rate3', from: 'cy@example.com',
+    text: 'laminate, 400 sq ft, in dallas tx',
+    extracted: { intent: 'new_quote', material: 'laminate', area_sqft: 400, area_unit: 'sqft',
+      city: 'dallas',
+      evidence: { material: 'laminate', area_sqft: '400', area_unit: 'sq ft', city: 'dallas' } },
+  });
+  const c = compose(askAbout('rate3', three.order_id));
+  check('a property out of the area is told so', /outside what I can reach/.test(c.body), true);
+  check('and is not asked where it is', /Whereabouts is the property/.test(c.body), false);
+  check('and is given no figure at all', /\$/.test(c.body), false);
 }
 
 console.log('\nthe states the letter only claimed to handle');
@@ -834,6 +885,28 @@ console.log('\nand a customer who really is accepting one');
   check('this one is read as accepting', yes.decision.category, 'offer_response');
   check('and goes to a person, not to a price', yes.decision.route, 'project');
   check('marked for the owner now', yes.decision.gate_color, 'red');
+  check('and the gate says which way: accepted', yes.decision.offer_answer, 'accepted');
+}
+
+console.log('\nand a customer who is pushing back on the price');
+{
+  const first = arrive({
+    id: 'r22', thread: 'th-pushback', from: 'noah@example.com',
+    text: 'laminate, 300 sq ft, buda tx, what would it cost?',
+    extracted: { intent: 'new_quote', material: 'laminate', area_sqft: 300, area_unit: 'sqft',
+      city: 'buda',
+      evidence: { material: 'laminate', area_sqft: '300', area_unit: 'sq ft', city: 'buda' } },
+  });
+  priceIt('r22');
+
+  const pushback = arrive({
+    id: 'r23', thread: 'th-pushback', from: 'noah@example.com',
+    text: 'that is more than we expected',
+    extracted: { intent: 'offer_response', evidence: {} },
+  });
+  check('this one is read as haggling, not accepting', pushback.decision.category, 'offer_response');
+  check('the owner decides, not a price', pushback.decision.route, 'project');
+  check('and the gate says which way: pushed back', pushback.decision.offer_answer, 'pushed_back');
 }
 
 console.log('\nwhere a letter goes is the sentence\'s decision');

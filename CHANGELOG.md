@@ -206,6 +206,14 @@ watched to fail. Two survived that and were tightened because of it. The rules t
 decide whether a change may be pushed run in the build as well as locally, so they
 hold for a clone and not only for one machine.
 
+**Which way a reply to a quote went is now a fact, not a sentence.** The gate has always told
+acceptance from haggling; the difference used to live only in the words a person reads in
+`gate_reasons`, so a lane meant to act on it would need a second copy of the same vocabulary — and
+the first thing a second copy does is disagree with the first. `messages.offer_answer` now carries
+the gate's own verdict: `accepted`, `pushed_back`, or `NULL` for every other reply, which is nearly
+all of them. Deliberately not a boolean — a reply that is neither, a timing question or a change of
+material, is a real case and must not read as a refusal.
+
 ## 0.1.0
 
 First public state of the intake router. It reads a mailbox, decides what each
