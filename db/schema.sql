@@ -3,6 +3,16 @@
 
 BEGIN;
 
+-- Which files in db/history this database has run. Written by scripts/migrate.mjs at the moment
+-- it runs one, so nothing has to be remembered by a person. The checksum is what makes an edit to
+-- an already-applied migration visible instead of silent.
+CREATE TABLE schema_migrations (
+    filename    text        PRIMARY KEY,
+    checksum    text        NOT NULL,
+    applied_at  timestamptz NOT NULL DEFAULT now(),
+    watched     boolean     NOT NULL DEFAULT true
+);
+
 CREATE TABLE contacts (
     id          integer     GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     email       text        NOT NULL,

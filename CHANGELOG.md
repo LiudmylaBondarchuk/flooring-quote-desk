@@ -11,6 +11,25 @@ A conversation now outlives the email that started it, the price list is kept by
 owner rather than by a developer, and a price is computed and written down. The desk
 answers a customer for the first time — with a question, never with a figure.
 
+**The database remembers which migrations it has run.** There were twenty-eight files in
+`db/history` and no record anywhere of which of them production had actually seen. One turned out
+never to have arrived: a constraint sat in the canon, sat in a migration, and was absent from the
+live database, and nobody could have said when it went missing or whether anything else had. Each
+file had been pasted into a browser by hand, and that hand-off failed three times in a single day —
+a column typed as `note` for `notes`, a double dash inside a sentence that the editor read as a
+comment and truncated at, and a statement pasted with a `--` in front of it that reported success
+and did nothing.
+
+There is a ledger now, and a runner that reads it: what is pending, and `--apply` to run it. Each
+migration runs inside its own transaction together with the row recording it, because one that
+half-ran and was recorded as done is worse than one that never ran. A file that has already run and
+has been edited since is **refused** — the file says one thing, the database was built from another,
+and guessing which is right is the mistake. So is a row in the ledger with no file behind it.
+
+The ledger starts today rather than claiming to know the past: every existing file is recorded as
+applied-but-unwatched, which is the honest description. What proves the past is `db:check:live`,
+which compares the live schema against a clean build.
+
 **A job is a job, not a piece of paper.** An email joins an open order in its own
 thread, or opens one when it is the kind of email that starts work; the database
 holds one open order per thread through a partial unique index rather than through
