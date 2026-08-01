@@ -398,6 +398,151 @@
           "queryReplacement": "={{ [$json.visit_id] }}"
         }
       }
+    },
+    {
+      "id": "tell-clock",
+      "name": "Time to tell the owner",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        960
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "tell-needs",
+      "name": "What the owner has not been told",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        960
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Everything the owner is told before a visit, for agreed visits nobody has been told about.\n--\n-- Read off the job, never off the newest letter. A customer says \"laminate, Kyle TX\" one day and\n-- \"about 400 sq ft\" the next, and a message built from either letter alone sends somebody out\n-- knowing half of it.\n--\n-- Only agreed visits still ahead of us, and only those nobody has been told about: owner_told_at\n-- being null is what makes this run once. A visit that lapsed gets nothing -- nobody is driving\n-- anywhere.\n\nSELECT v.id                                   AS visit_id,\n       v.order_id,\n       v.agreed,\n       o.contact_email,\n       o.city,\n       o.zone,\n       o.material_category,\n       o.area_sqft,\n       o.area_unit,\n       o.existing_floor_action,\n       o.old_floor_removal,\n       o.fixing_method,\n       o.on_site_items,\n       o.booking_code,\n       (SELECT jsonb_build_object('low', f.total_low, 'high', f.total_high, 'kind', f.kind)\n          FROM offers f\n         WHERE f.order_id = o.id\n         ORDER BY f.created_at DESC\n         LIMIT 1)                             AS ballpark,\n       -- the rates for what the visit has to settle, from the price list rather than from anywhere\n       -- a number could have been typed by hand\n       (coalesce((SELECT jsonb_object_agg(b.component,\n                    jsonb_build_object('label', b.product, 'unit', b.unit,\n                                       'val_low', b.rate_low, 'val_high', b.rate_high))\n                    FROM price_bands b\n                   WHERE b.active AND b.component = 'stairs'), '{}'::jsonb)\n        || coalesce((SELECT jsonb_build_object('subfloor',\n                       jsonb_build_object('label', 'levelling and moisture work', 'unit', 'sqft',\n                                          'val_low', r.val_low, 'val_high', r.val_high))\n                       FROM pricing_rules r\n                      WHERE r.rule_key = 'subfloor_leveling'), '{}'::jsonb)) AS on_site_rates\n  FROM visits v\n  JOIN orders o ON o.id = v.order_id\n WHERE v.state = 'agreed'\n   AND v.owner_told_at IS NULL\n   AND v.agreed > now() - interval '1 day'\n   AND o.state NOT IN ('done', 'lost')\n ORDER BY v.agreed;\n",
+        "options": {
+          "queryReplacement": "={{ [] }}"
+        }
+      }
+    },
+    {
+      "id": "tell-write",
+      "name": "Write what the owner is told",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        960
+      ],
+      "parameters": {
+        "jsCode": "// What whoever drives out reads before knocking on the door.\n//\n// A message rather than a file, and not to the mailbox every customer writes to. Somebody about to\n// knock is holding a phone, not opening a drive, and a note that lands among the day's letters is\n// competing with the work for attention. This goes to its own channel and stays there.\n//\n// It is for the owner and never for the customer. It says what was quoted and calls it a ballpark,\n// it names what only the visit can settle and what this firm charges for those, and it says what to\n// bring. A customer reading it would learn what the firm charges itself and what it is unsure of,\n// neither of which is theirs to see.\n//\n// Built from the job rather than from the newest letter, for the same reason everything else here\n// is: a customer says \"laminate, Kyle TX\" one day and \"about 400 sq ft\" the next, and a message\n// made from either letter alone sends somebody out knowing half of it.\n\nconst WHERE_THE_WORK_IS = 'America/Chicago';\n\nconst when = (iso) => {\n  const at = new Date(iso);\n  if (Number.isNaN(at.getTime())) return null;\n  const day = at.toLocaleDateString('en-US', {\n    timeZone: WHERE_THE_WORK_IS, weekday: 'long', month: 'long', day: 'numeric',\n  });\n  const time = at.toLocaleTimeString('en-US', {\n    timeZone: WHERE_THE_WORK_IS, hour: 'numeric', minute: '2-digit',\n  }).toLowerCase().replace(/\\s/g, '');\n  return `${day}, ${time}`;\n};\n\nconst money = (n) => `$${Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;\nconst number = (n) => Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });\n\nconst SPELLED = {\n  remove_first: 'the old floor comes out',\n  over_existing: 'laying over what is there',\n};\n\n// What to bring, worked out from the job rather than printed the same every time. A list that never\n// changes is a list nobody reads by the third visit.\nconst toBring = (row, onSite) => {\n  const bring = ['tape measure', 'moisture meter'];\n  if (row.material_category) bring.push(`${row.material_category} samples`);\n  if (onSite.includes('subfloor')) bring.push('levelling compound sample', 'straightedge');\n  if (onSite.includes('stairs')) bring.push('tread gauge');\n  if (row.old_floor_removal === true) bring.push('a look under a corner of the old floor');\n  return bring;\n};\n\nreturn $input.all().map((item, i) => {\n  const row = item.json || {};\n  const at = when(row.agreed);\n  const onSite = Array.isArray(row.on_site_items) ? row.on_site_items : [];\n  const rates = row.on_site_rates && typeof row.on_site_rates === 'object' ? row.on_site_rates : {};\n  const ballpark = row.ballpark && typeof row.ballpark === 'object' ? row.ballpark : null;\n\n  if (!row.visit_id || !at) {\n    return {\n      json: { ...row, ready_to_tell: false, why_not: 'the visit has no readable time' },\n      pairedItem: { item: i },\n    };\n  }\n\n  const where = `${row.city || 'somewhere not established'}`\n    + `${row.zone ? ` (${row.zone} of the service area)` : ''}`;\n\n  const job = [\n    row.material_category || 'floor not said yet',\n    row.area_sqft ? `about ${number(row.area_sqft)} ${row.area_unit || 'sqft'}`\n      : 'no size given — measure everything',\n    row.existing_floor_action\n      ? (SPELLED[row.existing_floor_action] || row.existing_floor_action)\n      : 'what happens to the old floor is not established',\n    row.fixing_method || null,\n  ].filter(Boolean).join(', ');\n\n  // What was quoted, and that it was a ballpark. Somebody standing in the room needs to know what\n  // the customer already has in mind before saying a firm number out loud. It is here and nowhere\n  // near the agreement, which is the customer's and carries only the price agreed at the door.\n  const quoted = ballpark && ballpark.low !== null && ballpark.low !== undefined\n    ? `Quoted by email: ${money(ballpark.low)} to ${money(ballpark.high)}`\n      + ' — a ballpark, not a commitment. The firm price is yours to give on the day.'\n    : 'Quoted by email: nothing yet.';\n\n  const settleHere = onSite.map((thing) => {\n    const rate = rates[thing];\n    const range = rate ? ` — ${money(rate.val_low)} to ${money(rate.val_high)} per ${rate.unit}` : '';\n    return `  ${thing}${range}, named to the customer and not counted`;\n  });\n\n  const message = [\n    `Visit ${at} · ${where}`,\n    `Job ${row.order_id}${row.booking_code ? ` · code ${row.booking_code}` : ''}`\n      + `${row.contact_email ? ` · ${row.contact_email}` : ''}`,\n    '',\n    job,\n    quoted,\n    ...(settleHere.length ? ['', 'To settle on site:', ...settleHere] : []),\n    '',\n    `Bring: ${toBring(row, onSite).join(', ')}`,\n    '',\n    'Not for the customer. Written when the visit was agreed, from the job as it stood then.',\n  ].join('\\n');\n\n  return {\n    json: { ...row, ready_to_tell: true, why_not: null, message },\n    pairedItem: { item: i },\n  };\n});\n"
+      }
+    },
+    {
+      "id": "tell-ready",
+      "name": "Is there something to say?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        960
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ready",
+              "leftValue": "={{ $json.ready_to_tell }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "tell-slack",
+      "name": "Tell the owner",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        960,
+        880
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": null,
+          "name": "Slack account"
+        }
+      },
+      "parameters": {
+        "authentication": "accessToken",
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#visits",
+          "mode": "name"
+        },
+        "text": "={{ $json.message }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "webhookId": "1c883500-5689-487f-804c-380f6d0acd5a"
+    },
+    {
+      "id": "tell-said",
+      "name": "Say the owner was told",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1200,
+        880
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- The owner has been told, and this is when. Guarded so a second run finds nothing to stamp rather\n-- than saying the same visit again in the same channel.\n\nUPDATE visits\n   SET owner_told_at = now()\n WHERE id = $1::int\n   AND owner_told_at IS NULL\nRETURNING id, order_id, owner_told_at;\n",
+        "options": {
+          "queryReplacement": "={{ [$json.visit_id] }}"
+        }
+      }
     }
   ],
   "connections": {
@@ -546,6 +691,62 @@
         [
           {
             "node": "The visit is off",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Time to tell the owner": {
+      "main": [
+        [
+          {
+            "node": "What the owner has not been told",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What the owner has not been told": {
+      "main": [
+        [
+          {
+            "node": "Write what the owner is told",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write what the owner is told": {
+      "main": [
+        [
+          {
+            "node": "Is there something to say?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is there something to say?": {
+      "main": [
+        [
+          {
+            "node": "Tell the owner",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Tell the owner": {
+      "main": [
+        [
+          {
+            "node": "Say the owner was told",
             "type": "main",
             "index": 0
           }
