@@ -17,7 +17,9 @@ const seed = readFileSync(join(root, 'db', 'seeds', 'reference-data.sql'), 'utf8
 
 // db/seeds and db/history are where these rows are supposed to be written
 const SOURCES = [join('db', 'seeds'), join('db', 'history')];
-const READS = ['src', 'workflows', 'db'];
+// scripts is here because leaving it out cost a red CI: two harness checks asserted the old
+// signature word for word, and this check could not see them.
+const READS = ['src', 'workflows', 'db', 'scripts'];
 
 const unquote = (literal) => {
   const inner = literal.replace(/^E?'/, '').replace(/'$/, '').replace(/''/g, "'");
@@ -36,7 +38,7 @@ const walk = (dir) => {
     if (entry.isDirectory()) {
       if (SOURCES.some((s) => relative(root, here).startsWith(s))) continue;
       walk(here);
-    } else if (/\.(js|sql|json)$/.test(entry.name)) {
+    } else if (/\.(js|mjs|sql|json)$/.test(entry.name)) {
       files.push([relative(root, here), readFileSync(here, 'utf8')]);
     }
   }
