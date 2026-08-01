@@ -1869,6 +1869,21 @@ console.log('\nwhat a step and a square foot cost, and where those numbers come 
   check('and the stairs rate does too',
     [asIssued.stairs?.val_low, asIssued.stairs?.val_high, asIssued.stairs?.unit], [45, 80, 'each']);
 
+  // Before the price list is taken apart below, not after. Asked afterwards these two would pass
+  // against a gutted list -- they would hold just as well if on-site pricing had stopped working
+  // for every job there is, which is not what they read as saying.
+  const plain = Number(ask(`WITH made AS (
+      INSERT INTO orders (thread_id, state, contact_email, material_category, area_sqft, area_unit,
+                          area_status, city, zone)
+      VALUES ('t-plain', 'new', 'plain@example.com', 'Laminate', 300, 'sqft', 'known', 'Kyle, TX', 'core')
+      RETURNING id) SELECT id FROM made`));
+  ask(`INSERT INTO messages (thread_id, gmail_message_id, direction, sender, order_id, category, body)
+       VALUES ('t-plain', 'rate-2', 'inbound', 'client', ${plain}, 'quote_request', 'laminate, 300 sq ft')`);
+  const plainQuote = priceIt('rate-2').quote;
+  check('a job with neither is quoted neither, while both rates are there to be had',
+    plainQuote.breakdown.lines.filter((l) => l.kind === 'on_site').length, 0);
+  check('and is still priced', plainQuote.priceable, true);
+
   // the half of provenance a passing check never shows: change the list, and this must change
   ask("UPDATE pricing_rules SET val_low = 3.00, val_high = 7.00 WHERE rule_key = 'subfloor_leveling'");
   check('changing the price list changes what the quote is told',
@@ -1884,23 +1899,6 @@ console.log('\nwhat a step and a square foot cost, and where those numbers come 
   // an inactive band is not a rate, however present the row is
   ask("UPDATE price_bands SET active = false WHERE component = 'stairs'");
   check('and a band that has been retired stops being quoted', rates().stairs, undefined);
-
-  // a job carrying neither must come back with nothing rather than an empty rate
-  const plain = Number(ask(`WITH made AS (
-      INSERT INTO orders (thread_id, state, contact_email, material_category, area_sqft, area_unit,
-                          area_status, city, zone)
-      VALUES ('t-plain', 'new', 'plain@example.com', 'Laminate', 300, 'sqft', 'known', 'Kyle, TX', 'core')
-      RETURNING id) SELECT id FROM made`));
-  ask(`INSERT INTO messages (thread_id, gmail_message_id, direction, sender, order_id, category, body)
-       VALUES ('t-plain', 'rate-2', 'inbound', 'client', ${plain}, 'quote_request', 'laminate, 300 sq ft')`);
-  // The statement hands over every rate this firm keeps, whatever the job is; it is the
-  // arithmetic that decides which of them the job has. So the question "is a job with neither
-  // told about neither" belongs here and not one step earlier, where it would have been asserting
-  // something the statement never claimed to do.
-  const plainQuote = priceIt('rate-2').quote;
-  check('a job with neither is quoted neither',
-    plainQuote.breakdown.lines.filter((l) => l.kind === 'on_site').length, 0);
-  check('and is still priced', plainQuote.priceable, true);
 }
 
 console.log(`\n${failed === 0 ? 'all checks passed' : `${failed} check(s) FAILED`}`);

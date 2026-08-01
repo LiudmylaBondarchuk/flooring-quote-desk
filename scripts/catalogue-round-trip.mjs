@@ -171,15 +171,16 @@ console.log('\na product the owner has just started offering');
 {
   const sheet = JSON.parse(JSON.stringify(SEEDED));
   sheet[4].rate_low = 5.25;
-  // Something the price list does not already carry. Stair nosing used to stand here, back when
-  // the seeded list was six floor bands and stairs were the obvious example of a new line -- but
-  // stairs are quoted today, so they belong in what a fresh database starts with, and the example
-  // of a new product has to be one.
-  sheet.push(...asSheet([['Carpet', 'stairs', 'Carpet stair runner', 'each', '35', '60', '0', '', 'per step']]));
+  // A floor, not a second kind of stair. Stair nosing used to stand here, back when the seeded
+  // list was six floor bands -- but stairs are quoted today, so they belong in what a fresh
+  // database starts with. A carpet stair runner was the first replacement and it was worse: two
+  // active stairs bands is a state the quote statement cannot express, and a scenario has no
+  // business demonstrating one.
+  sheet.push(...asSheet([['Carpet', 'floor', 'Carpet tile', 'sqft', '3.00', '6.00', '10', '300.00', '']]));
   const out = sync(sheet);
   check('one row added, nothing retired', [out.added, out.deactivated], [1, 0]);
   check('the addition is in the log',
-    events().filter((e) => e.kind === 'added').map((e) => e.band), ['Carpet / stairs / Carpet stair runner']);
+    events().filter((e) => e.kind === 'added').map((e) => e.band), ['Carpet / floor / Carpet tile']);
 }
 
 console.log('\nthe read came back empty, which is what a broken connection looks like');
