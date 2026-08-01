@@ -81,6 +81,44 @@ const promptBody = (path) => {
 const only = process.argv.slice(2).filter((a) => !a.startsWith('-'));
 const adopt = process.argv.includes('--adopt');
 
+// There is one instance and there are many branches, and deploying is indifferent to which one it
+// is standing on. A branch that predates a lane's newest nodes will push its own older version of
+// them over the top, and the lane goes on running -- quieter, wronger, and without an error
+// anywhere. It happened twice in one day: once to a statement that had stopped recording a column,
+// and once nearly to a canvas that had just been rewired.
+//
+// So the tool asks git rather than trusting whoever is at the keyboard to remember. --anyway is for
+// the case that is genuinely deliberate, and being a word makes it a decision.
+if (!process.argv.includes('--anyway')) {
+  const { execFileSync } = await import('node:child_process');
+  const git = (...args) => execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  let behind = null;
+  try {
+    git('fetch', '--quiet', 'origin', 'main');
+    behind = Number(git('rev-list', '--count', 'HEAD..origin/main'));
+  } catch {
+    // A rule that cannot tell whether it applies has to say so. Guessing "probably fine" here is
+    // the same guess that put an older statement onto a live lane.
+    console.error('git could not say how this branch stands against origin/main, so this cannot');
+    console.error('tell whether deploying would push something older than what is live.');
+    console.error('Fix that, or pass --anyway if you know what you are doing.');
+    process.exit(1);
+  }
+  if (behind > 0) {
+    const branch = git('rev-parse', '--abbrev-ref', 'HEAD');
+    console.error(`refused — ${branch} is ${behind} commit(s) behind origin/main.`);
+    console.error('');
+    console.error('There is one instance. Deploying from here would push this branch\'s version of');
+    console.error('every shared lane over what is live, including the parts of it that were merged');
+    console.error('after this branch was cut. Nothing would report an error.');
+    console.error('');
+    console.error('  git checkout main && git pull    then deploy');
+    console.error('  or merge main into this branch first');
+    console.error('  or --anyway, if pushing the older version is the point');
+    process.exit(1);
+  }
+}
+
 let changed = 0;
 const outOfReach = [];
 for (const file of readdirSync(join(root, 'workflows')).filter((f) => f.endsWith('.json'))) {
