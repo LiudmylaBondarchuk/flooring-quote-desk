@@ -89,6 +89,10 @@ const SEEDED = asSheet([
   ['Laminate', 'floor', 'Laminate premium (water-resistant)', 'sqft', '6.00', '10.00', '10', '350.00', ''],
   ['LVP', 'floor', 'Luxury vinyl plank / tile', 'sqft', '4.50', '9.00', '10', '400.00', 'US avg ~6.50'],
   ['Wood', 'floor', 'Engineered wood', 'sqft', '7.00', '14.00', '10', '450.00', 'US avg ~10.50'],
+  // The sheet is the whole price list, not the floor part of it. A band seeded here and absent
+  // from the sheet is deactivated by the first import -- which is how the stairs rate came to
+  // exist on production and nowhere a fresh build could find it.
+  ['Wood', 'stairs', 'Stair nosing', 'each', '45.00', '80.00', '0', '', 'per step'],
 ]);
 
 const sync = (rows) => apply(rows);
@@ -109,7 +113,7 @@ console.log('\nthe sheet says exactly what the seed already said');
     [out.added, out.changed, out.deactivated, out.reactivated], [0, 0, 0, 0]);
   check('not one row was touched, down to when it was last stamped', bands(), before);
   check('nothing was written to the log', events(), []);
-  check('the count it reports back is the count that is live', out.active_after, 6);
+  check('the count it reports back is the count that is live', out.active_after, 7);
 }
 
 console.log('\none rate is edited in the sheet');
@@ -167,11 +171,15 @@ console.log('\na product the owner has just started offering');
 {
   const sheet = JSON.parse(JSON.stringify(SEEDED));
   sheet[4].rate_low = 5.25;
-  sheet.push(...asSheet([['Wood', 'stairs', 'Stair nosing', 'each', '45', '80', '0', '', 'per step']]));
+  // Something the price list does not already carry. Stair nosing used to stand here, back when
+  // the seeded list was six floor bands and stairs were the obvious example of a new line -- but
+  // stairs are quoted today, so they belong in what a fresh database starts with, and the example
+  // of a new product has to be one.
+  sheet.push(...asSheet([['Carpet', 'stairs', 'Carpet stair runner', 'each', '35', '60', '0', '', 'per step']]));
   const out = sync(sheet);
   check('one row added, nothing retired', [out.added, out.deactivated], [1, 0]);
   check('the addition is in the log',
-    events().filter((e) => e.kind === 'added').map((e) => e.band), ['Wood / stairs / Stair nosing']);
+    events().filter((e) => e.kind === 'added').map((e) => e.band), ['Carpet / stairs / Carpet stair runner']);
 }
 
 console.log('\nthe read came back empty, which is what a broken connection looks like');
