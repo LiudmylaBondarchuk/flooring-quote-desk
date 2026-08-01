@@ -1,0 +1,97 @@
+# It lives in the PUBLIC repository on purpose, so the run is visible in that repository's own
+# Actions tab while somebody is watching. The knowledge base is private and is checked out as a
+# step; nothing else in the public repository names it.
+#
+# The trigger is a label, and the label is the authorisation. Only somebody who can write to the
+# repository can add one, so no stranger's pull request can start this. Copilot is not the
+# trigger: it is not always asked for a review, and something that can only run after a reviewer
+# who may never arrive cannot be shown on demand.
+name: claim-check
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: pull request number
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    # The label by name, and the branch by origin. A pull request from a fork would have this
+    # job check out somebody else's code and then run npm ci -- which executes their
+    # postinstall script with every secret in this job already in the environment. Solo work
+    # loses nothing by refusing them; the day that changes, this needs rethinking rather than
+    # relaxing.
+    if: >-
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.label.name == 'claim-check' &&
+        github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: ci
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+        ports:
+          - 5432:5432
+    env:
+      CHECK_DATABASE_URL: postgres://postgres:ci@localhost:5432/postgres
+      DATABASE_URL: postgres://postgres:ci@localhost:5432/postgres
+      CLAIM_CHECK_PROJECT: flooring-quote-desk
+      CLAIM_CHECK_KB_PATH: ${{ github.workspace }}/knowledge-base
+    steps:
+      - name: checkout the pull request branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      # actions/checkout on a bare SHA does not create a local origin/main, and the diff is
+      # taken against it. The same reason ci.yml fetches it separately in its own guards job.
+      - name: fetch main for the diff
+        run: git fetch --no-tags origin main
+
+      # Read-only. This job runs code from a branch; a token that can write to the knowledge
+      # base has no business being in the same environment as it. The run's own record leaves
+      # as an artifact instead, which needs no write access anywhere.
+      - name: checkout the knowledge base
+        uses: actions/checkout@v5
+        with:
+          repository: LiudmylaBondarchuk/review-agent
+          token: ${{ secrets.REVIEW_AGENT_PAT }}
+          path: knowledge-base
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: install product dependencies (the checks run against these)
+        run: npm ci
+
+      - name: build the database the checks run against
+        run: npm run db:check
+
+      - name: claim-check
+        run: node knowledge-base/claim-check/review-pr.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # so the comment can point at the run that produced it
+          CLAIM_CHECK_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      # Kept whatever happened above, including a run that decided there was nothing to say.
+      - name: keep the record of this run
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claim-check-pr-${{ github.event.pull_request.number || inputs.pr }}
+          path: knowledge-base/runs/
+          if-no-files-found: ignore

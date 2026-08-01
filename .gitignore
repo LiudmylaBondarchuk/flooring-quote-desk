@@ -22,3 +22,6 @@ CLAUDE.md
 # fresh clone reads as five missing files. Two commits have swept it in by adding a directory.
 workflows/80-watchman.json
 db/80-watchman/
+
+# where claim-check writes the one-off script it runs; never part of this repository
+claim-check-scratch/
