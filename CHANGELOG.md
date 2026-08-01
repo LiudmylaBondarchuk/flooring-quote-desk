@@ -18,6 +18,11 @@ and compared, rather than written twice and hoped over. `messages` is left as it
 holds what a customer reported, including figures the gate looked at and refused, because their
 letter still has to show a person what they wrote.
 
+**A visit remembers where its job sheet was written.** `visits.job_sheet_url` is null until one
+exists, which is also what stops a second being made when the same booking is delivered twice. The
+sheet is for whoever drives out; it is never sent to the customer and nothing may put it in front of
+one.
+
 **A visit that moved or vanished stops being believed.** Bookings change and neither the change nor
 the cancellation arrives as a message anybody sends: a customer presses reschedule on Google's page,
 or the owner deletes a morning from her calendar, and the desk is told nothing either way. So the

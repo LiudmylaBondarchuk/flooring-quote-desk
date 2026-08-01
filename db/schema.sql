@@ -272,6 +272,7 @@ CREATE TABLE visits (
     agreed_at    timestamptz,
     booked_event_id text,
     confirmed_at timestamptz,
+    job_sheet_url text,
 
     CONSTRAINT visits_state_known CHECK (state IN ('offered', 'agreed', 'lapsed')),
     -- one direction only: an agreed visit has a time, and a cancelled one keeps the time it
