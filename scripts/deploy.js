@@ -136,17 +136,23 @@ for (const file of readdirSync(join(root, 'workflows')).filter((f) => f.endsWith
   // instance is left exactly as the canvas has it.
   if (brought.length) {
     const fresh = new Set(brought.map((n) => n.name));
-    for (const [from, groups] of Object.entries(exported.connections)) {
-      if (!groups?.main) continue;
-      const live = connections[from] || (connections[from] = { main: [] });
-      groups.main.forEach((group, i) => {
-        for (const edge of group || []) {
-          if (!fresh.has(from) && !fresh.has(edge.node)) continue;
-          while (live.main.length <= i) live.main.push([]);
-          const there = live.main[i].some((e) => e.node === edge.node && e.index === edge.index);
-          if (!there) live.main[i].push(edge);
-        }
-      });
+    for (const [from, byKind] of Object.entries(exported.connections)) {
+      const live = connections[from] || (connections[from] = {});
+      // every kind of wire, not only main: a model reaches an agent through ai_languageModel and a
+      // parser through ai_outputParser, and an agent deployed without those is an agent with no
+      // model. This read `groups.main` and skipped the rest, which would have been discovered live.
+      for (const [kind, groups] of Object.entries(byKind || {})) {
+        if (!Array.isArray(groups)) continue;
+        const here = live[kind] || (live[kind] = []);
+        groups.forEach((group, i) => {
+          for (const edge of group || []) {
+            if (!fresh.has(from) && !fresh.has(edge.node)) continue;
+            while (here.length <= i) here.push([]);
+            const there = here[i].some((e) => e.node === edge.node && e.index === edge.index);
+            if (!there) here[i].push(edge);
+          }
+        });
+      }
     }
   }
 
@@ -159,6 +165,30 @@ for (const file of readdirSync(join(root, 'workflows')).filter((f) => f.endsWith
   if (onlyLive.length) {
     console.log(`note ${file} — the instance has ${onlyLive.length} node(s) this export does not: `
       + `${onlyLive.join(', ')}. Nothing was removed; delete them in n8n if they are finished with.`);
+  }
+
+  // The same blindness one level down, and it is worse. Adding a node between two others leaves the
+  // old wire between them in place, so the work runs down both paths at once -- once through the
+  // new node and once around it. That happened when the second reader was put between the gate and
+  // the save, and every email would have been triaged twice.
+  const strandedWires = [];
+  for (const [from, byKind] of Object.entries(connections)) {
+    const mine = exported.connections[from];
+    for (const [kind, groups] of Object.entries(byKind || {})) {
+      if (!Array.isArray(groups)) continue;
+      groups.forEach((group, i) => {
+        for (const edge of group || []) {
+          const known = (mine?.[kind]?.[i] || []).some(
+            (e) => e.node === edge.node && e.index === edge.index);
+          if (!known) strandedWires.push(`${from} -> ${edge.node}`);
+        }
+      });
+    }
+  }
+  if (strandedWires.length) {
+    console.log(`note ${file} — the instance has ${strandedWires.length} wire(s) this export does `
+      + `not: ${strandedWires.join(', ')}. Nothing was removed. A wire left beside a node that was `
+      + 'meant to replace it runs the work down both paths at once.');
   }
 
   let touched = brought.length;

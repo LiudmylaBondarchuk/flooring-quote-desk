@@ -639,6 +639,59 @@ console.log('\nthe letter a customer would actually receive');
     /comes to roughly/.test(letter.body), false);
 }
 
+console.log('\nthe second reader can only ever raise a hand');
+{
+  const foldSource = read('src', '00-intake-router', 'fold-in-the-second-opinion.js');
+  // the same file in both modes: watching, which is how it is deployed, and acting, which is what
+  // one word turns on. The safety property has to hold in both, and it is only interesting in the
+  // second -- so it is exercised there rather than left until the day somebody flips it.
+  const foldWith = (acting) => (decision, verdict) => new Function('$input', '$',
+    foldSource.replace('const THE_READER_MAY_ACT = false;', `const THE_READER_MAY_ACT = ${acting};`))(
+    { all: () => [{ json: verdict }] },
+    () => ({ all: () => [{ json: decision }] }),
+  )[0].json;
+  const fold = foldWith(true);
+  const watching = foldWith(false);
+
+  const free = { gmail_message_id: 'f1', category: 'quote_request', auto_blocked: false };
+  const held = { gmail_message_id: 'f2', category: 'quote_request', auto_blocked: true };
+
+  check('a reader that agrees changes nothing',
+    fold(free, { holds: true }).auto_blocked, false);
+  check('and says so on the message', fold(free, { holds: true }).second_opinion, 'holds');
+
+  const stopped = fold(free, { holds: false, why: 'they asked for anything but laminate' });
+  check('a reader that disagrees raises the hand', stopped.auto_blocked, true);
+  check('and the reason is kept for the owner',
+    stopped.second_opinion_why, 'they asked for anything but laminate');
+
+  check('a hand the gate raised is never lowered by agreement',
+    fold(held, { holds: true }).auto_blocked, true);
+  check('nor by silence', fold(held, {}).auto_blocked, true);
+
+  // three ways of saying nothing usable, and all three must leave the decision alone
+  for (const [what, verdict] of [['no answer at all', {}],
+                                 ['a shape nobody expects', { verdict: 'maybe' }],
+                                 ['a refusal with no reason', { holds: false }]]) {
+    const out = fold(free, verdict);
+    check(`${what} changes nothing`, [out.auto_blocked, out.second_opinion], [false, null]);
+  }
+
+  check('the decision itself is carried through untouched',
+    fold(free, { holds: true }).category, 'quote_request');
+
+  // as deployed today: the opinion is written down and nothing acts on it
+  const seen = watching(free, { holds: false, why: 'they asked for anything but laminate' });
+  check('while it is only watching, the hand stays down', seen.auto_blocked, false);
+  check('but what it thought is still written down', seen.second_opinion, 'does_not_hold');
+  check('with the reason, ready to be counted later',
+    seen.second_opinion_why, 'they asked for anything but laminate');
+  check('and a hand the gate raised is still not touched by it',
+    watching(held, { holds: true }).auto_blocked, true);
+  check('and the answer is wrapped in output, as the parser returns it',
+    fold(free, { output: { holds: false, why: 'the town is not in Texas' } }).auto_blocked, true);
+}
+
 console.log('\na job that has everything is priced, whatever the newest letter says');
 {
   // the conversation a live letter found on 31 July: three emails, the third carrying nothing at

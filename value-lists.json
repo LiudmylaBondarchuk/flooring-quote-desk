@@ -535,6 +535,17 @@
         "messages.offer_answer"
       ],
       "produced_by_gate": "offer_answer"
+    },
+    "second_opinion": {
+      "means": "what a second reader made of the decision the code reached. NULL when it was not asked, did not answer, or answered something unusable -- and then nothing changes.",
+      "values": [
+        "holds",
+        "does_not_hold"
+      ],
+      "sql": [
+        "messages.second_opinion"
+      ],
+      "not_produced_by_gate": "a model answers this after the gate has decided, not the gate itself"
     }
   }
 }
