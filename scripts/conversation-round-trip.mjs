@@ -1984,6 +1984,12 @@ console.log('\nwhat the owner is told before a visit');
   check('the moment it kept is the first one',
     ask(`SELECT owner_told_at IS NOT NULL FROM visits WHERE id = ${visitId}`), 't');
 
+  // a moved visit is told about again, with the time it now has
+  rowOf(visitSql('the-visit-moved'), [visitId, '2026-08-06T18:30:00+00:00']);
+  check('a visit that moved is waiting to be told about again', mine().length, 1);
+  check('and what is said carries the new time',
+    compose(mine()[0]).message.includes('Thursday, August 6, 1:30pm'), true);
+
   // nobody is driving anywhere
   ask(`UPDATE visits SET state = 'lapsed' WHERE order_id = ${bareId}`);
   check('a cancelled visit is not prepared for',
