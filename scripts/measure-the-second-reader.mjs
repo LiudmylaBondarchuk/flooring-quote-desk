@@ -37,6 +37,11 @@ const assemble = readFileSync(
   join(root, 'db', '00-intake-router', 'what-the-second-reader-is-asked.sql'), 'utf8')
   .replace(/;\s*$/, '');
 
+// Only letters the gate that exists today decided. Half of what is on file was triaged before
+// several of these columns were, by rules since rewritten, and the reader read those old decisions
+// and objected -- rightly, since they were wrong at the time and have since been fixed. Measuring
+// against them measures the repairs, not the reader. That is what matched_rule filters: it was
+// added on 27 July, so its presence is the mark of a decision the current rules made.
 const letters = asJson(`
   SELECT gmail_message_id, thread_id, is_outbound, category, route,
          coalesce(missing_fields, '[]'::jsonb) AS missing_fields,
@@ -44,6 +49,7 @@ const letters = asJson(`
          coalesce(gate_reasons, '[]'::jsonb) AS gate_reasons
     FROM messages
    WHERE category IS NOT NULL
+     AND matched_rule IS NOT NULL
    ORDER BY created_at`);
 
 const quote = (v) => `'${String(v).replace(/'/g, "''")}'`;
