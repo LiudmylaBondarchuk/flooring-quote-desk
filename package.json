@@ -15,6 +15,7 @@
     "deploy": "npm run test:logic && node --env-file=.env scripts/deploy.js && npm run extract && npm test",
     "test:logic": "node --test tests/decision-gate.test.js tests/invariants.test.js tests/signal-dictionaries.test.js tests/lookup-contract.test.js tests/extraction-contract.test.js tests/storage-contract.test.js tests/read-the-sheet.test.js tests/handoff-status.test.js tests/migration-names.test.js",
     "guards": "node scripts/guards.mjs",
+    "ci:wait": "node scripts/ci-wait.mjs",
     "scan": "gitleaks detect --no-git --redact --config .gitleaks.toml -v",
     "db:check": "sh scripts/db-check.sh",
     "db:check:live": "sh scripts/db-check.sh --live",
