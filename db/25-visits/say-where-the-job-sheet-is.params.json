@@ -1,0 +1,3 @@
+{
+  "queryReplacement": "={{ [$json.visit_id, $json.job_sheet_url] }}"
+}

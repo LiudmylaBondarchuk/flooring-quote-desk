@@ -1899,6 +1899,91 @@ console.log('\nwhat a step and a square foot cost, and where those numbers come 
   // an inactive band is not a rate, however present the row is
   ask("UPDATE price_bands SET active = false WHERE component = 'stairs'");
   check('and a band that has been retired stops being quoted', rates().stairs, undefined);
+
+  // Put the price list back. This block borrows the shared database to prove where a rate comes
+  // from, and everything after it in this file reads the same rows -- a check that takes something
+  // away and leaves it away is a check that quietly rewrites the ones below it. Which is exactly
+  // the defect a reviewer found in this same block, one section down.
+  ask("UPDATE price_bands SET active = true, rate_low = 45.00 WHERE component = 'stairs'");
+  ask(`INSERT INTO pricing_rules (rule_key, val_low, val_high, notes)
+       VALUES ('subfloor_leveling', 2.00, 5.00, 'per sqft; TX slab moisture -> survey')
+       ON CONFLICT (rule_key) DO UPDATE SET val_low = 2.00, val_high = 5.00`);
+  check('and the price list is left as it was found',
+    [rates().stairs?.val_low, rates().subfloor?.val_low], [45, 2]);
+}
+
+console.log('\nthe sheet whoever drives out reads before knocking');
+{
+  const visitSql = (n) => read('db', '25-visits', `${n}.sql`).replace(/;\s*$/, '');
+  const sheetSource = read('src', '25-visits', 'write-the-job-sheet.js');
+  const compose = (row) => new Function('$input', sheetSource)({ all: () => [{ json: row }] })[0].json;
+  const waiting = () => JSON.parse(ask(
+    `SELECT coalesce(json_agg(t), '[]'::json) FROM (${visitSql('what-the-job-sheet-needs')}) t`));
+
+  // the facts arrive across two letters, which is the whole reason this reads the job
+  const orderId = Number(ask(`WITH made AS (
+      INSERT INTO orders (thread_id, state, contact_email, material_category, area_sqft, area_unit,
+                          area_status, city, zone, existing_floor_action, old_floor_removal,
+                          on_site_items, booking_code)
+      VALUES ('t-sheet', 'survey_needed', 'sheet@example.com', 'Laminate', 400, 'sqft', 'known',
+              'Kyle, TX', 'core', 'remove_first', true, '{stairs,subfloor}', 'SHEET23')
+      RETURNING id) SELECT id FROM made`));
+  ask(`INSERT INTO offers (order_id, kind, status, total_low, total_high)
+       VALUES (${orderId}, 'ballpark', 'sent', 1760, 4400)`);
+  const visitId = Number(ask(`WITH made AS (
+      INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id)
+      VALUES (${orderId}, 'agreed', '["the booking page"]'::jsonb, '2026-08-04T18:30:00+00:00',
+              now(), 'e-sheet')
+      RETURNING id) SELECT id FROM made`));
+
+  const mine = () => waiting().filter((r) => Number(r.visit_id) === visitId);
+  check('a visit with no sheet is waiting for one', mine().length, 1);
+
+  const written = compose(mine()[0]);
+  check('there is a sheet to write', written.ready_to_write, true);
+  check('the time is in Texas', written.sheet.includes('Tuesday, August 4, 1:30pm'), true);
+  check('the job is on it, from the order rather than a letter',
+    ['Floor:     Laminate', 'Area:      about 400 sqft', 'Kyle, TX', 'the old floor comes out']
+      .every((line) => written.sheet.includes(line)), true);
+  check('what was quoted is on it, and called a ballpark',
+    written.sheet.includes('$1,760 to $4,400') && written.sheet.includes('a ballpark from the email'), true);
+  check('what the visit must settle is named with a rate and marked as not counted',
+    written.sheet.includes('stairs — $45 to $80 per each, named to the customer and not counted'), true);
+  check('and what to bring follows from the job rather than a fixed list',
+    ['Laminate samples', 'levelling compound sample', 'tread gauge', 'a look under a corner']
+      .every((thing) => written.sheet.includes(thing)), true);
+  // the rule this whole thing is under
+  check('the sheet says on its face that it is not for the customer',
+    written.sheet.includes('Not for the customer'), true);
+
+  // the case that would otherwise render as a row of blanks
+  const bareId = Number(ask(`WITH made AS (
+      INSERT INTO orders (thread_id, state, contact_email, city, zone)
+      VALUES ('t-bare', 'survey_needed', 'bare@example.com', 'Buda, TX', 'core')
+      RETURNING id) SELECT id FROM made`));
+  ask(`WITH made AS (INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id)
+       VALUES (${bareId}, 'agreed', '["the booking page"]'::jsonb, '2026-08-05T18:30:00+00:00',
+               now(), 'e-bare') RETURNING id) SELECT id FROM made`);
+  const bare = compose(waiting().find((r) => Number(r.order_id) === bareId));
+  check('a job that has said almost nothing still gets a usable sheet',
+    ['Floor:     not said yet', 'Area:      not said yet — measure everything',
+     'Quoted:    nothing yet.'].every((line) => bare.sheet.includes(line)), true);
+  check('and it is not told to bring samples of nothing',
+    bare.sheet.includes('samples'), false);
+
+  // written once
+  rowOf(visitSql('say-where-the-job-sheet-is'), [visitId, 'https://drive.example/sheet-1']);
+  check('a visit that has a sheet stops waiting for one', mine().length, 0);
+  check('and a second run stamps nothing', ask(
+    `WITH again AS (${fill(visitSql('say-where-the-job-sheet-is'), [visitId, 'https://drive.example/second'])})
+     SELECT count(*) FROM again`), '0');
+  check('the address it kept is the first one',
+    ask(`SELECT job_sheet_url FROM visits WHERE id = ${visitId}`), 'https://drive.example/sheet-1');
+
+  // nobody is driving anywhere
+  ask(`UPDATE visits SET state = 'lapsed' WHERE order_id = ${bareId}`);
+  check('a cancelled visit is not prepared for',
+    waiting().filter((r) => Number(r.order_id) === bareId).length, 0);
 }
 
 console.log(`\n${failed === 0 ? 'all checks passed' : `${failed} check(s) FAILED`}`);
