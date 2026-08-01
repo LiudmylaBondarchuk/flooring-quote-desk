@@ -1962,6 +1962,14 @@ console.log('\nwhat the owner is told before a visit');
   check('it says on its face that it is not for the customer',
     said.message.includes('Not for the customer'), true);
 
+  // a price nobody has seen is not what the customer is expecting
+  ask(`INSERT INTO offers (order_id, kind, status, total_low, total_high)
+       VALUES (${orderId}, 'ballpark', 'draft', 9990, 9999)`);
+  check('a draft price is not read out as what was quoted',
+    compose(mine()[0]).message.includes('$1,760 to $4,400'), true);
+  check('and the draft\'s own figures reach nobody',
+    compose(mine()[0]).message.includes('9,99'), false);
+
   // the case that would otherwise be a row of blanks
   const bareId = Number(ask(`WITH made AS (
       INSERT INTO orders (thread_id, state, contact_email, city, zone)

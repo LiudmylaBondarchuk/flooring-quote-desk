@@ -22,9 +22,14 @@ SELECT v.id                                   AS visit_id,
        o.fixing_method,
        o.on_site_items,
        o.booking_code,
+       -- a ballpark that actually went out. A draft or one still waiting on the owner's word has
+       -- not been seen by anybody, and reading it out as "quoted by email" would send somebody to
+       -- a door believing the customer expects a number nobody ever sent them.
        (SELECT jsonb_build_object('low', f.total_low, 'high', f.total_high, 'kind', f.kind)
           FROM offers f
          WHERE f.order_id = o.id
+           AND f.kind = 'ballpark'
+           AND f.status IN ('sent', 'accepted', 'declined', 'expired')
          ORDER BY f.created_at DESC
          LIMIT 1)                             AS ballpark,
        -- the rates for what the visit has to settle, from the price list rather than from anywhere
