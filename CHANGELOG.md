@@ -11,6 +11,20 @@ A conversation now outlives the email that started it, the price list is kept by
 owner rather than by a developer, and a price is computed and written down. The desk
 answers a customer for the first time — with a question, never with a figure.
 
+**The letters are signed by a firm with a name.** They went out as "the flooring desk", which says
+what sent a letter rather than who it came from — serviceable while a letter only carried a rough
+price, and wrong the moment somebody is asked to sign an agreement with the same outfit. Shoal Creek
+Flooring now, with the service area under it, because that is what people ask before anything else
+and a signature is where they are already looking. It is one row, and the six letters that read that
+row pick it up untouched. The letters go on saying "I": one person does this work.
+
+**And nothing a customer reads is written down twice.** The name, the booking page, the words that
+turn a job down — each is a row so that changing it is an UPDATE and not a deploy, and nothing
+enforced that. A copy is never made on purpose: somebody wants the link in one more letter, types it
+where the work already is, and both copies are right that afternoon. The row is edited months later
+and the copy that stays behind is the one nobody remembers writing. The stored templates are now
+read out of the seed and refused anywhere under `src`, `workflows` or `db`.
+
 **An order holds only the floors the gate will stand behind.** The constraint allowed anything under
 a million where the gate settles between twenty and twenty thousand square feet — every value in
 between refused by the code and permitted by the database. The two numbers are now read out of both

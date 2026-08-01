@@ -14,6 +14,11 @@ const read = (...p) => readFileSync(join(root, ...p), 'utf8');
 const run = (args, input) => execFileSync('psql', [url, '-q', ...args], { input, encoding: 'utf8' });
 const ask = (sql) => execFileSync('psql', [url, '-t', '-A', '-c', sql], { encoding: 'utf8' }).trim();
 
+// asked of the database this harness just built, never written here. The name the firm signs with
+// is a row precisely so that changing it is an UPDATE, and a harness holding its own copy would
+// have to be edited every time — which is how a check ends up asserting last year's name.
+const signature = () => ask("SELECT body FROM reply_templates WHERE key = 'signature'").trim();
+
 if (ask("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'") !== '0') {
   console.error('refusing to run: CHECK_DATABASE_URL is not empty. It must be disposable.');
   process.exit(1);
@@ -629,7 +634,7 @@ console.log('\nthe letter a customer would actually receive');
   check('it asks for the one thing missing, in the words a person wrote',
     letter.body.includes('To price this I need one more thing'), true);
   check('it does not ask for what it already knows', /what are you thinking of putting down/.test(letter.body), false);
-  check('it is signed', letter.body.trimEnd().endsWith('the flooring desk'), true);
+  check('it is signed', letter.body.trimEnd().endsWith(signature()), true);
   // The old promise here was that an asking letter carried no figure at all. That was the pause
   // this desk exists to remove, and it is deliberately reversed: the rate goes out first. What
   // survives is the narrower and more important rule -- a TOTAL is only ever worked out from an
@@ -1077,7 +1082,7 @@ console.log('\na price becomes a letter, and it only ever reaches the owner');
     letter.body.includes(letter.the_letter_itself), true);
   check('with the words a person wrote, not the code',
     /Thanks for the details/.test(letter.the_letter_itself), true);
-  check('and it is signed', letter.the_letter_itself.trimEnd().endsWith('the flooring desk'), true);
+  check('and it is signed', letter.the_letter_itself.trimEnd().endsWith(signature()), true);
   check('the figures are in it', /\$/.test(letter.the_letter_itself), true);
   check('every priced line shows the rate it came from',
     /at \$[\d,]+(-\$[\d,]+)?\/sqft/.test(letter.the_letter_itself), true);
