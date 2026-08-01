@@ -63,8 +63,10 @@ CREATE TABLE orders (
     CONSTRAINT orders_fixing_known CHECK (fixing_method IS NULL OR fixing_method IN (
         'click_lock', 'floating', 'glue_down', 'nail_down', 'staple_down',
         'loose_lay', 'peel_and_stick', 'mortar_set', 'thinset')),
+    -- the range the gate will settle an area within, and nothing wider. messages is looser on
+    -- purpose: it holds what a customer reported, including figures the gate refused.
     CONSTRAINT orders_area_sane CHECK (area_sqft IS NULL
-        OR (area_sqft > 0 AND area_sqft < 1000000)),
+        OR (area_sqft >= 20 AND area_sqft <= 20000)),
     CONSTRAINT orders_booking_code_shape CHECK (booking_code IS NULL
         OR booking_code ~ '^[ABCDEFGHJKMNPQRSTUVWXYZ]{5}[23456789]{2}$'),
     CONSTRAINT orders_on_site_items_known CHECK (on_site_items <@ ARRAY['stairs']::text[]),

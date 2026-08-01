@@ -377,3 +377,20 @@ for (const [name, list] of named.filter(([, l]) => l.fixture_field)) {
     });
   }
 }
+
+// --- the database's idea of a plausible floor, against the gate's
+//
+// A fourth copy of a rule, and the one place it could quietly widen: the gate decides which areas
+// it will stand behind, and orders may hold only those. Written as numbers in two languages, so it
+// is read from both rather than trusted in either.
+test('orders_area_sane holds exactly the range the gate settles', () => {
+  const { captured } = constants[DEFAULT_SOURCE];
+  const schema = readFileSync(join(root, 'db', 'schema.sql'), 'utf8');
+  const found = schema.match(
+    /CONSTRAINT orders_area_sane CHECK \(area_sqft IS NULL\s*OR \(area_sqft >= (\d+) AND area_sqft <= (\d+)\)\)/);
+  assert.ok(found, 'db/schema.sql has no orders_area_sane in the shape this reads');
+  assert.equal(Number(found[1]), captured.AREA_MIN,
+    'the database accepts floors smaller than the gate will settle');
+  assert.equal(Number(found[2]), captured.AREA_MAX,
+    'the database accepts floors larger than the gate will settle');
+});
