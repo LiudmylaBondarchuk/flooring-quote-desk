@@ -11,6 +11,15 @@ A conversation now outlives the email that started it, the price list is kept by
 owner rather than by a developer, and a price is computed and written down. The desk
 answers a customer for the first time — with a question, never with a figure.
 
+**Three times are offered, and one of them is agreed.** A job left at `survey_needed` had nothing
+to do next. Now the desk names concrete times, the customer replies with a number, and `visits`
+remembers which was taken — the times as they were offered, in the order they were offered, so that
+*the second one* still means something a month later. By reply and not by a link: a link needs a
+page, a login and a customer willing to use both, and a reply is one keystroke. A reply must name
+exactly one of the times and nothing that argues with it; two numbers, none, a refusal or a time of
+their own all go to a person, because the cost of asking the owner is one email and the cost of
+guessing is a van outside the wrong house.
+
 **A staircase no longer stops the floor being priced.** The word *stairs* marked the scope unknown,
 which holds the whole email for a person — so a customer who mentioned a staircase got no number for
 their floor either, and the floor was always perfectly priceable. Stairs vary: straight, winder,

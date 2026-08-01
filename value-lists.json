@@ -364,6 +364,17 @@
         "orders.on_site_items"
       ]
     },
+    "visit_state": {
+      "means": "where an offer of times stands. offered: three times named and nothing said back. agreed: the customer picked one. lapsed: nobody answered and the times are past.",
+      "values": [
+        "offered",
+        "agreed",
+        "lapsed"
+      ],
+      "sql": [
+        "visits.state"
+      ]
+    },
     "order_event_kind": {
       "means": "why a line was written in an order's history: it was created, a fact merged, a fact corrected, its state moved, or a draft ratified.",
       "not_produced_by_gate": "written by the order layer, not by the decision gate",

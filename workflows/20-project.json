@@ -74,6 +74,65 @@
           "queryReplacement": "={{ [$json.gmail_message_id] }}"
         }
       }
+    },
+    {
+      "id": "times-open",
+      "name": "What times are open",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        760,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- The open offer of times on the job this letter belongs to, if there is one, and the letter itself.\n--\n-- Only 'offered' rows: a visit already agreed is not answered again, and a lapsed one is history.\n-- The unique index makes \"the open offer\" a single row rather than a choice.\n\nSELECT m.gmail_message_id,\n       m.order_id,\n       coalesce(m.body, '')                    AS body,\n       v.id                                    AS visit_id,\n       coalesce(v.offered, '[]'::jsonb)        AS offered\n  FROM messages m\n  LEFT JOIN visits v ON v.order_id = m.order_id AND v.state = 'offered'\n WHERE m.gmail_message_id = $1::text;\n",
+        "options": {
+          "queryReplacement": "={{ [$json.gmail_message_id] }}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Which of the times we offered the customer meant, if any.\n//\n// Three times went out numbered, so most replies are a digit and nothing else. The rest are prose,\n// and prose is where this must be careful: reading \"not the 2nd, but the 3rd works\" as a vote for\n// two would put somebody's van outside a house on the wrong morning.\n//\n// The rule is that a reply must name exactly one of the times and nothing that argues with it.\n// Anything else -- two numbers, none, a refusal, a new time of their own -- goes to a person. There\n// is no cost to being wrong in that direction; the owner reads one more email. The cost the other\n// way is a wasted drive and a customer who was told a time nobody wrote down.\n\n// \"one\" is missing from the first of these on purpose. It is a pronoun far more often than a\n// number -- \"the second one please\" names the second time and mentions the word one -- and reading\n// both made that reply ambiguous and sent it to a person. Nobody picking the first time writes\n// \"one\" alone; they write 1 or first.\nconst ORDINALS = [\n  [1, /\\b(1|first|1st)\\b/i],\n  [2, /\\b(2|two|second|2nd)\\b/i],\n  [3, /\\b(3|three|third|3rd)\\b/i],\n  [4, /\\b(4|four|fourth|4th)\\b/i],\n  [5, /\\b(5|five|fifth|5th)\\b/i],\n];\n\n// A reply that turns all three down often names one on the way past -- \"tuesday is no good\" -- so\n// a refusal has to win over a number rather than being outvoted by it.\nconst REFUSES = /\\bnone\\b|neither|no good|don'?t work|doesn'?t work|do not work|does not work|can'?t (do|make)|cannot (do|make)|unable to make|another (time|day|week)|different (time|day)|any other/i;\n\n// and a reply proposing its own time is an answer to a different question than the one asked\nconst PROPOSES = /\\bhow about\\b|\\bwhat about\\b|\\binstead\\b|\\bcould you (do|come)\\b|\\bwould (\\w+ )?work\\b|\\bany chance\\b/i;\n\nconst asked = (text) => {\n  const said = String(text || '');\n  if (!said.trim()) return { picked: null, why: 'the reply had no words in it' };\n  if (REFUSES.test(said)) return { picked: null, why: 'the reply turns the times down' };\n  if (PROPOSES.test(said)) return { picked: null, why: 'the reply proposes a time of its own' };\n\n  const named = ORDINALS.filter(([, pattern]) => pattern.test(said)).map(([n]) => n);\n  if (named.length === 0) return { picked: null, why: 'the reply names none of the times' };\n  if (named.length > 1) {\n    return { picked: null, why: `the reply names ${named.join(' and ')} — it cannot be read as one` };\n  }\n  return { picked: named[0], why: null };\n};\n\nreturn $input.all().map((item, i) => {\n  const row = item.json || {};\n  const offered = Array.isArray(row.offered) ? row.offered\n    : (typeof row.offered === 'string' ? JSON.parse(row.offered) : []);\n\n  // no open offer on this job: a reply about times when nobody offered any is a person's problem,\n  // not a lookup that quietly matches the wrong visit\n  if (!row.visit_id || !offered.length) {\n    return {\n      json: { ...row, agreed: null, agreed_index: null, needs_a_person: true,\n        why_not: 'there is no open offer of times on this job' },\n      pairedItem: { item: i },\n    };\n  }\n\n  const { picked, why } = asked(row.body);\n  const withinRange = picked !== null && picked <= offered.length;\n\n  return {\n    json: {\n      ...row,\n      agreed: withinRange ? offered[picked - 1] : null,\n      agreed_index: withinRange ? picked : null,\n      needs_a_person: !withinRange,\n      why_not: withinRange ? null\n        : (why || `the reply names ${picked}, and only ${offered.length} times were offered`),\n    },\n    pairedItem: { item: i },\n  };\n});\n"
+      },
+      "id": "which-time",
+      "name": "Which time did they pick",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        980,
+        480
+      ]
+    },
+    {
+      "id": "remember-time",
+      "name": "Remember the agreed time",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1200,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- The time the customer picked, written down against the offer it answers.\n--\n-- Idempotent on the message: the router can deliver the same reply twice, and the second delivery\n-- must find the visit already agreed and change nothing. Guarded on state rather than on agreed_in\n-- so that a second, different reply to a settled visit is also refused -- a customer who changes\n-- their mind is a person's conversation, not a silent overwrite of a date somebody has driven to.\n\nWITH answered AS (\n  -- nullif before the cast: a reply on a job with no open offer arrives here with no visit at all,\n  -- and \"\" is not an integer. The lane runs this for every reply rather than branching first, so\n  -- the statement is what has to hold when there is nothing to settle.\n  SELECT $1::text                        AS gmail_message_id,\n         nullif($2::text, '')::int       AS visit_id,\n         nullif($3::text, '')::timestamptz AS agreed\n),\nsettled AS (\n  UPDATE visits v\n     SET state = 'agreed', agreed = a.agreed, agreed_in = a.gmail_message_id, agreed_at = now()\n    FROM answered a\n   WHERE v.id = a.visit_id\n     AND v.state = 'offered'\n     -- a reply nobody could read arrives here too, with no time on it. Refusing it in the statement\n     -- rather than upstream keeps the lane one path: without this the write is attempted, the\n     -- constraint refuses an agreed visit with no time, and a customer's ordinary \"none of those\n     -- work\" turns into an entry in the error lane.\n     AND a.agreed IS NOT NULL\n  RETURNING v.id, v.order_id, v.agreed\n)\nSELECT (SELECT gmail_message_id FROM answered)  AS gmail_message_id,\n       (SELECT id FROM settled)                 AS visit_id,\n       (SELECT order_id FROM settled)           AS order_id,\n       (SELECT agreed FROM settled)             AS agreed,\n       EXISTS (SELECT 1 FROM settled)           AS was_settled;\n",
+        "options": {
+          "queryReplacement": "={{ [$json.gmail_message_id, $json.visit_id, $json.agreed] }}"
+        }
+      }
     }
   ],
   "connections": {
@@ -93,6 +152,33 @@
         [
           {
             "node": "Accepting a ballpark asks for a visit",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "What times are open",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What times are open": {
+      "main": [
+        [
+          {
+            "node": "Which time did they pick",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which time did they pick": {
+      "main": [
+        [
+          {
+            "node": "Remember the agreed time",
             "type": "main",
             "index": 0
           }
