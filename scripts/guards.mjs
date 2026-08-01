@@ -113,8 +113,22 @@ if (argv[0] === '--message') {
       'unstage it, and if it genuinely belongs here take it out of .gitignore deliberately');
   }
 
-  const brought = git('diff', '--cached', '--name-only', '--diff-filter=A', '--', 'src/', 'db/')
-    .split('\n').filter(Boolean);
+  // A merge stages everything the other branch had as though this commit were adding it, and those
+  // files each stood in front of this same rule when they were written. Asking again turns every
+  // merge into a refusal with no honest answer, since there is nothing new here to have run. What a
+  // merge can genuinely introduce is a file that is on neither side -- something written while
+  // resolving it -- and that is what is left to answer for.
+  // asked of git rather than of .git/MERGE_HEAD, because a worktree keeps its own and this repo has
+  // one open in another session
+  const merging = (() => {
+    try { git('rev-parse', '--verify', '--quiet', 'MERGE_HEAD'); return true; } catch { return false; }
+  })();
+  const addedAgainst = (ref) =>
+    git('diff', '--cached', '--name-only', '--diff-filter=A', ...(ref ? [ref] : []), '--', 'src/', 'db/')
+      .split('\n').filter(Boolean);
+  const brought = merging
+    ? addedAgainst().filter((f) => addedAgainst('MERGE_HEAD').includes(f))
+    : addedAgainst();
   if (brought.length && !/^Audited:/m.test(message)) {
     complain(`this commit brings source nobody has run here yet: ${brought.join(', ')}`,
       '"it has tests and they pass" is not an answer: tests written by the same hand as the code '
