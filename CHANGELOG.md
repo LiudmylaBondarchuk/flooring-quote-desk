@@ -11,6 +11,27 @@ A conversation now outlives the email that started it, the price list is kept by
 owner rather than by a developer, and a price is computed and written down. The desk
 answers a customer for the first time — with a question, never with a figure.
 
+**A second reader looks at every decision, and can only ever raise a hand.** Grounding checks that
+a value's words appear in the email; it does not read meaning, and no regular expression will teach
+it to. Run and watched before this was written: *anything but laminate*, *we do not want laminate*
+and *laminate please* all contain the word, and the gate stands behind Laminate for all three.
+
+A model is now asked once per email, after the code has decided, and it is given **the whole
+conversation** — reading one letter is the mistake this system has made three times in a fortnight.
+It answers one question: does the decision hold together with what the customer actually wrote.
+
+**Its only power is to raise `auto_blocked`**, which already exists and already sends an email to a
+person instead of answering it. It cannot change a value, cannot unblock anything, cannot route,
+and it cannot lower a hand the gate has already raised. Two models agreeing on a wrong answer is a
+real thing; this one can never turn a refusal into a permission. If it says nothing, says something
+unusable, or is not there at all, **nothing changes** — a reader that cannot speak must not be able
+to stop the desk working.
+
+The wording lives in the node, not in a document, so changing what it asks is an edit rather than a
+rewrite. What it has not yet done is earn its place: that means running it across the fixtures with
+known answers and counting how often it stops a good decision against how often it catches a bad
+one. Until then it is wired and honest about being unmeasured.
+
 **The database remembers which migrations it has run.** There were twenty-eight files in
 `db/history` and no record anywhere of which of them production had actually seen. One turned out
 never to have arrived: a constraint sat in the canon, sat in a migration, and was absent from the

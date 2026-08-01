@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "properties": {
+    "holds": {
+      "type": "boolean",
+      "description": "true when the decision holds together with what the customer wrote"
+    },
+    "why": {
+      "type": "string",
+      "description": "one sentence, only when holds is false, written for the owner"
+    }
+  },
+  "required": [
+    "holds"
+  ]
+}

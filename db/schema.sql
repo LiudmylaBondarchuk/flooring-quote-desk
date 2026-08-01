@@ -168,6 +168,8 @@ CREATE TABLE messages (
     auto_blocked              boolean,
     service_asked_about       text,
     offer_answer              text,
+    second_opinion            text,
+    second_opinion_why        text,
     is_returning              boolean     NOT NULL DEFAULT false,
     same_signature            boolean     NOT NULL DEFAULT false,
     material_category         text,
@@ -197,6 +199,10 @@ CREATE TABLE messages (
         'the_job_is_ready', 'same_job_signature', 'thread_continuation', 'not_a_customer',
         'capability_question',
         'wants_a_price', 'unclassified')),
+    CONSTRAINT messages_second_opinion_known CHECK (second_opinion IS NULL
+        OR second_opinion IN ('holds', 'does_not_hold')),
+    CONSTRAINT messages_second_opinion_says_why CHECK (second_opinion IS DISTINCT FROM 'does_not_hold'
+        OR second_opinion_why IS NOT NULL),
     CONSTRAINT messages_offer_answer_known CHECK (offer_answer IS NULL
         OR offer_answer IN ('accepted', 'pushed_back')),
     CONSTRAINT messages_route_known    CHECK (route IN (
@@ -382,6 +388,10 @@ COMMENT ON COLUMN messages.pricing_allowed IS
     'Nothing blocks putting a price in front of this customer. Says nothing about who sends it.';
 COMMENT ON COLUMN messages.service_asked_about IS
     'Which row of services this email was asking about, by label. The answer itself stays in that table so there is one place to edit what the firm says.';
+COMMENT ON COLUMN messages.second_opinion IS
+    'What a second reader made of the decision the code reached. NULL means it was not asked or could not answer, and then nothing changes.';
+COMMENT ON COLUMN messages.second_opinion_why IS
+    'One sentence, written for the owner rather than for a developer. Required when the reader says the decision does not hold, because a raised hand with no reason is worse than none.';
 COMMENT ON COLUMN messages.offer_answer IS
     'Which way a reply to a quote went: accepted, pushed_back, or NULL when it was neither. Decided by the gate, so no other place has to read the words again.';
 COMMENT ON COLUMN messages.auto_blocked IS

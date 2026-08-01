@@ -13,6 +13,8 @@ UPDATE messages SET
   auto_blocked              = $28,
   service_asked_about       = $29,
   offer_answer              = $30,
+  second_opinion            = $31,
+  second_opinion_why        = $32,
   danger                    = $8,
   intent                    = $9,
   geo_zone                  = $10,
