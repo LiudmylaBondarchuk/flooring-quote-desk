@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -305,4 +305,29 @@ for (const [name, list] of named.filter(([, l]) => l.fixture_field)) {
       wrong.map(({ fixture, value }) => `"${fixture}" sets ${name} to "${value}"`).join('; ') +
       ` — ${name} is a closed list, and a fixture built on a value outside it proves nothing about real mail`);
   });
+}
+
+// --- a params file names a node that is not in its workflow
+//
+// The expression `$('Read the booking')` is how a statement reaches back past the node feeding it,
+// and it is the only part of a lane that no harness runs: the round trip calls statements directly
+// with values chosen by hand, so a name that matches nothing fails for the first time on a live
+// booking. Which is how it did.
+{
+  const workflows = readdirSync(join(root, 'workflows')).filter((f) => f.endsWith('.json'));
+  for (const file of workflows) {
+    const workflow = JSON.parse(readFileSync(join(root, 'workflows', file), 'utf8'));
+    const names = new Set(workflow.nodes.map((n) => n.name));
+    for (const node of workflow.nodes) {
+      const expression = node.parameters?.options?.queryReplacement || '';
+      const reached = [...String(expression).matchAll(/\$\('([^']+)'\)/g)].map((m) => m[1]);
+      if (!reached.length) continue;
+      test(`${file}: ${node.name} reaches back to nodes that exist`, () => {
+        for (const reference of reached) {
+          assert.ok(names.has(reference),
+            `${node.name} reads $('${reference}'), and no node in ${file} is called that`);
+        }
+      });
+    }
+  }
 }
