@@ -837,5 +837,52 @@
       "total_low": 1936,
       "total_high": 3872
     }
+  },
+  {
+    "name": "LVP, 300 sq ft in Kyle, and damp under the old floor",
+    "why": "330 sq ft of material is bought to lay 300 at 4.50-9.00, so 1485-2970, and that is the whole of it. Levelling a slab runs 2.00-5.00 a foot, and how much of the floor needs it is not a thing anybody can tell from an email -- so it is named and left out of the total, exactly as stairs are.",
+    "row": {
+      "gmail_message_id": "m-damp",
+      "pricing_allowed": true,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "LVP",
+      "area_sqft": "300.00",
+      "area_status": "known",
+      "area_comparable": true,
+      "old_floor_removal": false,
+      "zone": "core",
+      "on_site_items": [
+        "subfloor"
+      ],
+      "on_site_rates": {
+        "subfloor": {
+          "label": "levelling and moisture work",
+          "unit": "sqft",
+          "val_low": "2.00",
+          "val_high": "5.00"
+        }
+      },
+      "bands": [
+        {
+          "category": "LVP",
+          "product": "Luxury vinyl plank / tile",
+          "unit": "sqft",
+          "rate_low": "4.50",
+          "rate_high": "9.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
+      ],
+      "rules": {}
+    },
+    "expect": {
+      "priceable": true,
+      "refusals": [],
+      "subtotal_low": 1485,
+      "subtotal_high": 2970,
+      "total_low": 1485,
+      "total_high": 2970
+    }
   }
 ]

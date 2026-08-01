@@ -69,6 +69,14 @@ exactly one of the times and nothing that argues with it; two numbers, none, a r
 their own all go to a person, because the cost of asking the owner is one email and the cost of
 guessing is a van outside the wrong house.
 
+**And what is under the old floor is seen rather than guessed at.** A moisture or uneven-slab flag
+turned the message red and stopped there — the quote lane works its own colour out from the order,
+the flag never reached the order, and a job with damp under it was priced exactly like one without,
+without even carrying the assumption that the floor beneath is sound. It joins stairs on
+`orders.on_site_items`: named in the quote at this firm's own rate, kept out of the total, and left
+for somebody standing on it. The rate comes from `pricing_rules` rather than `price_bands`, because
+levelling is labour by the square foot and not a product with a unit.
+
 **A staircase no longer stops the floor being priced.** The word *stairs* marked the scope unknown,
 which holds the whole email for a person — so a customer who mentioned a staircase got no number for
 their floor either, and the floor was always perfectly priceable. Stairs vary: straight, winder,

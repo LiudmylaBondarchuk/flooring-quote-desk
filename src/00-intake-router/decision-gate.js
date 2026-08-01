@@ -394,7 +394,15 @@ for (const item of $input.all()) {
     if (!zone && !jobKnowsZone) missing.push('location');
 
     if (zone === 'out') reasons.push('outside the service area (Austin + 30 mi)');
-    if (subfloor) reasons.push('subfloor/moisture flag — site survey needed');
+    if (subfloor) {
+      // Named rather than merely noted. Saying "site survey needed" in the reasons turned the
+      // message red and nothing else: the quote lane works its colour out from the order, the flag
+      // never reached the order, and the job was priced exactly like one with a sound floor -- and
+      // without even the assumption that it is sound, because that sentence lives in a branch this
+      // flag skips.
+      onSite.push('subfloor');
+      reasons.push('subfloor/moisture flag — levelling is named in the quote and counted on site');
+    }
     if (pattern && EXTRA_LABOUR_PATTERN.test(pattern)) {
       reasons.push(`pattern work (${pattern}) — extra labour and waste`);
     }
