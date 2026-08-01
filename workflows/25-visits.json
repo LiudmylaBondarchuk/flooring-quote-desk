@@ -540,7 +540,7 @@
         "operation": "executeQuery",
         "query": "-- The owner has been told, and this is when. Guarded so a second run finds nothing to stamp rather\n-- than saying the same visit again in the same channel.\n\nUPDATE visits\n   SET owner_told_at = now()\n WHERE id = $1::int\n   AND owner_told_at IS NULL\nRETURNING id, order_id, owner_told_at;\n",
         "options": {
-          "queryReplacement": "={{ [$json.visit_id] }}"
+          "queryReplacement": "={{ [$('Write what the owner is told').item.json.visit_id] }}"
         }
       }
     }

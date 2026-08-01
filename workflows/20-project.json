@@ -192,7 +192,7 @@
         "operation": "executeQuery",
         "query": "-- The invitation went out, so this job is waiting on a booking rather than on us.\n--\n-- A visit with no time yet: 'offered' is what it means to have asked and not been answered, and it\n-- is what stops a second invitation going out on the next delivery of the same acceptance. There is\n-- nothing in `offered` to store, because the times are Google's to know -- the array is there\n-- because the table was built for the other design, where the desk named three itself.\n\nINSERT INTO visits (order_id, state, offered, offered_in)\nSELECT $2::int, 'offered', '[\"the booking page\"]'::jsonb, $1::text\n WHERE NOT EXISTS (SELECT 1 FROM visits WHERE order_id = $2::int AND state IN ('offered', 'agreed'))\nRETURNING id, order_id, state;\n",
         "options": {
-          "queryReplacement": "={{ [$json.gmail_message_id, $json.order_id] }}"
+          "queryReplacement": "={{ [$('Write the invitation').item.json.gmail_message_id, $('Write the invitation').item.json.order_id] }}"
         }
       }
     }

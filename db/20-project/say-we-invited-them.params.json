@@ -1,3 +1,3 @@
 {
-  "queryReplacement": "={{ [$json.gmail_message_id, $json.order_id] }}"
+  "queryReplacement": "={{ [$('Write the invitation').item.json.gmail_message_id, $('Write the invitation').item.json.order_id] }}"
 }
