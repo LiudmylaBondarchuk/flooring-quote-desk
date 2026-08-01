@@ -3,8 +3,8 @@
     "Every closed list of values in this system, written down once.",
     "",
     "Nothing generates from this file. Each copy stays written in the language that",
-    "owns it \u2014 a CHECK constraint in SQL, a literal in the Code node n8n executes,",
-    "the sentence the model is given \u2014 and tests/value-lists.test.js fails when any",
+    "owns it — a CHECK constraint in SQL, a literal in the Code node n8n executes,",
+    "the sentence the model is given — and tests/value-lists.test.js fails when any",
     "copy stops agreeing with what is here.",
     "",
     "A list with no `sql` is one the database never stores. A list with no `gate` is",
@@ -214,7 +214,7 @@
     },
     "fixing_method": {
       "reachability_untested": {
-        "floating": "accepted and stored, but no branch of the gate depends on it \u2014 it is what the assumptions already state when no method is given",
+        "floating": "accepted and stored, but no branch of the gate depends on it — it is what the assumptions already state when no method is given",
         "loose_lay": "accepted and stored; the gate takes no branch on it",
         "peel_and_stick": "accepted and stored; the gate takes no branch on it"
       },
@@ -272,7 +272,7 @@
     },
     "intent": {
       "reachability_untested": {
-        "offer_response": "the gate branches on three intents only \u2014 complaint, scheduling and follow_up. This one is stored and never read, so no decision can demonstrate it"
+        "offer_response": "the gate branches on three intents only — complaint, scheduling and follow_up. This one is stored and never read, so no decision can demonstrate it"
       },
       "means": "the model's guess at what the sender wants. An input to classification, never the classification itself.",
       "produced_by_gate": "intent",
@@ -297,7 +297,7 @@
       "compared_in_gate": "intent",
       "fixture_field": "extracted.intent",
       "why_constrained_now": [
-        "The database still never constrains raw model output \u2014 it constrains what the gate accepted",
+        "The database still never constrains raw model output — it constrains what the gate accepted",
         "of it. messages.intent used to hold the answer lowercased and nothing more, so nonsense in",
         "was nonsense stored and an empty answer became an empty string. The gate now writes a value",
         "from this list or null, which is what earns the CHECK. The raw answer is still kept, in",
@@ -385,6 +385,16 @@
         "offers.status"
       ]
     },
+    "offer_kind": {
+      "means": "what a price was worked out from. ballpark: a letter -- a material, a number the customer typed, a town -- so accepting it buys a visit and not a job. firm: given after somebody has stood in the room, and the only kind that may book work.",
+      "values": [
+        "ballpark",
+        "firm"
+      ],
+      "sql": [
+        "offers.kind"
+      ]
+    },
     "offer_outcome": {
       "means": "how it ended, once it ended.",
       "values": [
@@ -435,7 +445,7 @@
         "part": "first",
         "source": "src/10-quote/compute-quote.js"
       },
-      "why_no_sql": "a refusal is carried on the item to the owner, never stored \u2014 the message keeps its own gate_reasons"
+      "why_no_sql": "a refusal is carried on the item to the owner, never stored — the message keeps its own gate_reasons"
     },
     "breakdown_kind": {
       "means": "what one line of a quote is for. A customer reading a total is owed the parts it is made of.",

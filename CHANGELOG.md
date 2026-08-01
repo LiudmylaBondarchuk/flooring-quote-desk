@@ -11,6 +11,14 @@ A conversation now outlives the email that started it, the price list is kept by
 owner rather than by a developer, and a price is computed and written down. The desk
 answers a customer for the first time — with a question, never with a figure.
 
+**Saying yes to a price buys a visit, not a job.** Every price this desk has given was worked out
+from a letter — a material, a number the customer typed, a town — and accepting one cannot start
+work, because nobody has seen the floor. `offers.kind` records which a price was: `ballpark`, worked
+out from an email, or `firm`, given after somebody has stood in the room. Only a firm price may book
+work, and nothing issues one yet. An acceptance moves the order from `quoted` to `survey_needed`,
+which until now was a state the database allowed and nothing could reach: `booked` was read as an
+exclusion by eight statements and set by none, so a customer saying yes changed nothing anywhere.
+
 **A second reader looks at every decision, and can only ever raise a hand.** Grounding checks that
 a value's words appear in the email; it does not read meaning, and no regular expression will teach
 it to. Run and watched before this was written: *anything but laminate*, *we do not want laminate*

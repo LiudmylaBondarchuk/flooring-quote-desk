@@ -90,6 +90,7 @@ CREATE INDEX order_events_order_idx ON order_events (order_id, created_at);
 CREATE TABLE offers (
     id              integer     GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     order_id        integer     REFERENCES orders (id) ON DELETE CASCADE,
+    kind            text        NOT NULL DEFAULT 'ballpark',
     subtotal_low    numeric(10, 2),
     subtotal_high   numeric(10, 2),
     total_low       numeric(10, 2),
@@ -104,6 +105,7 @@ CREATE TABLE offers (
     final_amount    numeric(10, 2),
     created_at      timestamptz NOT NULL DEFAULT now(),
 
+    CONSTRAINT offers_kind_known    CHECK (kind IN ('ballpark', 'firm')),
     CONSTRAINT offers_status_known  CHECK (status IN ('draft', 'awaiting_approval', 'sent', 'accepted', 'declined', 'expired')),
     CONSTRAINT offers_outcome_known CHECK (outcome IS NULL OR outcome IN ('won', 'lost')),
     CONSTRAINT offers_total_sane    CHECK ((total_low  IS NULL OR total_low  >= 0)
@@ -374,6 +376,9 @@ COMMENT ON COLUMN services.priority IS
     'Order within one side of the catalogue. What the firm does is always checked before what it refuses, in code.';
 COMMENT ON COLUMN messages.matched_rule IS
     'Which of the classification rules fired. The only record of why this email went where it went.';
+COMMENT ON COLUMN offers.kind IS
+    'ballpark: worked out from an email, so accepting it buys a visit and not a job. firm: given after somebody has seen the floor.';
+
 COMMENT ON COLUMN offers.approval_thread_id IS
     'The Gmail thread the owner was asked in. Her reply arrives in it, and it is the only thing tying an answer to the offer it answers.';
 COMMENT ON COLUMN offers.letter_text IS
