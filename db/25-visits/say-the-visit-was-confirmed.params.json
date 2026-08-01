@@ -1,0 +1,3 @@
+{
+  "queryReplacement": "={{ [$('Write the confirmation').item.json.visit_id] }}"
+}

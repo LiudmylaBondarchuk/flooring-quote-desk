@@ -139,6 +139,16 @@ INSERT INTO reply_templates (key, body, sends_automatically, notes) VALUES
      'Thanks for getting in touch. To price this I need one more thing: roughly how many square feet is the floor? A rough number is fine — I can firm it up on site.',
      true,
      'sent when the material is known and the area is not'),
+    ('visit_confirmed_opening',
+     'That is booked in — thank you.
+
+I have the visit down as below, along with the job as I have it so far. If any of that looks wrong, just reply to this email and I will put it right.',
+     true,
+     'sent a quarter of an hour after a booking, not on the instant: Google has already sent its own confirmation and two letters at once read as a machine talking to itself'),
+    ('visit_confirmed_closing',
+     'There is nothing to prepare. It helps if the rooms are walkable and I can see the existing floor, but that is all.',
+     true,
+     'after the time and the job, because it answers what the customer does next'),
     ('needs_material',
      'Thanks for getting in touch. What are you thinking of putting down — luxury vinyl plank, laminate, engineered wood, sheet vinyl or carpet?',
      true,

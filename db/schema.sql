@@ -269,6 +269,7 @@ CREATE TABLE visits (
     agreed_in    text        REFERENCES messages (gmail_message_id) ON DELETE SET NULL,
     agreed_at    timestamptz,
     booked_event_id text,
+    confirmed_at timestamptz,
 
     CONSTRAINT visits_state_known CHECK (state IN ('offered', 'agreed', 'lapsed')),
     CONSTRAINT visits_agreed_has_a_time CHECK ((state = 'agreed') = (agreed IS NOT NULL)),

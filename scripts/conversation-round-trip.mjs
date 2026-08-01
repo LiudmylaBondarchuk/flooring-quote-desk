@@ -1712,6 +1712,67 @@ console.log('\na booking on the calendar finding the job it belongs to');
     ask(`SELECT count(*) FROM visits WHERE order_id = ${mine}`), '1');
 }
 
+console.log('\nsaying something about a booking, a quarter of an hour later');
+{
+  const visitSql = (n) => read('db', '25-visits', `${n}.sql`).replace(/;\s*$/, '');
+  const writeSource = read('src', '25-visits', 'write-the-confirmation.js');
+  const compose = (row) => new Function('$input', writeSource)({ all: () => [{ json: row }] })[0].json;
+  const waiting = (minutes) => JSON.parse(ask(
+    `SELECT coalesce(json_agg(t), '[]'::json) FROM (${fill(visitSql('which-visits-need-a-word'), [minutes])}) t`));
+
+  const orderId = Number(ask(`WITH made AS (
+      INSERT INTO orders (thread_id, state, contact_email, material_category, area_sqft, area_unit,
+                          area_status, city, zone, on_site_items)
+      VALUES ('t-word', 'survey_needed', 'customer@example.com', 'Laminate', 400, 'sqft', 'known',
+              'Kyle, TX', 'core', '{stairs}')
+      RETURNING id) SELECT id FROM made`));
+  const visitId = Number(ask(`WITH made AS (
+      INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id)
+      VALUES (${orderId}, 'agreed', '["2026-08-04T18:30:00+00:00"]'::jsonb,
+              '2026-08-04T18:30:00+00:00', now() - interval '20 minutes', 'e-1')
+      RETURNING id) SELECT id FROM made`));
+
+  check('a booking older than the wait is waiting to be answered', waiting(15).length, 1);
+  check('and one younger than it is left alone', waiting(60).length, 0);
+
+  const row = waiting(15)[0];
+  check('the address is the one on the job', row.write_to, 'customer@example.com');
+
+  const letter = compose(row);
+  check('the letter is ready to send', letter.ready_to_send, true);
+  // stored as an instant; printed where the work is. The same booking reads half past eight in the
+  // evening in Warsaw and half past one in the afternoon to the person driving to it.
+  check('the time is written in Texas, not wherever it was booked from',
+    letter.subject, 'Visit booked — Tuesday, August 4 at 1:30pm');
+  check('the job is repeated back as the desk holds it',
+    letter.body.includes('Floor: Laminate') && letter.body.includes('Area: about 400 sqft')
+    && letter.body.includes('Where: Kyle, TX'), true);
+  check('and what only a visit can settle is named', letter.body.includes('stairs'), true);
+
+  const stamp = (id) => rowOf(visitSql('say-the-visit-was-confirmed'), [id]);
+  stamp(visitId);
+  check('once answered it is not waiting any more', waiting(15).length, 0);
+  check('and a second run stamps nothing', ask(
+    `WITH again AS (${fill(visitSql('say-the-visit-was-confirmed'), [visitId])})
+     SELECT count(*) FROM again`), '0');
+
+  // a job that was finished between the booking and the letter
+  const stale = Number(ask(`WITH made AS (
+      INSERT INTO orders (thread_id, state, contact_email, material_category, city, zone, closed_at)
+      VALUES ('t-word-2', 'lost', 'gone@example.com', 'LVP', 'Buda, TX', 'core', now())
+      RETURNING id) SELECT id FROM made`));
+  ask(`INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id)
+       VALUES (${stale}, 'agreed', '["2026-08-04T18:30:00+00:00"]'::jsonb,
+               '2026-08-04T18:30:00+00:00', now() - interval '20 minutes', 'e-2')`);
+  check('a job let go before the letter went out is not written to', waiting(15).length, 0);
+
+  // and the refusals the letter states about itself
+  check('a visit with no readable time is not written about',
+    compose({ ...row, agreed: 'not a date' }).ready_to_send, false);
+  check('nor is a job with nobody to write to',
+    compose({ ...row, write_to: null }).ready_to_send, false);
+}
+
 console.log(`\n${failed === 0 ? 'all checks passed' : `${failed} check(s) FAILED`}`);
 
 try {
