@@ -6,7 +6,12 @@ INSERT INTO price_bands (category, component, product, unit, rate_low, rate_high
     ('Laminate', 'floor', 'Laminate standard', 'sqft', 4.00, 8.00, 10, 350.00, NULL),
     ('Laminate', 'floor', 'Laminate premium (water-resistant)', 'sqft', 6.00, 10.00, 10, 350.00, NULL),
     ('LVP', 'floor', 'Luxury vinyl plank / tile', 'sqft', 4.50, 9.00, 10, 400.00, 'US avg ~6.50'),
-    ('Wood', 'floor', 'Engineered wood', 'sqft', 7.00, 14.00, 10, 450.00, 'US avg ~10.50')
+    ('Wood', 'floor', 'Engineered wood', 'sqft', 7.00, 14.00, 10, 450.00, 'US avg ~10.50'),
+    -- Stairs are quoted per step and never added to a total, so this row is the only thing
+    -- standing between the quote and saying nothing about them at all. It was on production
+    -- and absent here, which meant a database built from this file could not name a stairs
+    -- rate and no test would have said so.
+    ('Wood', 'stairs', 'Stair nosing', 'each', 45.00, 80.00, 0, NULL, 'per step')
 ON CONFLICT (category, component, coalesce(product, '')) DO NOTHING;
 
 INSERT INTO pricing_rules (rule_key, val_low, val_high, notes) VALUES

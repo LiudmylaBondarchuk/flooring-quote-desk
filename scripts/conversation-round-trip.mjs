@@ -1845,6 +1845,62 @@ console.log('\nasking a customer who said yes to pick a time');
     compose({ gmail_message_id: 'inv-3' }).ready_to_send, false);
 }
 
+console.log('\nwhat a step and a square foot cost, and where those numbers come from');
+{
+  // Every other check about stairs and levelling hands the rate in by fixture, which proves the
+  // arithmetic and says nothing about where the number came from. Nothing would have noticed if
+  // this statement stopped returning any rate at all: the letter would quietly stop naming one,
+  // and every test would stay green. Found by a reviewer reading #62, not by anything here.
+  const orderId = Number(ask(`WITH made AS (
+      INSERT INTO orders (thread_id, state, contact_email, material_category, area_sqft, area_unit,
+                          area_status, city, zone, on_site_items)
+      VALUES ('t-rates', 'new', 'rates@example.com', 'Wood', 300, 'sqft', 'known',
+              'Kyle, TX', 'core', '{stairs,subfloor}')
+      RETURNING id) SELECT id FROM made`));
+  ask(`INSERT INTO messages (thread_id, gmail_message_id, direction, sender, order_id, category, body)
+       VALUES ('t-rates', 'rate-1', 'inbound', 'client', ${orderId}, 'quote_request', 'wood, 300 sq ft, stairs, damp slab')`);
+
+  const rates = () => JSON.parse(ask(
+    `SELECT coalesce((SELECT on_site_rates FROM (${fill(quoteSql('gather-what-a-price-needs'), ['rate-1'])}) t), '{}'::jsonb)`));
+
+  const asIssued = rates();
+  check('the levelling rate arrives from the price list, not from a fixture',
+    [asIssued.subfloor?.val_low, asIssued.subfloor?.val_high], [2, 5]);
+  check('and the stairs rate does too',
+    [asIssued.stairs?.val_low, asIssued.stairs?.val_high, asIssued.stairs?.unit], [45, 80, 'each']);
+
+  // Before the price list is taken apart below, not after. Asked afterwards these two would pass
+  // against a gutted list -- they would hold just as well if on-site pricing had stopped working
+  // for every job there is, which is not what they read as saying.
+  const plain = Number(ask(`WITH made AS (
+      INSERT INTO orders (thread_id, state, contact_email, material_category, area_sqft, area_unit,
+                          area_status, city, zone)
+      VALUES ('t-plain', 'new', 'plain@example.com', 'Laminate', 300, 'sqft', 'known', 'Kyle, TX', 'core')
+      RETURNING id) SELECT id FROM made`));
+  ask(`INSERT INTO messages (thread_id, gmail_message_id, direction, sender, order_id, category, body)
+       VALUES ('t-plain', 'rate-2', 'inbound', 'client', ${plain}, 'quote_request', 'laminate, 300 sq ft')`);
+  const plainQuote = priceIt('rate-2').quote;
+  check('a job with neither is quoted neither, while both rates are there to be had',
+    plainQuote.breakdown.lines.filter((l) => l.kind === 'on_site').length, 0);
+  check('and is still priced', plainQuote.priceable, true);
+
+  // the half of provenance a passing check never shows: change the list, and this must change
+  ask("UPDATE pricing_rules SET val_low = 3.00, val_high = 7.00 WHERE rule_key = 'subfloor_leveling'");
+  check('changing the price list changes what the quote is told',
+    [rates().subfloor?.val_low, rates().subfloor?.val_high], [3, 7]);
+
+  ask("DELETE FROM pricing_rules WHERE rule_key = 'subfloor_leveling'");
+  check('and taking the row out leaves no rate to name at all', rates().subfloor, undefined);
+  check('while the other one is untouched by it', rates().stairs?.val_low, 45);
+
+  ask("UPDATE price_bands SET rate_low = 55.00 WHERE component = 'stairs'");
+  check('the stairs rate follows its own row the same way', rates().stairs?.val_low, 55);
+
+  // an inactive band is not a rate, however present the row is
+  ask("UPDATE price_bands SET active = false WHERE component = 'stairs'");
+  check('and a band that has been retired stops being quoted', rates().stairs, undefined);
+}
+
 console.log(`\n${failed === 0 ? 'all checks passed' : `${failed} check(s) FAILED`}`);
 
 try {
