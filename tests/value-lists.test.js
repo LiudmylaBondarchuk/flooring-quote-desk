@@ -18,6 +18,13 @@ for (const table of schema.matchAll(/CREATE TABLE (\w+) \(([\s\S]*?)\n\);/g)) {
     whitelistOfColumn.set(`${table[1]}.${check[1]}`,
       check[2].split(',').map((v) => v.trim().replace(/^'|'$/g, '')));
   }
+  // A column holding a set writes its whitelist as containment rather than membership. It is the
+  // same promise -- these values and no others -- and reading only IN (...) would let an array
+  // column drift from the canon while every test still passed.
+  for (const check of flat.matchAll(/CONSTRAINT \w+\s+CHECK \((\w+) <@ ARRAY\[([^\]]*)\]/g)) {
+    whitelistOfColumn.set(`${table[1]}.${check[1]}`,
+      check[2].split(',').map((v) => v.trim().replace(/^'|'$/g, '')));
+  }
 }
 
 const DEFAULT_SOURCE = 'src/00-intake-router/decision-gate.js';
