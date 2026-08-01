@@ -1,0 +1,132 @@
+# Draft — lives here until it has been run, then copied to
+# flooring-quote-desk/.github/workflows/claim-check.yml.
+#
+# It lives in the PUBLIC repository on purpose, so the run is visible in that repository's own
+# Actions tab while somebody is watching. The knowledge base is private and is checked out as a
+# step; nothing else in the public repository names it.
+#
+# The trigger is a label, and the label is the authorisation. Only somebody who can write to the
+# repository can add one, so no stranger's pull request can start this. Copilot is not the
+# trigger: it is not always asked for a review, and something that can only run after a reviewer
+# who may never arrive cannot be shown on demand.
+name: claim-check
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: pull request number
+        required: true
+
+# pull-requests: write, and it has to be. The comment goes to /issues/{n}/comments, so issues:
+# write looks like the narrower grant that would do -- and it was tried, and GitHub answered 403
+# "Resource not accessible by integration": when the number is a pull request, the permission
+# checked is pull-requests, whatever the path says. The narrowing was suggested by the reviewer,
+# accepted on reasoning rather than on a run, and it silently stopped the reviewer commenting at
+# all.
+#
+# So the concern behind it stands and cannot be closed here: this grant also permits approve,
+# request-changes and close. "It cannot approve" rests on the script, not on this file. Said out
+# loud rather than papered over with a permission that does not work.
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    # The label by name, and the branch by origin. A pull request from a fork would have this
+    # job check out somebody else's code and then run npm ci -- which executes their
+    # postinstall script with every secret in this job already in the environment. Solo work
+    # loses nothing by refusing them; the day that changes, this needs rethinking rather than
+    # relaxing.
+    if: >-
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.label.name == 'claim-check' &&
+        github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: ci
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+        ports:
+          - 5432:5432
+    env:
+      CHECK_DATABASE_URL: postgres://postgres:ci@localhost:5432/postgres
+      DATABASE_URL: postgres://postgres:ci@localhost:5432/postgres
+      CLAIM_CHECK_PROJECT: flooring-quote-desk
+      CLAIM_CHECK_KB_PATH: ${{ github.workspace }}/knowledge-base
+    steps:
+      # Resolved rather than read off the event, because on workflow_dispatch there is no pull
+      # request in the payload at all: the checkout ref came out empty, the job reviewed whatever
+      # main happened to be, and the manual path -- the one that exists so this can be shown when
+      # nobody has asked Copilot for anything -- did nothing whatsoever.
+      - name: which pull request, and which commit
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          n="${{ github.event.pull_request.number || inputs.pr }}"
+          sha=$(gh api "repos/${{ github.repository }}/pulls/$n" --jq .head.sha)
+          echo "number=$n" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: checkout the pull request branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.pr.outputs.sha }}
+          fetch-depth: 0
+          # 3 — the token is not left in .git/config, where a package script from the branch
+          # under review could read it. Fetching a public repository needs no credential.
+          persist-credentials: false
+
+      # actions/checkout on a bare SHA does not create a local origin/main, and the diff is
+      # taken against it. The same reason ci.yml fetches it separately in its own guards job.
+      - name: fetch main for the diff
+        run: git fetch --no-tags origin main
+
+      # Read-only. This job runs code from a branch; a token that can write to the knowledge
+      # base has no business being in the same environment as it. The run's own record leaves
+      # as an artifact instead, which needs no write access anywhere.
+      - name: checkout the knowledge base
+        uses: actions/checkout@v5
+        with:
+          repository: LiudmylaBondarchuk/review-agent
+          token: ${{ secrets.REVIEW_AGENT_PAT }}
+          path: knowledge-base
+          # actions/checkout writes the token into knowledge-base/.git/config by default, and it
+          # would still be sitting there when npm ci runs lifecycle scripts out of the branch
+          # being reviewed. Nothing here needs git again after the files arrive.
+          persist-credentials: false
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: install product dependencies (the checks run against these)
+        run: npm ci
+
+      - name: build the database the checks run against
+        run: npm run db:check
+
+      - name: claim-check
+        run: node knowledge-base/claim-check/review-pr.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # so the comment can point at the run that produced it
+          CLAIM_CHECK_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CLAIM_CHECK_PR: ${{ steps.pr.outputs.number }}
+
+      # Kept whatever happened above, including a run that decided there was nothing to say.
+      - name: keep the record of this run
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claim-check-pr-${{ steps.pr.outputs.number }}
+          path: knowledge-base/runs/
+          if-no-files-found: ignore
