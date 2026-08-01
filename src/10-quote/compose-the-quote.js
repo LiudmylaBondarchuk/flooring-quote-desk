@@ -13,6 +13,11 @@ const readable = (lines) => (lines || []).map((line) => {
   if (line.kind === 'minimum') {
     return `  ${line.label}: minimum charge ${money(line.amount)} applies`;
   }
+  // a flat charge for turning up, not a rate on anything: "1 visit at $50-$150" reads as though
+  // there were a price per visit and we had chosen one
+  if (line.kind === 'travel') {
+    return `  ${line.label}: ${money(line.low)}${line.low === line.high ? '' : ` to ${money(line.high)}`}`;
+  }
   const rate = line.rate_low === line.rate_high
     ? `${money(line.rate_low)}/${line.unit}`
     : `${money(line.rate_low)}-${money(line.rate_high)}/${line.unit}`;

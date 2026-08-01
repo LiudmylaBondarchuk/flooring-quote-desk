@@ -11,6 +11,14 @@ A conversation now outlives the email that started it, the price list is kept by
 owner rather than by a developer, and a price is computed and written down. The desk
 answers a customer for the first time — with a question, never with a figure.
 
+**The drive to the edge of the service area is charged.** Georgetown, San Marcos, Bastrop,
+Dripping Springs, Elgin, Taylor and Wimberley are inside what this firm covers and outside what the
+rates already pay for. Until now `edge` produced the sentence *travel fee applies* and never became
+money, so every quote to one of them was short by the drive. It is added after the minimum charge
+and not inside it: the minimum is what the floor work is worth turning up for, and the drive is not
+floor work — folding it in would let a big enough job swallow it and a small one be driven to for
+nothing. The customer sees it as its own line.
+
 **Saying yes to a price buys a visit, not a job.** Every price this desk has given was worked out
 from a letter — a material, a number the customer typed, a town — and accepting one cannot start
 work, because nobody has seen the floor. `offers.kind` records which a price was: `ballpark`, worked

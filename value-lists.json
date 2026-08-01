@@ -452,7 +452,8 @@
       "values": [
         "floor",
         "removal",
-        "minimum"
+        "minimum",
+        "travel"
       ],
       "gate": {
         "const": "LINE_KINDS",
