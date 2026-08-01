@@ -139,6 +139,20 @@ INSERT INTO reply_templates (key, body, sends_automatically, notes) VALUES
      'Thanks for getting in touch. To price this I need one more thing: roughly how many square feet is the floor? A rough number is fine — I can firm it up on site.',
      true,
      'sent when the material is known and the area is not'),
+    ('booking_link',
+     'https://calendar.app.google/CrUEcreHuaL2WSy4A',
+     true,
+     'the short share link from Copy link, never the /calendar/u/0/ form, which resolves against the reader own Google account. Changing the booking page means changing this row and nothing else.'),
+    ('visit_invitation',
+     'Good — thank you. The next step is for me to come and see the floor, so the price stops being a range and starts being a number.
+
+Pick whichever time suits you here:',
+     true,
+     'sent when a customer accepts a ballpark and the order moves to survey_needed'),
+    ('visit_invitation_closing',
+     'The booking page will ask for a code so I can match the visit to your job. It is above. Nothing else is needed, and it takes about a minute.',
+     true,
+     'after the link and the code'),
     ('visit_confirmed_opening',
      'That is booked in — thank you.
 

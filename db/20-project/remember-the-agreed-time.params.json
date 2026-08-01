@@ -1,3 +1,0 @@
-{
-  "queryReplacement": "={{ [$json.gmail_message_id, $json.visit_id, $json.agreed] }}"
-}
