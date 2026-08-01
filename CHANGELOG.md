@@ -11,6 +11,15 @@ A conversation now outlives the email that started it, the price list is kept by
 owner rather than by a developer, and a price is computed and written down. The desk
 answers a customer for the first time — with a question, never with a figure.
 
+**A staircase no longer stops the floor being priced.** The word *stairs* marked the scope unknown,
+which holds the whole email for a person — so a customer who mentioned a staircase got no number for
+their floor either, and the floor was always perfectly priceable. Stairs vary: straight, winder,
+open-sided, with a landing. Counting them from an email is guessing at a figure the owner then has
+to honour. So they are named in the quote at the firm's own rate per step, given no quantity and no
+money, and left for the visit to settle. `orders.on_site_items` holds what a job carries of that
+kind, on the order rather than the message, because a customer mentions the stairs once in whichever
+letter they happen to be thinking about them.
+
 **The drive to the edge of the service area is charged.** Georgetown, San Marcos, Bastrop,
 Dripping Springs, Elgin, Taylor and Wimberley are inside what this firm covers and outside what the
 rates already pay for. Until now `edge` produced the sentence *travel fee applies* and never became

@@ -43,6 +43,11 @@ applied AS (
     existing_floor_action = coalesce((SELECT facts FROM trusted)->>'existing_floor_action', o.existing_floor_action),
     fixing_method         = coalesce((SELECT facts FROM trusted)->>'fixing_method',         o.fixing_method),
     old_floor_removal     = coalesce(((SELECT facts FROM trusted)->>'old_floor_removal')::boolean, o.old_floor_removal),
+    -- a set, not a value: a customer mentions the stairs once, in whichever letter they happen to
+    -- be thinking about them, and a later letter that says nothing about them does not remove them
+    on_site_items         = coalesce((SELECT array_agg(DISTINCT x) FROM unnest(
+                              o.on_site_items || coalesce((SELECT array_agg(v)::text[] FROM jsonb_array_elements_text(
+                                coalesce((SELECT facts FROM trusted)->'on_site_items', '[]'::jsonb)) v), '{}')) x), '{}'),
     updated_at            = now()
    WHERE o.id = $2::int
      -- reads before, so before is forced to run first. Without this the two are unordered and

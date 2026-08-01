@@ -355,6 +355,15 @@
         "orders.state"
       ]
     },
+    "on_site_item": {
+      "means": "what a job holds that a letter cannot put a price on. Named in the quote with its own per-unit range, never added to the total, and settled when somebody sees it.",
+      "values": [
+        "stairs"
+      ],
+      "sql": [
+        "orders.on_site_items"
+      ]
+    },
     "order_event_kind": {
       "means": "why a line was written in an order's history: it was created, a fact merged, a fact corrected, its state moved, or a draft ratified.",
       "not_produced_by_gate": "written by the order layer, not by the decision gate",
@@ -453,7 +462,8 @@
         "floor",
         "removal",
         "minimum",
-        "travel"
+        "travel",
+        "on_site"
       ],
       "gate": {
         "const": "LINE_KINDS",

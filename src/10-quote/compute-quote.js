@@ -3,7 +3,7 @@ const CURRENCY = 'USD';
 const PRICED_UNIT = 'sqft';
 const RATE_BASIS = 'rates are this firm\'s own price list as it stood when the quote was made, and the rates used are written into this breakdown';
 
-const LINE_KINDS = { floor: 'floor', removal: 'removal', minimum: 'minimum', travel: 'travel' };
+const LINE_KINDS = { floor: 'floor', removal: 'removal', minimum: 'minimum', travel: 'travel', on_site: 'on_site' };
 
 const REFUSALS = [
   ['pricing_not_allowed', (f) => f.row.pricing_allowed !== true],
@@ -70,6 +70,13 @@ const priceOne = (row) => {
   // quote was short by the drive on every job that had one.
   const travelRate = row.zone === 'edge' ? asRate(rules.travel_fee) : null;
 
+  // What a letter cannot put a price on. Named with the firm's own per-step rate so the customer
+  // knows the order of magnitude, and deliberately given no quantity and no money: counting stairs
+  // from an email is guessing at a number the owner then has to honour.
+  const onSiteRates = row.on_site_rates && typeof row.on_site_rates === 'object' ? row.on_site_rates : {};
+  const onSiteItems = (Array.isArray(row.on_site_items) ? row.on_site_items : [])
+    .filter((item) => asRate(onSiteRates[item]) !== null);
+
   const facts = { row, material, area, bands, removal, removalRate };
   const refusals = REFUSALS.filter(([, applies]) => applies(facts)).map(([code]) => code);
 
@@ -119,6 +126,21 @@ const priceOne = (row) => {
     low: travelLow,
     high: travelHigh,
   }] : [];
+
+  const onSiteLines = onSiteItems.map((item) => {
+    const rate = asRate(onSiteRates[item]);
+    return {
+      kind: LINE_KINDS.on_site,
+      label: item,
+      source: 'price_bands',
+      unit: String(onSiteRates[item].unit ?? 'each'),
+      quantity: null,
+      rate_low: rate.low,
+      rate_high: rate.high,
+      low: null,
+      high: null,
+    };
+  });
 
   const floorLines = [];
   const minimumLines = [];
@@ -175,7 +197,7 @@ const priceOne = (row) => {
       area_sqft: money(area),
       area_status: row.area_status,
       old_floor_removal: removal,
-      lines: [...floorLines, ...removalLines, ...minimumLines, ...travelLines],
+      lines: [...floorLines, ...removalLines, ...minimumLines, ...travelLines, ...onSiteLines],
     },
   };
 };

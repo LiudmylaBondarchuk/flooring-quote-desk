@@ -790,5 +790,52 @@
       "total_low": 880,
       "total_high": 1760
     }
+  },
+  {
+    "name": "Laminate, 440 sq ft in Kyle, and there are stairs",
+    "why": "484 sq ft of material is bought to lay 440 at 4.00-8.00, so 1936-3872, and that is the whole of it. The stairs are named with the firm's own per-step rate so the customer knows the order of magnitude, and they are not counted: how many steps, and whether they are winders or open-sided, is what the visit is for. A number invented here is one the owner then has to honour.",
+    "row": {
+      "gmail_message_id": "m-stairs",
+      "pricing_allowed": true,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "Laminate",
+      "area_sqft": "440.00",
+      "area_status": "known",
+      "area_comparable": true,
+      "old_floor_removal": false,
+      "zone": "core",
+      "on_site_items": [
+        "stairs"
+      ],
+      "on_site_rates": {
+        "stairs": {
+          "label": "Stair nosing",
+          "unit": "each",
+          "val_low": "45.00",
+          "val_high": "80.00"
+        }
+      },
+      "bands": [
+        {
+          "category": "Laminate",
+          "product": "Laminate standard",
+          "unit": "sqft",
+          "rate_low": "4.00",
+          "rate_high": "8.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
+      ],
+      "rules": {}
+    },
+    "expect": {
+      "priceable": true,
+      "refusals": [],
+      "subtotal_low": 1936,
+      "subtotal_high": 3872,
+      "total_low": 1936,
+      "total_high": 3872
+    }
   }
 ]

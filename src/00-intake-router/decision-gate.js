@@ -171,7 +171,7 @@ for (const item of $input.all()) {
   const ev = ex.evidence || {};
   const cats = row.categories || [];
   const src = norm(row.source_text);
-  const reasons = [], missing = [], dropped = [];
+  const reasons = [], missing = [], dropped = [], onSite = [];
 
   const nothingToRead = row.body_empty === true && src.length === 0;
   const fullyQuoted = row.body_fully_quoted === true;
@@ -405,8 +405,12 @@ for (const item of $input.all()) {
       reasons.push(`${area} sq ft is unusually large for residential — confirm before pricing`);
     }
     if (said(RE.stairs)) {
-      scopeUnknown = true;
-      reasons.push('stairs are charged per step, not per sq ft — the formula cannot express them');
+      // Not scope-unknown any more. Marking the scope unknown holds the whole email for a person,
+      // so a customer who mentioned a staircase got no number for their floor either -- and the
+      // floor was always perfectly priceable. The stairs are named, quoted per step, kept out of
+      // the total, and left for the visit to count.
+      onSite.push('stairs');
+      reasons.push('stairs are charged per step, not per sq ft — named in the quote, counted on site');
     } else if (removal === true || scope === 'remove_first') {
       reasons.push('the old floor comes out — removal and disposal are charged per sq ft on top');
     } else if (scope === 'over_existing') {
@@ -537,6 +541,7 @@ for (const item of $input.all()) {
     existing_floor_action: scope,
     fixing_method: fixing,
     old_floor_removal: removal,
+    on_site_items: onSite,
   };
 
   out.push({ json: {
