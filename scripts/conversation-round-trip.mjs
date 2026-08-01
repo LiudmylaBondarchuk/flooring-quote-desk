@@ -1537,6 +1537,87 @@ console.log('\nsaying yes to a price worked out from an email');
   check('a finished job is left alone', stateNow(), 'done');
 }
 
+console.log('\noffering three times, and reading which one they took');
+{
+  const projectSql = (n) => read('db', '20-project', `${n}.sql`).replace(/;\s*$/, '');
+  const quote = (v) => `'${String(v).replace(/'/g, "''")}'`;
+  const pickSource = read('src', '20-project', 'which-time-did-they-pick.js');
+  const whichOne = (row) => new Function('$input', pickSource)(
+    { all: () => [{ json: row }] })[0].json;
+
+  const orderId = Number(ask(`WITH made AS (
+      INSERT INTO orders (thread_id, state, material_category, area_sqft, area_unit, area_status,
+                          city, zone)
+      VALUES ('t-visit', 'survey_needed', 'Laminate', 400, 'sqft', 'known', 'kyle tx', 'core')
+      RETURNING id) SELECT id FROM made`));
+  const times = ['2026-08-05 09:00:00+00', '2026-08-06 14:00:00+00', '2026-08-07 09:00:00+00'];
+  const offerTimes = () => Number(ask(`WITH made AS (
+      INSERT INTO visits (order_id, offered)
+      VALUES (${orderId}, '${JSON.stringify(times)}'::jsonb)
+      RETURNING id) SELECT id FROM made`));
+  const reply = (id, body) => ask(`WITH made AS (
+      INSERT INTO messages (thread_id, gmail_message_id, direction, sender, order_id, category, body)
+      VALUES ('t-visit', '${id}', 'inbound', 'client', ${orderId}, 'scheduling', ${quote(body)})
+      RETURNING gmail_message_id) SELECT gmail_message_id FROM made`);
+  const lookAt = (id) => rowOf(projectSql('what-times-are-open'), [id]);
+  const settle = (row) => rowOf(projectSql('remember-the-agreed-time'),
+    [row.gmail_message_id, row.visit_id, row.agreed]);
+
+  const visitId = offerTimes();
+
+  // the database refuses a second open offer on the same job before any code has to think about it
+  let refused = false;
+  try { offerTimes(); } catch { refused = true; }
+  check('a job cannot have two open offers of times at once', refused, true);
+
+  const read1 = (id, body) => { reply(id, body); return whichOne(lookAt(id)); };
+
+  check('a bare number takes that time', read1('v-1', '2').agreed_index, 2);
+  check('and it is the time we actually offered', read1('v-2', '2').agreed, times[1]);
+  check('words work as well as digits', read1('v-3', 'the second one please').agreed_index, 2);
+  check('and nothing is handed to a person for it', read1('v-4', 'third works').needs_a_person, false);
+
+  // the ones that must not be guessed at
+  check('two numbers is not an answer', read1('v-5', '1 or 3 both work').needs_a_person, true);
+  check('a refusal that names a day is still a refusal',
+    read1('v-6', 'tuesday is no good, none of these work').needs_a_person, true);
+  check('and a time of their own is a different conversation',
+    read1('v-7', 'how about the 9th instead?').needs_a_person, true);
+  check('a number we never offered is not read as one',
+    read1('v-8', 'number 4 please').needs_a_person, true);
+  check('and an empty reply names nothing', read1('v-9', '   ').needs_a_person, true);
+  // the example the code's own comment argues from, pinned so the argument stays true
+  check('and a sentence that rules one out while naming another is not read as either',
+    read1('v-11', 'not the 2nd, but the 3rd works for us').needs_a_person, true);
+
+  // and the writing down
+  const taken = whichOne(lookAt('v-1'));
+  const first = settle(taken);
+  check('the agreed time is written against the offer it answers', first.was_settled, 't');
+  check('and the visit says so', JSON.parse(ask(
+    `SELECT json_build_object('state', state, 'has_time', agreed IS NOT NULL,
+                              'stamped', agreed_at IS NOT NULL, 'from', agreed_in)
+       FROM visits WHERE id = ${visitId}`)),
+  { state: 'agreed', has_time: true, stamped: true, from: 'v-1' });
+
+  check('answering twice settles nothing the second time', settle(taken).was_settled, 'f');
+
+  // the lane runs this for every reply, readable or not: the unreadable ones must settle nothing
+  // rather than be refused by the constraint and land in the error lane
+  const unreadable = whichOne(lookAt('v-6'));
+  check('a reply nobody could read settles nothing, and is not an error',
+    settle(unreadable).was_settled, 'f');
+
+  // a later reply to a visit already agreed must not quietly move the date somebody drove to
+  reply('v-10', '3');
+  const late = whichOne(lookAt('v-10'));
+  check('and a change of mind afterwards is a person\'s conversation', late.needs_a_person, true);
+
+  check('the job can now hold a fresh offer of times', Number(ask(`WITH made AS (
+      INSERT INTO visits (order_id, offered) VALUES (${orderId}, '["2026-09-01 09:00:00+00"]'::jsonb)
+      RETURNING id) SELECT id FROM made`)) > 0, true);
+}
+
 console.log(`\n${failed === 0 ? 'all checks passed' : `${failed} check(s) FAILED`}`);
 
 try {

@@ -254,6 +254,29 @@ CREATE INDEX messages_open_work_idx ON messages (route, created_at DESC) WHERE h
 CREATE INDEX messages_signature_idx ON messages (lower(contact_email), material_category, area_sqft)
     WHERE material_category IS NOT NULL AND area_sqft IS NOT NULL;
 
+CREATE TABLE visits (
+    id           integer     GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    order_id     integer     NOT NULL REFERENCES orders (id) ON DELETE CASCADE,
+    state        text        NOT NULL DEFAULT 'offered',
+    offered      jsonb       NOT NULL,
+    offered_in   text        REFERENCES messages (gmail_message_id) ON DELETE SET NULL,
+    offered_at   timestamptz NOT NULL DEFAULT now(),
+    agreed       timestamptz,
+    agreed_in    text        REFERENCES messages (gmail_message_id) ON DELETE SET NULL,
+    agreed_at    timestamptz,
+
+    CONSTRAINT visits_state_known CHECK (state IN ('offered', 'agreed', 'lapsed')),
+    CONSTRAINT visits_agreed_has_a_time CHECK ((state = 'agreed') = (agreed IS NOT NULL)),
+    CONSTRAINT visits_agreement_is_stamped CHECK ((agreed IS NULL) = (agreed_at IS NULL)),
+    CONSTRAINT visits_offered_three CHECK (jsonb_typeof(offered) = 'array'
+        AND jsonb_array_length(offered) BETWEEN 1 AND 5)
+);
+
+CREATE UNIQUE INDEX visits_one_open_per_order ON visits (order_id) WHERE state = 'offered';
+
+COMMENT ON TABLE visits IS
+    'Times offered for somebody to come and see the floor, and which of them was agreed. Offered as written, in the order written, so that "the second one" still means something later.';
+
 CREATE TABLE service_area (
     id     integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     city   text    NOT NULL,
