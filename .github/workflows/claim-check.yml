@@ -1,3 +1,6 @@
+# Draft — lives here until it has been run, then copied to
+# flooring-quote-desk/.github/workflows/claim-check.yml.
+#
 # It lives in the PUBLIC repository on purpose, so the run is visible in that repository's own
 # Actions tab while somebody is watching. The knowledge base is private and is checked out as a
 # step; nothing else in the public repository names it.
@@ -17,13 +20,19 @@ on:
         description: pull request number
         required: true
 
-# The comment goes to /issues/{n}/comments, which is issues: write. pull-requests: write was
-# granting approve, request-changes and close for nothing -- "it cannot block, cannot approve"
-# was true only because the script chooses not to, which is not where that promise belongs.
+# pull-requests: write, and it has to be. The comment goes to /issues/{n}/comments, so issues:
+# write looks like the narrower grant that would do -- and it was tried, and GitHub answered 403
+# "Resource not accessible by integration": when the number is a pull request, the permission
+# checked is pull-requests, whatever the path says. The narrowing was suggested by the reviewer,
+# accepted on reasoning rather than on a run, and it silently stopped the reviewer commenting at
+# all.
+#
+# So the concern behind it stands and cannot be closed here: this grant also permits approve,
+# request-changes and close. "It cannot approve" rests on the script, not on this file. Said out
+# loud rather than papered over with a permission that does not work.
 permissions:
   contents: read
-  pull-requests: read
-  issues: write
+  pull-requests: write
 
 jobs:
   review:
