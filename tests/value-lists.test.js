@@ -331,3 +331,49 @@ for (const [name, list] of named.filter(([, l]) => l.fixture_field)) {
     }
   }
 }
+
+// --- a pattern written in more than one language, and nothing binding the copies
+//
+// A list of values has a natural home in a CHECK constraint that a test can read. A pattern does
+// not: it is a regular expression in the schema, a second one in a Code node, and an alphabet with
+// two lengths in the statement that makes the values. Three files, none able to see the others.
+//
+// Getting this wrong is silent, which is why it is worth a test at all. Loosen the copy that reads
+// a code and it keeps being issued and stored exactly as before; only the ones customers type stop
+// being recognised, so bookings quietly stop finding their job and nothing anywhere says so.
+{
+  const patterns = JSON.parse(readFileSync(join(root, 'value-lists.json'), 'utf8')).patterns || {};
+
+  for (const [name, pattern] of Object.entries(patterns)) {
+    const made = readFileSync(join(root, pattern.copies.made_in), 'utf8');
+    const schema = readFileSync(join(root, pattern.copies.sql), 'utf8');
+    const readIn = readFileSync(join(root, pattern.copies.read_in), 'utf8');
+
+    test(`${name}: the statement that makes one uses the alphabets and the lengths`, () => {
+      assert.ok(made.includes(`'${pattern.letters}'`),
+        `${pattern.copies.made_in} does not draw letters from ${pattern.letters}`);
+      assert.ok(made.includes(`'${pattern.digits}'`),
+        `${pattern.copies.made_in} does not draw digits from ${pattern.digits}`);
+      assert.ok(made.includes(`generate_series(1, ${pattern.letter_count})`),
+        `${pattern.copies.made_in} does not make ${pattern.letter_count} letters`);
+      assert.ok(made.includes(`generate_series(1, ${pattern.digit_count})`),
+        `${pattern.copies.made_in} does not make ${pattern.digit_count} digits`);
+    });
+
+    test(`${name}: the database accepts exactly that shape`, () => {
+      assert.ok(schema.includes(`'${pattern.regex}'`),
+        `no CHECK in db/schema.sql carries ${pattern.regex}`);
+    });
+
+    test(`${name}: the code that reads one recognises exactly that shape`, () => {
+      assert.ok(readIn.includes(`/${pattern.regex}/`),
+        `${pattern.copies.read_in} does not test against ${pattern.regex}`);
+    });
+
+    test(`${name}: the alphabets and lengths in the canon build the canon's own expression`, () => {
+      const built = `^[${pattern.letters}]{${pattern.letter_count}}[${pattern.digits}]{${pattern.digit_count}}$`;
+      assert.equal(built, pattern.regex,
+        'value-lists.json disagrees with itself: the alphabets and lengths do not make the regex');
+    });
+  }
+}

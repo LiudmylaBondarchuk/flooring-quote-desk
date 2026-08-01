@@ -579,5 +579,21 @@
       ],
       "not_produced_by_gate": "a model answers this after the gate has decided, not the gate itself"
     }
+  },
+  "patterns": {
+    "booking_code": {
+      "means": "the code printed in the letter that carries the booking link, and asked for on the booking form. Five letters then two digits, from alphabets with nothing ambiguous in them, and no separator: a person copies it off a screen by hand.",
+      "letters": "ABCDEFGHJKMNPQRSTUVWXYZ",
+      "digits": "23456789",
+      "letter_count": 5,
+      "digit_count": 2,
+      "regex": "^[ABCDEFGHJKMNPQRSTUVWXYZ]{5}[23456789]{2}$",
+      "copies": {
+        "made_in": "db/00-intake-router/find-or-create-an-order.sql",
+        "sql": "db/schema.sql",
+        "read_in": "src/25-visits/read-the-booking.js"
+      },
+      "why_it_is_here": "the rule lives in three files and none of them can see the others. Loosening the one that reads a code, or tightening the one that makes them, breaks nothing loudly: codes keep being issued and stored, and the ones customers type stop being recognised, so bookings quietly stop finding their job."
+    }
   }
 }
