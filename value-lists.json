@@ -356,9 +356,10 @@
       ]
     },
     "on_site_item": {
-      "means": "what a job holds that a letter cannot put a price on. Named in the quote with its own per-unit range, never added to the total, and settled when somebody sees it.",
+      "means": "what a job holds that a letter cannot put a price on. Named in the quote with its own rate, never added to the total, and settled when somebody sees it. Stairs vary by kind and number; what is under the old floor cannot be known from outside it.",
       "values": [
-        "stairs"
+        "stairs",
+        "subfloor"
       ],
       "sql": [
         "orders.on_site_items"

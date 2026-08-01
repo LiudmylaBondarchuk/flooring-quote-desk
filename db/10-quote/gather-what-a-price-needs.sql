@@ -68,11 +68,19 @@ SELECT
   -- what a step costs, taken from the price list and not from the floor material: a customer laying
   -- laminate still has stairs, and the stairs band is the firm's rate for a step whatever is on the
   -- floor below it
-  coalesce((SELECT json_object_agg(b.component,
-              json_build_object('label', b.product, 'unit', b.unit,
-                                'val_low', b.rate_low, 'val_high', b.rate_high))
-              FROM price_bands b
-             WHERE b.active AND b.component = 'stairs'), '{}'::json) AS on_site_rates
+  -- what each of these costs, from wherever this firm keeps that rate. Stairs are a price band,
+  -- because they are a product with a unit; levelling a slab is a pricing rule, because it is
+  -- labour per square foot. Both arrive under the name the job knows them by.
+  (coalesce((SELECT jsonb_object_agg(b.component,
+               jsonb_build_object('label', b.product, 'unit', b.unit,
+                                  'val_low', b.rate_low, 'val_high', b.rate_high))
+               FROM price_bands b
+              WHERE b.active AND b.component = 'stairs'), '{}'::jsonb)
+   || coalesce((SELECT jsonb_build_object('subfloor',
+                  jsonb_build_object('label', 'levelling and moisture work', 'unit', 'sqft',
+                                     'val_low', r.val_low, 'val_high', r.val_high))
+                  FROM pricing_rules r
+                 WHERE r.rule_key = 'subfloor_leveling'), '{}'::jsonb))    AS on_site_rates
   FROM messages m
   LEFT JOIN orders o ON o.id = m.order_id
   LEFT JOIN job    j ON j.id = o.id

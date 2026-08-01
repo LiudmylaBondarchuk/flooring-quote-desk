@@ -1764,6 +1764,30 @@ console.log('\na visit that moved, and one that vanished');
     `WITH again AS (${fill(visitSql('the-visit-is-off'), [visitId])}) SELECT count(*) FROM again`), '0');
 }
 
+console.log('\nwhat a letter cannot price reaches the job it belongs to');
+{
+  const damp = arrive({
+    id: 'damp-1', thread: 't-damp', from: 'damp@example.com',
+    text: 'lvp in the living room, 300 sq ft, kyle tx — there is damp coming through the slab',
+    extracted: { intent: 'new_quote', material: 'lvp', area_sqft: 300, city: 'kyle',
+      subfloor_flag: true,
+      evidence: { material: 'lvp', area_sqft: '300 sq ft', city: 'kyle',
+        subfloor_flag: 'damp coming through the slab' } },
+  });
+  check('the gate stands behind the flag rather than only colouring the letter',
+    damp.decision.settled.on_site_items, ['subfloor']);
+  check('and the job carries it', ask(
+    `SELECT on_site_items::text FROM orders WHERE id = ${damp.order_id}`), '{subfloor}');
+  check('while the floor itself is still priced',
+    damp.decision.category, 'quote_request');
+
+  // it survives a later letter that says nothing about it, the same way stairs do
+  arrive({ id: 'damp-2', thread: 't-damp', from: 'damp@example.com', text: 'any news?',
+    extracted: { intent: 'follow_up', evidence: {} } });
+  check('and a later letter that never mentions it does not take it away', ask(
+    `SELECT on_site_items::text FROM orders WHERE id = ${damp.order_id}`), '{subfloor}');
+}
+
 console.log('\nasking a customer who said yes to pick a time');
 {
   const projectSql = (n) => read('db', '20-project', `${n}.sql`).replace(/;\s*$/, '');

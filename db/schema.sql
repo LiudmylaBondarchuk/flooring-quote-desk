@@ -69,7 +69,7 @@ CREATE TABLE orders (
         OR (area_sqft >= 20 AND area_sqft <= 20000)),
     CONSTRAINT orders_booking_code_shape CHECK (booking_code IS NULL
         OR booking_code ~ '^[ABCDEFGHJKMNPQRSTUVWXYZ]{5}[23456789]{2}$'),
-    CONSTRAINT orders_on_site_items_known CHECK (on_site_items <@ ARRAY['stairs']::text[]),
+    CONSTRAINT orders_on_site_items_known CHECK (on_site_items <@ ARRAY['stairs', 'subfloor']::text[]),
     CONSTRAINT orders_closed_is_stamped CHECK (
         (state IN ('booked', 'done', 'lost')) = (closed_at IS NOT NULL))
 );
