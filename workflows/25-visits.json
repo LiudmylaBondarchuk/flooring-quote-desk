@@ -232,6 +232,172 @@
           "queryReplacement": "={{ [$('Write the confirmation').item.json.visit_id] }}"
         }
       }
+    },
+    {
+      "id": "recon-clock",
+      "name": "Check what the calendar says",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        620
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "recon-which",
+      "name": "Visits worth checking",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        620
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Visits the calendar might have changed under us, and what we believe about each.\n--\n-- Only ones that came from a booking -- a visit agreed by letter has no Google event to compare\n-- against -- and only ones still ahead of us. What happened to a visit last March is history, and\n-- reconciling history against a calendar that has since been tidied would rewrite the record of\n-- what was true at the time.\n\nSELECT v.id                AS visit_id,\n       v.order_id,\n       v.booked_event_id,\n       v.agreed,\n       v.confirmed_at IS NOT NULL AS was_told\n  FROM visits v\n  JOIN orders o ON o.id = v.order_id\n WHERE v.state = 'agreed'\n   AND v.booked_event_id IS NOT NULL\n   AND v.agreed > now() - interval '1 day'\n   AND o.state NOT IN ('done', 'lost')\n ORDER BY v.agreed;\n",
+        "options": {
+          "queryReplacement": "={{ [] }}"
+        }
+      }
+    },
+    {
+      "id": "recon-read",
+      "name": "What is on the calendar",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        480,
+        620
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": null,
+          "name": "Google Calendar account"
+        }
+      },
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "primary",
+          "mode": "list"
+        },
+        "returnAll": true,
+        "options": {
+          "timeMin": "={{ $now.minus(1, \"day\").toISO() }}",
+          "timeMax": "={{ $now.plus(120, \"days\").toISO() }}",
+          "showDeleted": true,
+          "singleEvents": true
+        }
+      }
+    },
+    {
+      "id": "recon-compare",
+      "name": "What the calendar says now",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        620
+      ],
+      "parameters": {
+        "jsCode": "// What the calendar says about visits this database still believes in.\n//\n// Bookings move and bookings vanish, and neither arrives as a message anybody sends us. A customer\n// presses \"reschedule\" on Google's own page and the desk is told nothing; the owner deletes a\n// morning from her calendar and the desk is told nothing. Either way the row here goes on naming a\n// time nobody is coming at, which is worse than knowing nothing: it reads as certainty.\n//\n// This compares the two rather than trusting a trigger to say what changed. Which events Google\n// emits for a reschedule -- one updated, or a cancelled and a created -- is not something this has\n// to know, and not knowing it is the point: a comparison is right whatever the notification did.\n\nconst CANCELLED = 'cancelled';\n\nreturn (() => {\n  const believed = $('Visits worth checking').all().map((item) => item.json || {});\n  if (!believed.length) return [];\n\n  const live = new Map();\n  for (const item of $input.all()) {\n    const event = item.json || {};\n    if (event.id) live.set(event.id, event);\n  }\n\n  const verdicts = [];\n  for (const [i, visit] of believed.entries()) {\n    const event = live.get(visit.booked_event_id);\n\n    // Not in the window we asked for is not the same as cancelled. The read covers a stretch of\n    // time; a visit outside it is simply unmentioned, and calling that a cancellation would strike\n    // out every booking far enough ahead.\n    if (!event) continue;\n\n    if (event.status === CANCELLED) {\n      verdicts.push({ json: { ...visit, what_changed: 'gone', now_at: null }, pairedItem: { item: i } });\n      continue;\n    }\n\n    const now_at = event.start?.dateTime || null;\n    if (!now_at) continue;\n\n    // compared as instants, because the two sides write the same moment differently: the database\n    // hands back +00:00 and Google says -05:00, and as strings those never agree\n    const same = new Date(now_at).getTime() === new Date(visit.agreed).getTime();\n    if (!same) {\n      verdicts.push({ json: { ...visit, what_changed: 'moved', now_at }, pairedItem: { item: i } });\n    }\n  }\n  return verdicts;\n})();\n"
+      }
+    },
+    {
+      "id": "recon-which-way",
+      "name": "Moved, or gone?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        620
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "moved",
+              "leftValue": "={{ $json.what_changed }}",
+              "rightValue": "moved",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "recon-moved",
+      "name": "The visit moved",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1200,
+        540
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- The customer moved the booking, so the visit follows it.\n--\n-- The letter that already went out named the old time, and this does not send another: when the\n-- desk cancels or moves anything the owner writes herself, and when a customer moves their own\n-- booking Google has already told them what they now have. A third letter from us would be the\n-- machine talking over both.\n--\n-- confirmed_at is cleared, so a moved visit is written about once more by the ordinary path -- the\n-- customer has a letter naming a time that is no longer the time.\n\nUPDATE visits\n   SET agreed = $2::timestamptz,\n       confirmed_at = NULL\n WHERE id = $1::int\n   AND state = 'agreed'\n   AND agreed IS DISTINCT FROM $2::timestamptz\nRETURNING id, order_id, agreed;\n",
+        "options": {
+          "queryReplacement": "={{ [$json.visit_id, $json.now_at] }}"
+        }
+      }
+    },
+    {
+      "id": "recon-off",
+      "name": "The visit is off",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1200,
+        700
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- The booking is gone from the calendar, so the visit is not happening.\n--\n-- The job stays where it is. A cancelled visit does not close a job or reopen a quote: somebody\n-- still wants a floor, and what happens next is a conversation, not a state change made by a\n-- polling loop that noticed an empty slot.\n--\n-- Nothing is written to anybody. When the owner cancels, the reason is hers and a cheerful\n-- \"pick another time\" from the desk lands exactly wrong; when the customer cancels, Google has\n-- already said so. Both were decided rather than defaulted.\n\nUPDATE visits\n   SET state = 'lapsed'\n WHERE id = $1::int\n   AND state = 'agreed'\nRETURNING id, order_id, state;\n",
+        "options": {
+          "queryReplacement": "={{ [$json.visit_id] }}"
+        }
+      }
     }
   ],
   "connections": {
@@ -318,6 +484,68 @@
         [
           {
             "node": "Say the visit was confirmed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check what the calendar says": {
+      "main": [
+        [
+          {
+            "node": "Visits worth checking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Visits worth checking": {
+      "main": [
+        [
+          {
+            "node": "What is on the calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What is on the calendar": {
+      "main": [
+        [
+          {
+            "node": "What the calendar says now",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What the calendar says now": {
+      "main": [
+        [
+          {
+            "node": "Moved, or gone?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Moved, or gone?": {
+      "main": [
+        [
+          {
+            "node": "The visit moved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "The visit is off",
             "type": "main",
             "index": 0
           }

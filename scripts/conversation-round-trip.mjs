@@ -1773,6 +1773,78 @@ console.log('\nsaying something about a booking, a quarter of an hour later');
     compose({ ...row, write_to: null }).ready_to_send, false);
 }
 
+console.log('\na visit that moved, and one that vanished');
+{
+  const visitSql = (n) => read('db', '25-visits', `${n}.sql`).replace(/;\s*$/, '');
+  const source = read('src', '25-visits', 'what-the-calendar-says-now.js');
+  // the code reads two nodes: the events on its input, and the visits from the lookup before it
+  const compare = (events, visits) => new Function('$input', '$', source)(
+    { all: () => events.map((json) => ({ json })) },
+    (name) => {
+      if (name !== 'Visits worth checking') throw new Error(`reached back to ${name}`);
+      return { all: () => visits.map((json) => ({ json })) };
+    },
+  ).map((r) => r.json);
+
+  const orderId = Number(ask(`WITH made AS (
+      INSERT INTO orders (thread_id, state, contact_email, material_category, city, zone)
+      VALUES ('t-moved', 'survey_needed', 'customer@example.com', 'Laminate', 'Kyle, TX', 'core')
+      RETURNING id) SELECT id FROM made`));
+  const visitId = Number(ask(`WITH made AS (
+      INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id, confirmed_at)
+      VALUES (${orderId}, 'agreed', '["2026-09-01T15:00:00+00:00"]'::jsonb,
+              '2026-09-01T15:00:00+00:00', now(), 'g-live', now())
+      RETURNING id) SELECT id FROM made`));
+  const worthChecking = () => JSON.parse(ask(
+    `SELECT coalesce(json_agg(t), '[]'::json) FROM (${visitSql('visits-worth-checking')}) t`))
+    .filter((v) => Number(v.visit_id) === visitId);
+  const believed = worthChecking();
+  // other sections of this run have left visits behind, which is realistic: the question is
+  // whether ours is among them, not whether it is alone
+  check('a booking still ahead of us is worth checking',
+    believed.some((v) => Number(v.visit_id) === visitId), true);
+
+  const asGoogle = (id, when, status) => ({ id, status, start: { dateTime: when } });
+
+  check('a booking still where we left it says nothing',
+    compare([asGoogle('g-live', '2026-09-01T15:00:00+00:00', 'confirmed')], believed).length, 0);
+  // the two sides write the same instant differently, and as strings they never agree
+  check('and the same instant written another way is still where we left it',
+    compare([asGoogle('g-live', '2026-09-01T10:00:00-05:00', 'confirmed')], believed).length, 0);
+
+  const moved = compare([asGoogle('g-live', '2026-09-02T15:00:00+00:00', 'confirmed')], believed);
+  check('a booking that moved says so', moved[0]?.what_changed, 'moved');
+  const gone = compare([asGoogle('g-live', '2026-09-01T15:00:00+00:00', 'cancelled')], believed);
+  check('and one that was cancelled says so', gone[0]?.what_changed, 'gone');
+
+  // the read covers a stretch of time, and a visit outside it is unmentioned, not cancelled
+  check('a booking the read never mentioned is left alone', compare([], believed).length, 0);
+
+  // and the writing down
+  rowOf(visitSql('the-visit-moved'), [visitId, '2026-09-02T15:00:00+00:00']);
+  // asked as an instant: psql renders a timestamptz in whatever zone the session is in, and the
+  // same moment written +02:00 and +00:00 is the same moment
+  check('the visit follows the booking', JSON.parse(ask(
+    `SELECT json_build_object('agreed', to_char(agreed AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI'),
+                              'told_again', confirmed_at IS NULL)
+       FROM visits WHERE id = ${visitId}`)),
+  { agreed: '2026-09-02 15:00', told_again: true });
+  check('moving it to where it already is changes nothing', ask(
+    `WITH again AS (${fill(visitSql('the-visit-moved'), [visitId, '2026-09-02T15:00:00+00:00'])})
+     SELECT count(*) FROM again`), '0');
+
+  rowOf(visitSql('the-visit-is-off'), [visitId]);
+  check('a cancelled booking lapses the visit',
+    ask(`SELECT state FROM visits WHERE id = ${visitId}`), 'lapsed');
+  check('and leaves the job where it was',
+    ask(`SELECT state FROM orders WHERE id = ${orderId}`), 'survey_needed');
+  check('a lapsed visit is not checked against the calendar again', worthChecking().length, 0);
+  check('but it still remembers when it was going to be', ask(
+    `SELECT agreed IS NOT NULL FROM visits WHERE id = ${visitId}`), 't');
+  check('and cancelling it twice changes nothing', ask(
+    `WITH again AS (${fill(visitSql('the-visit-is-off'), [visitId])}) SELECT count(*) FROM again`), '0');
+}
+
 console.log(`\n${failed === 0 ? 'all checks passed' : `${failed} check(s) FAILED`}`);
 
 try {

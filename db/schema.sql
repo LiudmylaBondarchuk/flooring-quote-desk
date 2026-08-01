@@ -272,7 +272,9 @@ CREATE TABLE visits (
     confirmed_at timestamptz,
 
     CONSTRAINT visits_state_known CHECK (state IN ('offered', 'agreed', 'lapsed')),
-    CONSTRAINT visits_agreed_has_a_time CHECK ((state = 'agreed') = (agreed IS NOT NULL)),
+    -- one direction only: an agreed visit has a time, and a cancelled one keeps the time it
+    -- was going to be. Requiring the reverse left no record that anybody was ever coming.
+    CONSTRAINT visits_agreed_has_a_time CHECK (state <> 'agreed' OR agreed IS NOT NULL),
     CONSTRAINT visits_agreement_is_stamped CHECK ((agreed IS NULL) = (agreed_at IS NULL)),
     CONSTRAINT visits_offered_three CHECK (jsonb_typeof(offered) = 'array'
         AND jsonb_array_length(offered) BETWEEN 1 AND 5)
