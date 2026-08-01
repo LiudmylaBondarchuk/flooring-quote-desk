@@ -7,6 +7,10 @@
 -- Only agreed visits still ahead of us, and only those nobody has been told about: owner_told_at
 -- being null is what makes this run once. A visit that lapsed gets nothing -- nobody is driving
 -- anywhere.
+--
+-- Ahead of us means ahead of now. This is read before somebody knocks, so a visit whose hour has
+-- passed has nothing to prepare for: if the lane were down across the appointment, catching up
+-- afterwards would announce a visit that already happened.
 
 SELECT v.id                                   AS visit_id,
        v.order_id,
@@ -48,6 +52,6 @@ SELECT v.id                                   AS visit_id,
   JOIN orders o ON o.id = v.order_id
  WHERE v.state = 'agreed'
    AND v.owner_told_at IS NULL
-   AND v.agreed > now() - interval '1 day'
+   AND v.agreed > now()
    AND o.state NOT IN ('done', 'lost')
  ORDER BY v.agreed;

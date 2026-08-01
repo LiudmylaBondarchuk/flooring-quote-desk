@@ -1998,6 +1998,10 @@ console.log('\nwhat the owner is told before a visit');
   check('and what is said carries the new time',
     compose(mine()[0]).message.includes('Thursday, August 6, 1:30pm'), true);
 
+  // an hour that has passed is not something to prepare for
+  ask(`UPDATE visits SET agreed = now() - interval '2 hours' WHERE id = ${visitId}`);
+  check('a visit whose hour has gone by is not prepared for', mine().length, 0);
+
   // nobody is driving anywhere
   ask(`UPDATE visits SET state = 'lapsed' WHERE order_id = ${bareId}`);
   check('a cancelled visit is not prepared for',
