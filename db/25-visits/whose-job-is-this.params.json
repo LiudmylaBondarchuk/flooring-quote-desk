@@ -1,0 +1,3 @@
+{
+  "queryReplacement": "={{ [$json.booked_email || '', $json.booking_code || ''] }}"
+}

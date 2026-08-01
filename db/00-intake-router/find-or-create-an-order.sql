@@ -45,10 +45,17 @@ already_said AS (
 made AS (
   INSERT INTO orders (contact_email, thread_id, material_category, area_sqft, area_unit, area_status,
                       city, zone, existing_floor_action, fixing_method, old_floor_removal,
-                      on_site_items)
+                      on_site_items, booking_code)
   SELECT $3, $2, t.material_category, t.area_sqft::numeric, t.area_unit, t.area_status,
          t.city, t.zone, t.existing_floor_action, t.fixing_method, t.old_floor_removal::boolean,
-         coalesce(t.on_site_items, '{}')
+         coalesce(t.on_site_items, '{}'),
+         -- five letters then two digits, and no separator. A person copies this off a screen
+         -- into a booking form: the shape is what they check against, and a hyphen is the first
+         -- thing left out when it is typed back. No I, O or L, no 0 or 1.
+         (SELECT string_agg(substr('ABCDEFGHJKMNPQRSTUVWXYZ', (random() * 22)::int + 1, 1), '')
+            FROM generate_series(1, 5))
+         || (SELECT string_agg(substr('23456789', (random() * 7)::int + 1, 1), '')
+               FROM generate_series(1, 2))
     FROM already_said t
    WHERE NOT EXISTS (SELECT 1 FROM open_in_thread)
      AND $4::boolean

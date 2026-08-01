@@ -46,6 +46,7 @@ CREATE TABLE orders (
     updated_at            timestamptz    NOT NULL DEFAULT now(),
 
     on_site_items     text[]      NOT NULL DEFAULT '{}',
+    booking_code      text,
 
     CONSTRAINT orders_state_known CHECK (state IN (
         'new', 'needs_info', 'quoted', 'negotiating',
@@ -64,11 +65,14 @@ CREATE TABLE orders (
         'loose_lay', 'peel_and_stick', 'mortar_set', 'thinset')),
     CONSTRAINT orders_area_sane CHECK (area_sqft IS NULL
         OR (area_sqft > 0 AND area_sqft < 1000000)),
+    CONSTRAINT orders_booking_code_shape CHECK (booking_code IS NULL
+        OR booking_code ~ '^[ABCDEFGHJKMNPQRSTUVWXYZ]{5}[23456789]{2}$'),
     CONSTRAINT orders_on_site_items_known CHECK (on_site_items <@ ARRAY['stairs']::text[]),
     CONSTRAINT orders_closed_is_stamped CHECK (
         (state IN ('booked', 'done', 'lost')) = (closed_at IS NOT NULL))
 );
 
+CREATE UNIQUE INDEX orders_booking_code_unique ON orders (booking_code);
 CREATE INDEX orders_thread_idx  ON orders (thread_id);
 CREATE UNIQUE INDEX orders_one_open_per_thread ON orders (thread_id)
     WHERE state NOT IN ('booked', 'done', 'lost');
@@ -264,6 +268,7 @@ CREATE TABLE visits (
     agreed       timestamptz,
     agreed_in    text        REFERENCES messages (gmail_message_id) ON DELETE SET NULL,
     agreed_at    timestamptz,
+    booked_event_id text,
 
     CONSTRAINT visits_state_known CHECK (state IN ('offered', 'agreed', 'lapsed')),
     CONSTRAINT visits_agreed_has_a_time CHECK ((state = 'agreed') = (agreed IS NOT NULL)),
@@ -273,6 +278,8 @@ CREATE TABLE visits (
 );
 
 CREATE UNIQUE INDEX visits_one_open_per_order ON visits (order_id) WHERE state = 'offered';
+CREATE UNIQUE INDEX visits_one_per_booking ON visits (booked_event_id)
+    WHERE booked_event_id IS NOT NULL;
 
 COMMENT ON TABLE visits IS
     'Times offered for somebody to come and see the floor, and which of them was agreed. Offered as written, in the order written, so that "the second one" still means something later.';
@@ -402,6 +409,9 @@ COMMENT ON COLUMN services.priority IS
     'Order within one side of the catalogue. What the firm does is always checked before what it refuses, in code.';
 COMMENT ON COLUMN messages.matched_rule IS
     'Which of the classification rules fired. The only record of why this email went where it went.';
+COMMENT ON COLUMN orders.booking_code IS
+    'Printed in the letter that carries the booking link, and asked for on the booking form. A tiebreaker when the email typed into the form is not the one on the order — never the only way in.';
+
 COMMENT ON COLUMN orders.on_site_items IS
     'What this job holds that a letter cannot put a price on. Named in the quote with a per-unit range, never added to the total, settled by the visit.';
 

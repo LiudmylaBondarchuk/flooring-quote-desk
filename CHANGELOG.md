@@ -11,6 +11,17 @@ A conversation now outlives the email that started it, the price list is kept by
 owner rather than by a developer, and a price is computed and written down. The desk
 answers a customer for the first time — with a question, never with a figure.
 
+**A booking made on the calendar finds the job it belongs to.** The desk sends a Google booking
+link and the customer picks a time from live availability, so nothing here keeps a second opinion
+about what is free — which removes double-booking, stale offers and travel buffers as things this
+code has to get right; Google owns all three. What arrives back is an event, and `25 Visits` reads
+it: the guest's address from the attendee list, and the order code from the booking form. Matching
+is the email first and the code second, and neither is a gate — a booking whose email is on the job
+matches whether the code is there or not, one from another address matches on the code, and an email
+and a code pointing at different jobs is handed to a person rather than resolved. `orders.booking_code`
+is five letters then two digits, from alphabets with no `I`, `O`, `L`, `0` or `1` in them, and with
+no separator: a hyphen is the first thing somebody leaves out when they type it back.
+
 **Three times are offered, and one of them is agreed.** A job left at `survey_needed` had nothing
 to do next. Now the desk names concrete times, the customer replies with a number, and `visits`
 remembers which was taken — the times as they were offered, in the order they were offered, so that

@@ -1618,6 +1618,100 @@ console.log('\noffering three times, and reading which one they took');
       RETURNING id) SELECT id FROM made`)) > 0, true);
 }
 
+console.log('\na booking on the calendar finding the job it belongs to');
+{
+  const visitSql = (n) => read('db', '25-visits', `${n}.sql`).replace(/;\s*$/, '');
+  const quoteLit = (v) => `'${String(v).replace(/'/g, "''")}'`;
+  const readSource = read('src', '25-visits', 'read-the-booking.js');
+  const readBooking = (event) => new Function('$input', readSource)(
+    { all: () => [{ json: event }] })[0].json;
+
+  // the two real events this was built from, kept exactly as Google returned them
+  const desk = 'flooring.demo.austin@gmail.com';
+  const googleEvent = (id, guest, description, when) => ({
+    id,
+    summary: 'Floor survey visit (Someone)',
+    organizer: { email: desk, self: true },
+    attendees: [{ email: desk, organizer: true }, { email: guest }],
+    description,
+    start: { dateTime: when, timeZone: 'America/Chicago' },
+  });
+  const polish = '<b>Zarezerwowane przez:</b>\nSomeone\nsomeone@example.com\n<br><b>Order code</b>\nKQMNP47';
+  const english = '<b>Booked by</b>\nSomeone\nsomeone@example.com\n<br><b>Order code</b>\nKQMNP47';
+
+  const readPolish = readBooking(googleEvent('g-1', 'guest@example.com', polish, '2026-08-03T15:00:00-05:00'));
+  check('the guest is read from the attendees, not the prose', readPolish.booked_email, 'guest@example.com');
+  check('and the code is found under a Polish label', readPolish.booking_code, 'KQMNP47');
+  check('as it is under an English one',
+    readBooking(googleEvent('g-2', 'guest@example.com', english, '2026-08-03T15:00:00-05:00')).booking_code,
+    'KQMNP47');
+  check('a code typed with a space or a hyphen still counts', readBooking(
+    googleEvent('g-5', 'guest@example.com', english.replace('KQMNP47', 'kqmnp-47'),
+      '2026-08-03T15:00:00-05:00')).booking_code, 'KQMNP47');
+  check('a code shaped like nothing we issue is not carried forward', readBooking(
+    googleEvent('g-3', 'guest@example.com', english.replace('KQMNP47', 'no idea sorry'),
+      '2026-08-03T15:00:00-05:00')).booking_code, null);
+  check('and a booking with neither says so plainly', readBooking(
+    { id: 'g-4', organizer: { email: desk }, attendees: [{ email: desk, organizer: true }],
+      description: 'nothing useful', start: {} }).nothing_to_go_on, true);
+
+  // now the matching, against real rows
+  const orderWith = (email, state) => Number(ask(`WITH made AS (
+      INSERT INTO orders (thread_id, state, contact_email, material_category, area_sqft, area_unit,
+                          area_status, city, zone, booking_code)
+      VALUES ('t-book-${email}', '${state}', ${quoteLit(email)}, 'Laminate', 400, 'sqft', 'known',
+              'kyle tx', 'core',
+              (SELECT string_agg(substr('ABCDEFGHJKMNPQRSTUVWXYZ', (random()*22)::int + 1, 1), '')
+                 FROM generate_series(1, 5))
+              || (SELECT string_agg(substr('23456789', (random()*7)::int + 1, 1), '')
+                    FROM generate_series(1, 2)))
+      RETURNING id) SELECT id FROM made`));
+  const codeOf = (id) => ask(`SELECT booking_code FROM orders WHERE id = ${id}`);
+  const whose = (email, code) => rowOf(visitSql('whose-job-is-this'), [email, code]);
+
+  const mine = orderWith('customer@example.com', 'quoted');
+  check('every order is issued a code, five letters then two digits',
+    /^[ABCDEFGHJKMNPQRSTUVWXYZ]{5}[23456789]{2}$/.test(codeOf(mine)), true);
+
+  check('a booking from the address on the job matches it',
+    Number(whose('customer@example.com', '').order_id), mine);
+  check('and it says what matched', whose('customer@example.com', '').matched_by, 'the email');
+  check('a booking from another address matches on the code',
+    Number(whose('someone.else@example.com', codeOf(mine)).order_id), mine);
+  check('and it says so', whose('someone.else@example.com', codeOf(mine)).matched_by, 'the code');
+  const both = whose('customer@example.com', codeOf(mine));
+  check('when both answer, they answer the same job', both.by_email, both.by_code);
+  check('and the record says the email carried it', both.matched_by, 'the email');
+  check('neither matching is nobody guessed at', whose('nobody@example.com', 'ZZZZZ99').order_id, '');
+
+  // the case where having two ways in is worse than one
+  const other = orderWith('another@example.com', 'quoted');
+  const disagree = whose('another@example.com', codeOf(mine));
+  check('an email and a code pointing at different jobs goes to a person',
+    disagree.needs_a_person, 't');
+  check('and picks neither of them', disagree.matched_by, 'they disagree');
+
+  // a finished job is not reopened by somebody booking against it
+  ask(`UPDATE orders SET state = 'done', closed_at = now() WHERE id = ${other}`);
+  check('a booking against a finished job matches nothing',
+    whose('another@example.com', '').order_id, '');
+
+  // and the writing down
+  const put = (orderId, when, eventId) => rowOf(visitSql('write-the-booked-visit'), [orderId, when, eventId]);
+  const first = put(mine, '2026-08-03T15:00:00-05:00', 'g-1');
+  check('the booking is written as an agreed visit', JSON.parse(ask(
+    `SELECT json_build_object('state', state, 'has_time', agreed IS NOT NULL,
+                              'event', booked_event_id, 'offered', jsonb_array_length(offered))
+       FROM visits WHERE id = ${first.id}`)),
+  { state: 'agreed', has_time: true, event: 'g-1', offered: 1 });
+  // the second delivery returns no row at all, which is the point -- so it is run rather than read
+  check('the same booking delivered twice writes one visit', ask(
+    `WITH again AS (${fill(visitSql('write-the-booked-visit'),
+      [mine, '2026-08-03T15:00:00-05:00', 'g-1'])}) SELECT count(*) FROM again`), '0');
+  check('and the job still has exactly one',
+    ask(`SELECT count(*) FROM visits WHERE order_id = ${mine}`), '1');
+}
+
 console.log(`\n${failed === 0 ? 'all checks passed' : `${failed} check(s) FAILED`}`);
 
 try {
