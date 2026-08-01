@@ -9,6 +9,18 @@
 // thing; this one can never turn a refusal into a permission, and it can never lower a hand the
 // gate has already raised.
 
+// The reader is watching and not yet acting. Measured against every real letter in the database it
+// raised its hand on more than a quarter of them, and reading those by hand showed a mixture: some
+// genuine defects the gate had missed, some inventions -- an area the customer never wrote -- and
+// some artefacts of being shown decisions made before half the columns existed. A quarter of the
+// post landing on somebody's desk is too much to ask on the strength of that.
+//
+// So the opinion is recorded on every message and changes nothing. Real traffic fills the column,
+// the numbers can be counted again in a week against decisions the current gate made, and turning
+// it on is this one word. Wiring it to act first and measuring afterwards would have been the same
+// mistake in the other order.
+const THE_READER_MAY_ACT = false;
+
 const decisions = $('Decision gate').all();
 
 // The reader is asked after the model has already been paid for once, so its answer arrives in
@@ -38,7 +50,8 @@ return $input.all().map((item, i) => {
       second_opinion: opinion,
       second_opinion_why: why,
       // never `opinion === 'holds' ? false : ...` -- a hand the gate raised stays raised
-      auto_blocked: decided.auto_blocked === true || opinion === 'does_not_hold',
+      auto_blocked: decided.auto_blocked === true
+        || (THE_READER_MAY_ACT && opinion === 'does_not_hold'),
     },
     pairedItem: { item: i },
   };

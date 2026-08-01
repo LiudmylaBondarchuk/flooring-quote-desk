@@ -34,10 +34,12 @@ SELECT
   $1::text AS gmail_message_id,
   coalesce((SELECT string_agg(format('%s  %s: %s', at, who, said), E'\n' ORDER BY created_at)
               FROM letters), '(no letters on file)')                        AS conversation,
-  coalesce((SELECT format(E'material: %s\narea:     %s %s\ntown:     %s (zone: %s)\nstate:    %s',
-                          coalesce(j.material_category, 'not said'),
-                          coalesce(j.area_sqft::text, 'not said'), coalesce(j.area_unit, ''),
-                          coalesce(j.city, 'not said'), coalesce(j.zone, 'not known'), j.state)
+  -- "state" was the label here once, and a reader took it for a US state and complained that
+  -- Texas had been recorded as "new". The words a reader is given are part of the question.
+  coalesce((SELECT format(E'material wanted: %s\nfloor area:     %s %s\nproperty is in:  %s (%s of the service area)\nhow far along:  %s',
+                          coalesce(j.material_category, 'not said yet'),
+                          coalesce(j.area_sqft::text, 'not said yet'), coalesce(j.area_unit, ''),
+                          coalesce(j.city, 'not said yet'), coalesce(j.zone, 'zone not known'), j.state)
               FROM job j), 'no job has been opened for this thread yet')     AS the_job,
   coalesce((SELECT string_agg(format('%s %s: %s -> %s', kind, field,
                                      coalesce(old_value, 'nothing'), coalesce(new_value, 'nothing')),

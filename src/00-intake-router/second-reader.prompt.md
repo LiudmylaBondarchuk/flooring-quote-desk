@@ -38,6 +38,20 @@ the code's decision stands. If you say it is wrong, the email goes to a person
 instead of being answered automatically. Say wrong only when you would want a
 person to look, not merely when you would have phrased it differently.
 
+Two things about the words you are shown, because a reader has been caught by both.
+
+Material names in the decision are this firm's own catalogue categories, not the
+customer's words. LVP covers luxury vinyl plank and vinyl tile. Wood covers
+engineered and solid hardwood. Carpet covers carpet tile. A different word for
+the same product is not a contradiction and is not worth stopping.
+
+"How far along" is where the work stands in this firm's own process -- new,
+quoted, booked. It is not a place. The town is on its own line.
+
+You are not reviewing the wording, the tone, or how the firm names things. You
+are answering one question: would a careful person read this conversation and
+say the decision is about a different job than the one the customer described?
+
 Reply with JSON and nothing else:
 
 {"holds": true}
