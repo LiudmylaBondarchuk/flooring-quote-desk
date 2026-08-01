@@ -11,6 +11,16 @@ A conversation now outlives the email that started it, the price list is kept by
 owner rather than by a developer, and a price is computed and written down. The desk
 answers a customer for the first time — with a question, never with a figure.
 
+**And a quarter of an hour later, the desk says something about it.** Google sends its own
+confirmation the instant somebody books, and a second letter in the same breath reads as a machine
+talking to itself. So the desk waits, and then says what Google cannot: which job this visit is for,
+what the desk holds on it, and that a reply will correct any of it. The wait is a column and a
+scheduled question — *which bookings are old enough and unanswered* — rather than a pause inside a
+workflow: a sleeping execution is the one thing in this repository nothing can run, and a lane that
+cannot be run against a database cannot be shown to be right. The time is printed where the work is:
+the same booking read half past eight in the evening to somebody in Warsaw and half past one in the
+afternoon to the person driving to it.
+
 **A booking made on the calendar finds the job it belongs to.** The desk sends a Google booking
 link and the customer picks a time from live availability, so nothing here keeps a second opinion
 about what is free — which removes double-booking, stale offers and travel buffers as things this

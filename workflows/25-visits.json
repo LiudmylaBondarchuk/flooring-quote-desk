@@ -91,6 +91,147 @@
           "queryReplacement": "={{ [$json.order_id, $('Read the booking').item.json.starts_at, $('Read the booking').item.json.event_id] }}"
         }
       }
+    },
+    {
+      "id": "word-clock",
+      "name": "Time to say something",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "word-which",
+      "name": "Which visits need a word",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Bookings the desk has not answered yet, and everything a letter about one needs.\n--\n-- Old enough, and only once. The wait is here rather than in a pause inside a workflow, so that\n-- \"which bookings are waiting\" is a question with an answer on any row at any moment -- including\n-- in a test, which a sleeping execution never is.\n--\n-- The address comes from the order and never from the booking form. Somebody who typed a code that\n-- was not theirs must not be told what is on that job.\n\nSELECT v.id                              AS visit_id,\n       v.order_id,\n       v.agreed,\n       o.contact_email                   AS write_to,\n       o.material_category,\n       o.area_sqft,\n       o.area_unit,\n       o.city,\n       o.on_site_items,\n       (SELECT body FROM reply_templates WHERE key = 'visit_confirmed_opening') AS opening,\n       (SELECT body FROM reply_templates WHERE key = 'visit_confirmed_closing') AS closing,\n       (SELECT body FROM reply_templates WHERE key = 'signature')       AS signature\n  FROM visits v\n  JOIN orders o ON o.id = v.order_id\n WHERE v.state = 'agreed'\n   AND v.confirmed_at IS NULL\n   AND v.agreed_at < now() - ($1::int * interval '1 minute')\n   AND o.contact_email IS NOT NULL\n   AND o.state NOT IN ('done', 'lost')\n ORDER BY v.agreed_at;\n",
+        "options": {
+          "queryReplacement": "={{ [15] }}"
+        }
+      }
+    },
+    {
+      "id": "word-write",
+      "name": "Write the confirmation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// The letter that says a booking landed on a job, written a quarter of an hour after it did.\n//\n// Google has already sent its own confirmation with the time in it. This one says what Google\n// cannot: which job this visit is for, what the desk has on it so far, and that the customer can\n// correct any of it by replying. Repeating the time as well is deliberate -- it is the one fact\n// both letters carry, and it is how a customer knows the two are about the same thing.\n//\n// The time is rendered in Texas. It was stored as an instant, and an instant printed in the wrong\n// place is a wrong time: the same booking read half past eight in the evening to somebody sitting\n// in Warsaw and half past one in the afternoon to the person driving to it.\nconst WHERE_THE_WORK_IS = 'America/Chicago';\n\nconst when = (iso) => {\n  const at = new Date(iso);\n  if (Number.isNaN(at.getTime())) return null;\n  const day = at.toLocaleDateString('en-US', {\n    timeZone: WHERE_THE_WORK_IS, weekday: 'long', month: 'long', day: 'numeric',\n  });\n  const time = at.toLocaleTimeString('en-US', {\n    timeZone: WHERE_THE_WORK_IS, hour: 'numeric', minute: '2-digit',\n  }).toLowerCase().replace(/\\s/g, '');\n  return `${day} at ${time}`;\n};\n\nconst number = (n) => Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });\n\n// What the desk has on the job, in the customer's own terms. Only what is actually known: a line\n// saying \"area: not said yet\" tells them nothing and reads as a form they failed to fill in.\nconst theJob = (row) => {\n  const lines = [];\n  if (row.material_category) lines.push(`  Floor: ${row.material_category}`);\n  if (row.area_sqft) lines.push(`  Area: about ${number(row.area_sqft)} ${row.area_unit || 'sqft'}`);\n  if (row.city) lines.push(`  Where: ${row.city}`);\n  const onSite = Array.isArray(row.on_site_items) ? row.on_site_items : [];\n  if (onSite.length) lines.push(`  To measure on the day: ${onSite.join(', ')}`);\n  return lines;\n};\n\nreturn $input.all().map((item, i) => {\n  const row = item.json || {};\n  const at = when(row.agreed);\n\n  // a visit with no readable time is not something to write a letter about. It cannot happen from\n  // the booking lane, which takes the time from Google, and saying so beats sending \"undefined\".\n  if (!at || !row.write_to) {\n    return {\n      json: { ...row, ready_to_send: false,\n        why_not: !at ? 'the visit has no readable time' : 'the job has no address to write to' },\n      pairedItem: { item: i },\n    };\n  }\n\n  const job = theJob(row);\n  const body = [\n    row.opening,\n    '',\n    `  ${at}`,\n    ...(job.length ? ['', ...job] : []),\n    '',\n    row.closing,\n    row.signature,\n  ].join('\\n');\n\n  return {\n    json: {\n      ...row,\n      ready_to_send: true,\n      why_not: null,\n      subject: `Visit booked — ${at}`,\n      body,\n    },\n    pairedItem: { item: i },\n  };\n});\n"
+      }
+    },
+    {
+      "id": "word-ready",
+      "name": "Is there a letter to send?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ready",
+              "leftValue": "={{ $json.ready_to_send }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "word-send",
+      "name": "Tell the customer",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        960,
+        220
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": null,
+          "name": "Gmail account"
+        }
+      },
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $json.write_to }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "webhookId": "4bbdbe8c-6c53-4ad2-9ef8-479ea423fef8"
+    },
+    {
+      "id": "word-stamp",
+      "name": "Say the visit was confirmed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1200,
+        220
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- The letter went out, so this booking is answered.\n--\n-- Guarded on confirmed_at rather than stamped blindly: two runs overlapping, or one retried after a\n-- send that had already happened, must not put a second letter in front of a customer.\n\nUPDATE visits\n   SET confirmed_at = now()\n WHERE id = $1::int\n   AND confirmed_at IS NULL\nRETURNING id, order_id, confirmed_at;\n",
+        "options": {
+          "queryReplacement": "={{ [$('Write the confirmation').item.json.visit_id] }}"
+        }
+      }
     }
   ],
   "connections": {
@@ -121,6 +262,62 @@
         [
           {
             "node": "Write the booked visit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Time to say something": {
+      "main": [
+        [
+          {
+            "node": "Which visits need a word",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which visits need a word": {
+      "main": [
+        [
+          {
+            "node": "Write the confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the confirmation": {
+      "main": [
+        [
+          {
+            "node": "Is there a letter to send?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is there a letter to send?": {
+      "main": [
+        [
+          {
+            "node": "Tell the customer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Tell the customer": {
+      "main": [
+        [
+          {
+            "node": "Say the visit was confirmed",
             "type": "main",
             "index": 0
           }
