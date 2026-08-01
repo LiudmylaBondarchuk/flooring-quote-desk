@@ -17,9 +17,13 @@ on:
         description: pull request number
         required: true
 
+# The comment goes to /issues/{n}/comments, which is issues: write. pull-requests: write was
+# granting approve, request-changes and close for nothing -- "it cannot block, cannot approve"
+# was true only because the script chooses not to, which is not where that promise belongs.
 permissions:
   contents: read
-  pull-requests: write
+  pull-requests: read
+  issues: write
 
 jobs:
   review:
@@ -48,11 +52,28 @@ jobs:
       CLAIM_CHECK_PROJECT: flooring-quote-desk
       CLAIM_CHECK_KB_PATH: ${{ github.workspace }}/knowledge-base
     steps:
+      # Resolved rather than read off the event, because on workflow_dispatch there is no pull
+      # request in the payload at all: the checkout ref came out empty, the job reviewed whatever
+      # main happened to be, and the manual path -- the one that exists so this can be shown when
+      # nobody has asked Copilot for anything -- did nothing whatsoever.
+      - name: which pull request, and which commit
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          n="${{ github.event.pull_request.number || inputs.pr }}"
+          sha=$(gh api "repos/${{ github.repository }}/pulls/$n" --jq .head.sha)
+          echo "number=$n" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
       - name: checkout the pull request branch
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ steps.pr.outputs.sha }}
           fetch-depth: 0
+          # 3 — the token is not left in .git/config, where a package script from the branch
+          # under review could read it. Fetching a public repository needs no credential.
+          persist-credentials: false
 
       # actions/checkout on a bare SHA does not create a local origin/main, and the diff is
       # taken against it. The same reason ci.yml fetches it separately in its own guards job.
@@ -68,6 +89,10 @@ jobs:
           repository: LiudmylaBondarchuk/review-agent
           token: ${{ secrets.REVIEW_AGENT_PAT }}
           path: knowledge-base
+          # actions/checkout writes the token into knowledge-base/.git/config by default, and it
+          # would still be sitting there when npm ci runs lifecycle scripts out of the branch
+          # being reviewed. Nothing here needs git again after the files arrive.
+          persist-credentials: false
 
       - uses: actions/setup-node@v5
         with:
@@ -86,12 +111,13 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # so the comment can point at the run that produced it
           CLAIM_CHECK_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CLAIM_CHECK_PR: ${{ steps.pr.outputs.number }}
 
       # Kept whatever happened above, including a run that decided there was nothing to say.
       - name: keep the record of this run
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: claim-check-pr-${{ github.event.pull_request.number || inputs.pr }}
+          name: claim-check-pr-${{ steps.pr.outputs.number }}
           path: knowledge-base/runs/
           if-no-files-found: ignore
