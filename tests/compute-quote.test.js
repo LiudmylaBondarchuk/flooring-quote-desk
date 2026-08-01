@@ -120,11 +120,17 @@ for (const [index, { name, row, expect }] of fixtures.entries()) {
 
   test(`a minimum that changed the total says so in the breakdown — ${name}`, () => {
     const applied = result.breakdown.lines.filter((l) => l.kind === 'minimum');
-    if (result.total_low > result.subtotal_low) {
+    // the total can now stand above the subtotal for a second reason: a flat charge added after
+    // the minimum rather than inside it. What must still be true is that nothing lifts the total
+    // without a line of its own, so the flat charges are subtracted before the minimum is blamed.
+    const flat = result.breakdown.lines.filter((l) => l.kind === 'travel');
+    const flatLow = flat.reduce((n, l) => n + Number(l.low), 0);
+    const flatHigh = flat.reduce((n, l) => n + Number(l.high), 0);
+    if (result.total_low - flatLow > result.subtotal_low) {
       assert.ok(applied.some((l) => l.applied_to_low === true),
         'the minimum lifted the low end and no line in the breakdown admits it');
     }
-    if (result.total_high > result.subtotal_high) {
+    if (result.total_high - flatHigh > result.subtotal_high) {
       assert.ok(applied.some((l) => l.applied_to_high === true),
         'the minimum lifted the high end and no line in the breakdown admits it');
     }

@@ -47,6 +47,7 @@ SELECT
   o.material_category,
   o.area_sqft,
   o.area_status,
+  o.zone,
   o.area_status IS NOT NULL             AS area_comparable,
   coalesce(o.old_floor_removal, false)  AS old_floor_removal,
   coalesce((SELECT json_agg(json_build_object(

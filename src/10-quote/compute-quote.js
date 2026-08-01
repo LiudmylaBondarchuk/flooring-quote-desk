@@ -3,7 +3,7 @@ const CURRENCY = 'USD';
 const PRICED_UNIT = 'sqft';
 const RATE_BASIS = 'rates are this firm\'s own price list as it stood when the quote was made, and the rates used are written into this breakdown';
 
-const LINE_KINDS = { floor: 'floor', removal: 'removal', minimum: 'minimum' };
+const LINE_KINDS = { floor: 'floor', removal: 'removal', minimum: 'minimum', travel: 'travel' };
 
 const REFUSALS = [
   ['pricing_not_allowed', (f) => f.row.pricing_allowed !== true],
@@ -64,6 +64,12 @@ const priceOne = (row) => {
   const rules = row.rules && typeof row.rules === 'object' ? row.rules : {};
   const removalRate = removal ? asRate(rules.old_floor_removal) : null;
 
+  // Georgetown, San Marcos, Wimberley and the rest are inside what this firm covers and outside
+  // what the rates already pay for -- core towns have the travel inside the rate, edge ones do not.
+  // Until now `edge` produced the sentence "travel fee applies" and never became money, so the
+  // quote was short by the drive on every job that had one.
+  const travelRate = row.zone === 'edge' ? asRate(rules.travel_fee) : null;
+
   const facts = { row, material, area, bands, removal, removalRate };
   const refusals = REFUSALS.filter(([, applies]) => applies(facts)).map(([code]) => code);
 
@@ -100,6 +106,20 @@ const priceOne = (row) => {
     high: removalHigh,
   }] : [];
 
+  const travelLow = travelRate ? travelRate.low : 0;
+  const travelHigh = travelRate ? travelRate.high : 0;
+  const travelLines = travelRate ? [{
+    kind: LINE_KINDS.travel,
+    label: 'travel to the edge of the service area',
+    source: 'pricing_rules.travel_fee',
+    unit: 'visit',
+    quantity: 1,
+    rate_low: travelRate.low,
+    rate_high: travelRate.high,
+    low: travelLow,
+    high: travelHigh,
+  }] : [];
+
   const floorLines = [];
   const minimumLines = [];
   const priced = bands.map((b) => {
@@ -123,16 +143,19 @@ const priceOne = (row) => {
 
     const subLow = money(floorLow + removalLow);
     const subHigh = money(floorHigh + removalHigh);
-    const totLow = money(Math.max(subLow, b.minCharge));
-    const totHigh = money(Math.max(subHigh, b.minCharge));
-    if (totLow > subLow || totHigh > subHigh) {
+    // after the minimum, not inside it: the minimum charge is what the floor work is worth turning
+    // up for, and the drive is not floor work. Folding travel in would let a big enough job swallow
+    // it and a small one charge it twice over.
+    const totLow = money(Math.max(subLow, b.minCharge) + travelLow);
+    const totHigh = money(Math.max(subHigh, b.minCharge) + travelHigh);
+    if (totLow - travelLow > subLow || totHigh - travelHigh > subHigh) {
       minimumLines.push({
         kind: LINE_KINDS.minimum,
         label: b.label,
         source: 'price_bands.min_charge',
         amount: b.minCharge,
-        applied_to_low: totLow > subLow,
-        applied_to_high: totHigh > subHigh,
+        applied_to_low: totLow - travelLow > subLow,
+        applied_to_high: totHigh - travelHigh > subHigh,
       });
     }
     return { subLow, subHigh, totLow, totHigh };
@@ -152,7 +175,7 @@ const priceOne = (row) => {
       area_sqft: money(area),
       area_status: row.area_status,
       old_floor_removal: removal,
-      lines: [...floorLines, ...removalLines, ...minimumLines],
+      lines: [...floorLines, ...removalLines, ...minimumLines, ...travelLines],
     },
   };
 };

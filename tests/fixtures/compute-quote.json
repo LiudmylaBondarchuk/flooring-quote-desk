@@ -667,5 +667,128 @@
       "refusals": []
     },
     "why": "The whole point of reading the unit the customer wrote is that the job can then be priced. A converted area reaching the lane and being refused would make that work pointless."
+  },
+  {
+    "name": "Laminate, 200 sq ft, Georgetown — the drive is charged",
+    "why": "220 sq ft of material is bought to lay 200 at 4.00-8.00, so 880-1760. Georgetown is edge: the rates cover the drive inside Austin and its close suburbs and not this one, so the travel fee is added after the minimum -- the minimum is what the floor work is worth turning up for, and the drive is not floor work. 880+50 to 1760+150.",
+    "row": {
+      "gmail_message_id": "m-edge-200",
+      "pricing_allowed": true,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "Laminate",
+      "area_sqft": "200.00",
+      "area_status": "known",
+      "area_comparable": true,
+      "old_floor_removal": false,
+      "zone": "edge",
+      "bands": [
+        {
+          "category": "Laminate",
+          "product": "Laminate standard",
+          "unit": "sqft",
+          "rate_low": "4.00",
+          "rate_high": "8.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
+      ],
+      "rules": {
+        "travel_fee": {
+          "val_low": "50.00",
+          "val_high": "150.00"
+        }
+      }
+    },
+    "expect": {
+      "priceable": true,
+      "refusals": [],
+      "subtotal_low": 880,
+      "subtotal_high": 1760,
+      "total_low": 930,
+      "total_high": 1910
+    }
+  },
+  {
+    "name": "Laminate, 30 sq ft, Georgetown — the minimum bites and the drive is still charged",
+    "why": "33 sq ft at 4.00-8.00 is 132-264, under the 400 minimum, so the floor work is 400 either way. The drive is added to that, not swallowed by it: 450 to 550. Folding travel inside the minimum would let a job this small be driven to for nothing.",
+    "row": {
+      "gmail_message_id": "m-edge-30",
+      "pricing_allowed": true,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "Laminate",
+      "area_sqft": "30.00",
+      "area_status": "known",
+      "area_comparable": true,
+      "old_floor_removal": false,
+      "zone": "edge",
+      "bands": [
+        {
+          "category": "Laminate",
+          "product": "Laminate standard",
+          "unit": "sqft",
+          "rate_low": "4.00",
+          "rate_high": "8.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
+      ],
+      "rules": {
+        "travel_fee": {
+          "val_low": "50.00",
+          "val_high": "150.00"
+        }
+      }
+    },
+    "expect": {
+      "priceable": true,
+      "refusals": [],
+      "subtotal_low": 132,
+      "subtotal_high": 264,
+      "total_low": 450,
+      "total_high": 550
+    }
+  },
+  {
+    "name": "the same job in Kyle is not charged for the drive",
+    "why": "Kyle is core, where the rate already pays for the drive. Charging it again would be charging twice for the same thing.",
+    "row": {
+      "gmail_message_id": "m-core-200",
+      "pricing_allowed": true,
+      "gate_color": "green",
+      "segment": "residential",
+      "material_category": "Laminate",
+      "area_sqft": "200.00",
+      "area_status": "known",
+      "area_comparable": true,
+      "old_floor_removal": false,
+      "zone": "core",
+      "bands": [
+        {
+          "category": "Laminate",
+          "product": "Laminate standard",
+          "unit": "sqft",
+          "rate_low": "4.00",
+          "rate_high": "8.00",
+          "wastage_pct": 10,
+          "min_charge": "400.00"
+        }
+      ],
+      "rules": {
+        "travel_fee": {
+          "val_low": "50.00",
+          "val_high": "150.00"
+        }
+      }
+    },
+    "expect": {
+      "priceable": true,
+      "refusals": [],
+      "subtotal_low": 880,
+      "subtotal_high": 1760,
+      "total_low": 880,
+      "total_high": 1760
+    }
   }
 ]
