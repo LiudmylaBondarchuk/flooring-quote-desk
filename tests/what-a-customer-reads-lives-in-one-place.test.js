@@ -46,6 +46,11 @@ READS.forEach((dir) => walk(join(root, dir)));
 // short enough and it is a common phrase; this length is a sentence somebody typed on purpose
 const WORTH_CHECKING = 20;
 
+// except in the signature, where every line is short by construction — that is what a signature
+// is. The firm's name is twenty characters today and one shorter name would have taken it out of
+// this check without anybody noticing, which is the opposite of what the check is for.
+const ALWAYS = new Set(['signature']);
+
 test('no wording a customer reads is typed anywhere but the row it comes from', () => {
   assert.ok(templates.length > 10, `only ${templates.length} templates parsed out of the seed`);
   assert.ok(files.length > 20, `only ${files.length} files read`);
@@ -53,7 +58,8 @@ test('no wording a customer reads is typed anywhere but the row it comes from', 
   const copies = [];
   for (const { key, body } of templates) {
     for (const line of body.split('\n').map((l) => l.trim())) {
-      if (line.length < WORTH_CHECKING) continue;
+      if (!line) continue;
+      if (line.length < WORTH_CHECKING && !ALWAYS.has(key)) continue;
       for (const [file, text] of files) {
         if (text.includes(line)) copies.push({ key, file, line });
       }
