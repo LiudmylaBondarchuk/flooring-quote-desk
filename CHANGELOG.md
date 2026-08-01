@@ -11,6 +11,13 @@ A conversation now outlives the email that started it, the price list is kept by
 owner rather than by a developer, and a price is computed and written down. The desk
 answers a customer for the first time — with a question, never with a figure.
 
+**An order holds only the floors the gate will stand behind.** The constraint allowed anything under
+a million where the gate settles between twenty and twenty thousand square feet — every value in
+between refused by the code and permitted by the database. The two numbers are now read out of both
+and compared, rather than written twice and hoped over. `messages` is left as it was on purpose: it
+holds what a customer reported, including figures the gate looked at and refused, because their
+letter still has to show a person what they wrote.
+
 **A visit that moved or vanished stops being believed.** Bookings change and neither the change nor
 the cancellation arrives as a message anybody sends: a customer presses reschedule on Google's page,
 or the owner deletes a morning from her calendar, and the desk is told nothing either way. So the
