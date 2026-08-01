@@ -39,6 +39,16 @@ cannot be run against a database cannot be shown to be right. The time is printe
 the same booking read half past eight in the evening to somebody in Warsaw and half past one in the
 afternoon to the person driving to it.
 
+**And the customer is finally asked to make one.** Everything about visits worked from the moment a
+booking arrived, and nothing had ever asked for one: a customer who accepted a price was moved to
+`survey_needed` and then heard nothing at all — the worst moment in the conversation to go quiet,
+because they have just said yes. The lane now sends the booking link and the job's code the moment
+the acceptance lands, once per job, and records that it asked. The link is a row in
+`reply_templates` rather than a constant in a node, so moving the booking page is an `UPDATE` and
+not a deploy. The design it replaces — the desk naming three times and reading "1, 2 or 3" out of a
+reply — is deleted rather than left standing: Google's own page holds real availability, and a
+second opinion about what is free is the thing that was never worth keeping.
+
 **A booking made on the calendar finds the job it belongs to.** The desk sends a Google booking
 link and the customer picks a time from live availability, so nothing here keeps a second opinion
 about what is free — which removes double-booking, stale offers and travel buffers as things this
