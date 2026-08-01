@@ -51,6 +51,29 @@
           "queryReplacement": "={{ [$json.gmail_message_id, 'awaiting_owner', '20 Project — Flooring'] }}"
         }
       }
+    },
+    {
+      "id": "ballpark-to-visit",
+      "name": "Accepting a ballpark asks for a visit",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        740,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- A customer who says yes to a price worked out from an email has not booked work. They have agreed\n-- to a visit, because nobody has seen the floor and the number came from what they typed.\n--\n-- This is the boundary the earlier attempt got wrong: it moved the order straight to 'booked' from\n-- an email, which promises a date this desk cannot honour and a price it cannot stand behind. What\n-- an acceptance moves is 'quoted' -> 'survey_needed'. Only a firm offer -- one given after somebody\n-- has stood in the room -- may book, and nothing issues one yet.\n--\n-- Written to be run twice without harm: an order already past 'quoted' is left where it is, and an\n-- offer already settled keeps its outcome. The router can redeliver, and a second delivery must not\n-- reopen a job somebody has since finished.\n\nWITH answered AS (\n  SELECT m.order_id, m.offer_answer\n    FROM messages m\n   WHERE m.gmail_message_id = $1::text\n     AND m.offer_answer = 'accepted'\n     AND m.order_id IS NOT NULL\n),\nthe_offer AS (\n  SELECT o.id, o.kind\n    FROM offers o\n    JOIN answered a ON a.order_id = o.order_id\n   WHERE o.status IN ('sent', 'awaiting_approval', 'accepted')\n   ORDER BY o.created_at DESC\n   LIMIT 1\n),\nsettled AS (\n  UPDATE offers o SET status = 'accepted', outcome = 'won'\n    FROM the_offer t\n   WHERE o.id = t.id\n     AND o.outcome IS NULL\n  RETURNING o.id\n),\nmoved AS (\n  UPDATE orders o\n     SET state = CASE WHEN t.kind = 'firm' THEN 'booked' ELSE 'survey_needed' END,\n         -- the database refuses a closed order with no closing time, and booked is a closed state.\n         -- survey_needed is not: the job is still open, it is waiting for somebody to see it.\n         closed_at = CASE WHEN t.kind = 'firm' THEN now() ELSE o.closed_at END\n    FROM answered a, the_offer t\n   WHERE o.id = a.order_id\n     AND o.state IN ('quoted', 'negotiating')\n  RETURNING o.id, o.state\n)\nSELECT (SELECT order_id FROM answered)                     AS order_id,\n       (SELECT kind FROM the_offer)                        AS offer_kind,\n       (SELECT id FROM settled)                            AS offer_settled,\n       (SELECT state FROM moved)                           AS order_state,\n       EXISTS (SELECT 1 FROM moved)                        AS moved;\n",
+        "options": {
+          "queryReplacement": "={{ [$json.gmail_message_id] }}"
+        }
+      }
     }
   ],
   "connections": {
@@ -59,6 +82,17 @@
         [
           {
             "node": "Accept handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accept handoff": {
+      "main": [
+        [
+          {
+            "node": "Accepting a ballpark asks for a visit",
             "type": "main",
             "index": 0
           }

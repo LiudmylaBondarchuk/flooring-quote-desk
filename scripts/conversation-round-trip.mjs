@@ -1472,6 +1472,71 @@ console.log('\ntwo customers in one poll are both answered');
   ['state_change/state -> lost']);
 }
 
+console.log('\nsaying yes to a price worked out from an email');
+{
+  const projectSql = (n) => read('db', '20-project', `${n}.sql`).replace(/;\s*$/, '');
+  const accepting = projectSql('accepting-a-ballpark-asks-for-a-visit');
+
+  // a job of its own, so nothing above is disturbed by moving it about
+  const orderId = Number(ask(`WITH made AS (
+      INSERT INTO orders (thread_id, state, material_category, area_sqft,
+                          area_unit, area_status, city, zone)
+      VALUES ('t-yes', 'quoted', 'Laminate', 400, 'sqft', 'known', 'kyle tx', 'core')
+      RETURNING id) SELECT id FROM made`));
+  const offerOf = (kind) => Number(ask(`WITH made AS (
+      INSERT INTO offers (order_id, kind, status, total_low, total_high)
+      VALUES (${orderId}, '${kind}', 'sent', 1760, 4400)
+      RETURNING id) SELECT id FROM made`));
+  const letter = (id, answer) => ask(`WITH made AS (
+      INSERT INTO messages (thread_id, gmail_message_id, direction, sender, order_id, offer_answer,
+                            category, body)
+      VALUES ('t-yes', '${id}', 'inbound', 'client', ${orderId},
+              ${answer === null ? 'NULL' : `'${answer}'`}, 'offer_response', 'looks good, I accept')
+      RETURNING gmail_message_id) SELECT gmail_message_id FROM made`);
+  const stateNow = () => ask(`SELECT state FROM orders WHERE id = ${orderId}`);
+  const say = (id) => rowOf(accepting, [id]);
+
+  const ballpark = offerOf('ballpark');
+  letter('yes-1', 'accepted');
+  const first = say('yes-1');
+
+  check('a ballpark accepted asks for a visit, it does not book work',
+    stateNow(), 'survey_needed');
+  check('and the offer it answers is won', JSON.parse(ask(
+    `SELECT json_build_object('status', status, 'outcome', outcome) FROM offers WHERE id = ${ballpark}`)),
+  { status: 'accepted', outcome: 'won' });
+  check('and the statement says which kind it was', first.offer_kind, 'ballpark');
+
+  // the router can deliver the same email twice, and a second delivery must change nothing
+  const again = say('yes-1');
+  check('saying it twice moves nothing the second time', again.moved, 'f');
+  check('and the order stays where the first one put it', stateNow(), 'survey_needed');
+
+  // a letter that pushed back is not an acceptance, whatever else it says
+  ask(`UPDATE orders SET state = 'quoted' WHERE id = ${orderId}`);
+  letter('yes-2', 'pushed_back');
+  say('yes-2');
+  check('pushing back on the price moves nothing', stateNow(), 'quoted');
+
+  // and a letter the gate could not read either way
+  letter('yes-3', null);
+  say('yes-3');
+  check('nor does a reply the gate read neither way', stateNow(), 'quoted');
+
+  // only a price given after somebody has stood in the room may book
+  ask(`UPDATE offers SET status = 'expired', outcome = 'lost' WHERE id = ${ballpark}`);
+  offerOf('firm');
+  letter('yes-4', 'accepted');
+  say('yes-4');
+  check('a firm price accepted does book the work', stateNow(), 'booked');
+
+  // a job somebody has since finished is not reopened by a late acceptance
+  ask(`UPDATE orders SET state = 'done' WHERE id = ${orderId}`);
+  letter('yes-5', 'accepted');
+  say('yes-5');
+  check('a finished job is left alone', stateNow(), 'done');
+}
+
 console.log(`\n${failed === 0 ? 'all checks passed' : `${failed} check(s) FAILED`}`);
 
 try {
