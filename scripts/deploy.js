@@ -79,6 +79,7 @@ const promptBody = (path) => {
 };
 
 const only = process.argv.slice(2).filter((a) => !a.startsWith('-'));
+const adopt = process.argv.includes('--adopt');
 
 let changed = 0;
 const outOfReach = [];
@@ -158,7 +159,8 @@ for (const file of readdirSync(join(root, 'workflows')).filter((f) => f.endsWith
   const onlyLive = nodes.filter((n) => !inTheExport.has(n.name)).map((n) => n.name);
   if (onlyLive.length) {
     console.log(`note ${file} — the instance has ${onlyLive.length} node(s) this export does not: `
-      + `${onlyLive.join(', ')}. Nothing was removed; delete them in n8n if they are finished with.`);
+      + `${onlyLive.join(', ')}. Nothing was removed there and nothing was taken into the export; `
+      + 'delete them in n8n if they are finished with, or pass --adopt to keep them.');
   }
 
   let touched = brought.length;
@@ -257,10 +259,28 @@ for (const file of readdirSync(join(root, 'workflows')).filter((f) => f.endsWith
     const named = all.find((w) => w.id === keptSettings.errorWorkflow);
     if (named) keptSettings.errorWorkflow = named.name;
   }
+
+  // The refresh takes back what the instance made of what it was sent -- ids, positions, fields a
+  // newer n8n added -- but only for nodes this export named. It used to take everything, which made
+  // the note above a lie: it said a stranded node had been left alone, and then wrote it into the
+  // export, so the next deploy created it again. That happened twice, and the second time a renamed
+  // branch node came back to life beside its replacement and quietly ran the work down both paths.
+  //
+  // Adopting a node built in the canvas is a thing somebody decides, so it has a word for it. This
+  // file is the only writer of workflows/*.json; without --adopt there would be no way in at all.
+  const keep = adopt ? () => true : (name) => inTheExport.has(name);
+  const keptNodes = freshVersion.nodes.filter((n) => keep(n.name));
+  const keptConnections = {};
+  for (const [from, byKind] of Object.entries(freshVersion.connections)) {
+    if (!keep(from)) continue;
+    keptConnections[from] = Object.fromEntries(Object.entries(byKind).map(([kind, groups]) =>
+      [kind, (groups || []).map((g) => (g || []).filter((e) => keep(e.node)))]));
+  }
+
   writeFileSync(join(root, 'workflows', file), JSON.stringify({
     name: fresh.name,
-    nodes: freshVersion.nodes,
-    connections: freshVersion.connections,
+    nodes: keptNodes,
+    connections: keptConnections,
     settings: keptSettings,
   }, null, 2) + '\n');
 
