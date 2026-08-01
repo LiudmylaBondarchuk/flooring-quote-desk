@@ -18,6 +18,13 @@ and compared, rather than written twice and hoped over. `messages` is left as it
 holds what a customer reported, including figures the gate looked at and refused, because their
 letter still has to show a person what they wrote.
 
+**And the sheet itself is written, ten minutes after a visit is agreed.** Who, where, what they
+asked for, what was quoted and that it was a ballpark, what only the visit can settle — named at
+this firm's own rate and marked as not counted — and what to bring, worked out from the job rather
+than printed the same every time. It goes to the owner's Drive and **the customer never receives
+it**; that promise now has a check behind it rather than a sentence in a description, refusing any
+letter, stored wording or statement that so much as mentions where the sheet lives.
+
 **A visit remembers where its job sheet was written.** `visits.job_sheet_url` is null until one
 exists, which is also what stops a second being made when the same booking is delivered twice. The
 sheet is for whoever drives out; it is never sent to the customer and nothing may put it in front of

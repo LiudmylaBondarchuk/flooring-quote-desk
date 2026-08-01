@@ -398,6 +398,151 @@
           "queryReplacement": "={{ [$json.visit_id] }}"
         }
       }
+    },
+    {
+      "id": "sheet-clock",
+      "name": "Time to prepare for a visit",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        960
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "sheet-needs",
+      "name": "What the job sheet needs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        960
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Everything a job sheet says, for visits that are agreed and have none yet.\n--\n-- Read off the job, never off the newest letter. A customer says \"laminate, Kyle TX\" one day and\n-- \"about 400 sq ft\" the next, and a sheet built from either letter alone sends somebody out\n-- knowing half of it.\n--\n-- Only agreed visits still ahead of us, and only those without a sheet: job_sheet_url being null\n-- is what makes this run once. A visit that lapsed gets nothing -- nobody is driving anywhere.\n\nSELECT v.id                                   AS visit_id,\n       v.order_id,\n       v.agreed,\n       o.contact_email,\n       o.city,\n       o.zone,\n       o.material_category,\n       o.area_sqft,\n       o.area_unit,\n       o.existing_floor_action,\n       o.old_floor_removal,\n       o.fixing_method,\n       o.on_site_items,\n       o.booking_code,\n       (SELECT jsonb_build_object('low', f.total_low, 'high', f.total_high, 'kind', f.kind)\n          FROM offers f\n         WHERE f.order_id = o.id\n         ORDER BY f.created_at DESC\n         LIMIT 1)                             AS ballpark,\n       -- the rates for what the visit has to settle, from the price list rather than from anywhere\n       -- a number could have been typed by hand\n       (coalesce((SELECT jsonb_object_agg(b.component,\n                    jsonb_build_object('label', b.product, 'unit', b.unit,\n                                       'val_low', b.rate_low, 'val_high', b.rate_high))\n                    FROM price_bands b\n                   WHERE b.active AND b.component = 'stairs'), '{}'::jsonb)\n        || coalesce((SELECT jsonb_build_object('subfloor',\n                       jsonb_build_object('label', 'levelling and moisture work', 'unit', 'sqft',\n                                          'val_low', r.val_low, 'val_high', r.val_high))\n                       FROM pricing_rules r\n                      WHERE r.rule_key = 'subfloor_leveling'), '{}'::jsonb)) AS on_site_rates\n  FROM visits v\n  JOIN orders o ON o.id = v.order_id\n WHERE v.state = 'agreed'\n   AND v.job_sheet_url IS NULL\n   AND v.agreed > now() - interval '1 day'\n   AND o.state NOT IN ('done', 'lost')\n ORDER BY v.agreed;\n",
+        "options": {
+          "queryReplacement": "={{ [] }}"
+        }
+      }
+    },
+    {
+      "id": "sheet-write",
+      "name": "Write the job sheet",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        960
+      ],
+      "parameters": {
+        "jsCode": "// The sheet whoever drives out reads before knocking on the door.\n//\n// It is for the owner and never for the customer. Nothing here is written to be sent: it says what\n// was quoted and calls it a ballpark, it names what the visit has to settle, and it lists what to\n// bring. A customer reading it would learn what the firm charges itself and what it is unsure of,\n// neither of which is theirs to see.\n//\n// Built from the job rather than from the newest letter, for the same reason everything else here\n// is: a customer says \"laminate, Kyle TX\" one day and \"about 400 sq ft\" the next, and a sheet made\n// from either letter sends somebody out knowing half of it.\n\nconst WHERE_THE_WORK_IS = 'America/Chicago';\n\nconst when = (iso) => {\n  const at = new Date(iso);\n  if (Number.isNaN(at.getTime())) return null;\n  const day = at.toLocaleDateString('en-US', {\n    timeZone: WHERE_THE_WORK_IS, weekday: 'long', month: 'long', day: 'numeric',\n  });\n  const time = at.toLocaleTimeString('en-US', {\n    timeZone: WHERE_THE_WORK_IS, hour: 'numeric', minute: '2-digit',\n  }).toLowerCase().replace(/\\s/g, '');\n  return `${day}, ${time}`;\n};\n\nconst money = (n) => `$${Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;\nconst number = (n) => Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });\n\nconst SPELLED = {\n  remove_first: 'the old floor comes out',\n  over_existing: 'laying over what is there',\n};\n\n// What to bring, worked out from the job rather than printed the same every time. A list that never\n// changes is a list nobody reads by the third visit.\nconst toBring = (row, onSite) => {\n  const bring = ['tape measure', 'moisture meter'];\n  if (row.material_category) bring.push(`${row.material_category} samples`);\n  if (onSite.includes('subfloor')) bring.push('levelling compound sample', 'straightedge');\n  if (onSite.includes('stairs')) bring.push('tread gauge');\n  if (row.old_floor_removal === true) bring.push('a look under a corner of the old floor');\n  return bring;\n};\n\nreturn $input.all().map((item, i) => {\n  const row = item.json || {};\n  const at = when(row.agreed);\n  const onSite = Array.isArray(row.on_site_items) ? row.on_site_items : [];\n  const rates = row.on_site_rates && typeof row.on_site_rates === 'object' ? row.on_site_rates : {};\n  const ballpark = row.ballpark && typeof row.ballpark === 'object' ? row.ballpark : null;\n\n  if (!row.visit_id || !at) {\n    return {\n      json: { ...row, ready_to_write: false, why_not: 'the visit has no readable time' },\n      pairedItem: { item: i },\n    };\n  }\n\n  const job = [\n    row.material_category ? `Floor:     ${row.material_category}` : 'Floor:     not said yet',\n    row.area_sqft ? `Area:      about ${number(row.area_sqft)} ${row.area_unit || 'sqft'}`\n      : 'Area:      not said yet — measure everything',\n    row.existing_floor_action\n      ? `Existing:  ${SPELLED[row.existing_floor_action] || row.existing_floor_action}`\n      : 'Existing:  not established — ask on the day',\n    row.fixing_method ? `Fixing:    ${row.fixing_method}` : null,\n  ].filter(Boolean);\n\n  // What was quoted, and that it was a ballpark. Somebody standing in the room needs to know what\n  // the customer already has in mind before saying a firm number out loud.\n  const quoted = ballpark && ballpark.low !== null && ballpark.low !== undefined\n    ? [`Quoted:    ${money(ballpark.low)} to ${money(ballpark.high)} — a ballpark from the email,`,\n      '           not a commitment. The firm price is yours to give on the day.']\n    : ['Quoted:    nothing yet.'];\n\n  const settleHere = onSite\n    .map((thing) => {\n      const rate = rates[thing];\n      const range = rate ? ` — ${money(rate.val_low)} to ${money(rate.val_high)} per ${rate.unit}` : '';\n      return `  ${thing}${range}, named to the customer and not counted`;\n    });\n\n  const sheet = [\n    'JOB SHEET',\n    '',\n    `Visit:     ${at}`,\n    `Where:     ${row.city || 'not established'}${row.zone ? ` (${row.zone} of the service area)` : ''}`,\n    `Contact:   ${row.contact_email || 'not established'}`,\n    `Job:       ${row.order_id}${row.booking_code ? `, code ${row.booking_code}` : ''}`,\n    '',\n    ...job,\n    '',\n    ...quoted,\n    ...(settleHere.length ? ['', 'To settle on site:', ...settleHere] : []),\n    '',\n    'Bring:',\n    ...toBring(row, onSite).map((thing) => `  ${thing}`),\n    '',\n    'Not for the customer. Written when the visit was agreed, from the job as it stood then.',\n  ].join('\\n');\n\n  return {\n    json: {\n      ...row,\n      ready_to_write: true,\n      why_not: null,\n      file_name: `job-${row.order_id}-${String(at).replace(/[^A-Za-z0-9]+/g, '-').toLowerCase()}.txt`,\n      sheet,\n    },\n    pairedItem: { item: i },\n  };\n});\n"
+      }
+    },
+    {
+      "id": "sheet-ready",
+      "name": "Is there a sheet to write?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        960
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ready",
+              "leftValue": "={{ $json.ready_to_write }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "sheet-upload",
+      "name": "Put it on the owner's Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        960,
+        880
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": null,
+          "name": "Google Drive account"
+        }
+      },
+      "parameters": {
+        "operation": "createFromText",
+        "content": "={{ $json.sheet }}",
+        "name": "={{ $json.file_name }}",
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "root",
+          "mode": "list"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "sheet-said",
+      "name": "Say where the job sheet is",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1200,
+        880
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- The sheet exists, and this is where. Guarded so a second run finds nothing to stamp rather than\n-- pointing a visit at a second copy of itself.\n\nUPDATE visits\n   SET job_sheet_url = $2::text\n WHERE id = $1::int\n   AND job_sheet_url IS NULL\nRETURNING id, order_id, job_sheet_url;\n",
+        "options": {
+          "queryReplacement": "={{ [$json.visit_id, $json.job_sheet_url] }}"
+        }
+      }
     }
   ],
   "connections": {
@@ -546,6 +691,62 @@
         [
           {
             "node": "The visit is off",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Time to prepare for a visit": {
+      "main": [
+        [
+          {
+            "node": "What the job sheet needs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What the job sheet needs": {
+      "main": [
+        [
+          {
+            "node": "Write the job sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the job sheet": {
+      "main": [
+        [
+          {
+            "node": "Is there a sheet to write?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is there a sheet to write?": {
+      "main": [
+        [
+          {
+            "node": "Put it on the owner's Drive",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Put it on the owner's Drive": {
+      "main": [
+        [
+          {
+            "node": "Say where the job sheet is",
             "type": "main",
             "index": 0
           }
