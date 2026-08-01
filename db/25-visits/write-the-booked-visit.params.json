@@ -1,0 +1,3 @@
+{
+  "queryReplacement": "={{ [$json.order_id, $json.starts_at, $json.event_id] }}"
+}
