@@ -57,6 +57,24 @@ const runsFor = async () => {
   return (await answer.json()).workflow_runs || [];
 };
 
+// A commit GitHub has never seen has no runs, and waiting for them is waiting for nothing. It
+// happened on the first day this script existed: a hook refused the push, the refusal scrolled past
+// above the output, and this sat for the full fifteen minutes on a commit that only ever existed on
+// one laptop -- then reported a timeout, which reads like a slow build rather than a push that
+// never happened.
+const onTheRemote = () => {
+  try {
+    return git('branch', '-r', '--contains', sha).trim().length > 0;
+  } catch {
+    return false;
+  }
+};
+if (!onTheRemote()) {
+  console.error(`${sha.slice(0, 8)} is on no remote branch, so GitHub has never seen it and never`);
+  console.error('will run anything for it. The push did not happen -- look for what refused it.');
+  process.exit(1);
+}
+
 const started = Date.now();
 console.log(`waiting on ${sha.slice(0, 8)} in ${owner}/${name}`);
 
