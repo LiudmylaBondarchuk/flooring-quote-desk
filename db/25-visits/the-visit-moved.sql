@@ -8,9 +8,14 @@
 -- confirmed_at is cleared, so a moved visit is written about once more by the ordinary path -- the
 -- customer has a letter naming a time that is no longer the time.
 
+-- owner_told_at goes with it. What the owner was told names a time, and after this that time is
+-- wrong: the customer has been moved and whoever is driving out has not. Clearing it puts the visit
+-- back in front of the lane, which says it again with the time it now has.
+
 UPDATE visits
    SET agreed = $2::timestamptz,
-       confirmed_at = NULL
+       confirmed_at = NULL,
+       owner_told_at = NULL
  WHERE id = $1::int
    AND state = 'agreed'
    AND agreed IS DISTINCT FROM $2::timestamptz

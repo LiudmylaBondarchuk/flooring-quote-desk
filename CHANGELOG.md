@@ -11,6 +11,32 @@ A conversation now outlives the email that started it, the price list is kept by
 owner rather than by a developer, and a price is computed and written down. The desk
 answers a customer for the first time — with a question, never with a figure.
 
+**The owner is told what they are driving to, before they knock.** A visit was agreed and nothing
+prepared anybody for it: an address in a calendar entry, and everything else — what was asked for,
+how big, what was quoted, what cannot be measured from an email — spread across a mailbox and a
+database. One message now, when the visit is agreed, carrying the time in Texas, the job as the job
+holds it, the ballpark that went out and that it was a ballpark, what only the visit can settle with
+the rate this firm charges for it, and what to bring, worked out from the job rather than printed
+the same every time.
+
+It goes to the owner's own channel and never to the mailbox every customer writes to: a note that
+lands among the day's letters competes with the work for attention. It was going to be a file on
+Drive, and a file has to be gone and opened, while somebody about to knock is holding a phone. What
+a visit remembers changed with it — not where a file is, but whether the owner has been told, which
+is what stops a second delivery of the same booking saying it all again.
+
+**And a stamp says which row it means.** Running the new lane found what nothing else would have.
+Every node reported success: the message went out with the right words, and the statement after it
+returned `{"success":true}` having updated nothing. What a node is handed after Gmail or Slack is
+that service's answer, not the row the lane was working on — so the identifier was undefined, the
+stamp never landed, and a test visit was announced once a minute with every run green. That is one
+of the six things this desk must never do.
+
+The check that came out of it reads the workflows rather than the statements, and told two more
+apart in lanes that change had not touched: the stamp after an invitation goes out, and the one
+after a reminder. Neither had been seen running; both were the same shape and are fixed the same
+way.
+
 **The letters are signed by a firm with a name.** They went out as "the flooring desk", which says
 what sent a letter rather than who it came from — serviceable while a letter only carried a rough
 price, and wrong the moment somebody is asked to sign an agreement with the same outfit. Shoal Creek

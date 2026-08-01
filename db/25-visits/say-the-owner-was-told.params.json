@@ -1,0 +1,3 @@
+{
+  "queryReplacement": "={{ [$('Write what the owner is told').item.json.visit_id] }}"
+}

@@ -272,6 +272,9 @@ CREATE TABLE visits (
     agreed_at    timestamptz,
     booked_event_id text,
     confirmed_at timestamptz,
+    -- null until the owner has been told what they are driving to; what is said carries the
+    -- ballpark and the on-site rates, so it never goes to a customer
+    owner_told_at timestamptz,
 
     CONSTRAINT visits_state_known CHECK (state IN ('offered', 'agreed', 'lapsed')),
     -- one direction only: an agreed visit has a time, and a cancelled one keeps the time it

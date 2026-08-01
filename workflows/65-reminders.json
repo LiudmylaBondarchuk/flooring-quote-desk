@@ -160,14 +160,15 @@
           "id": null,
           "name": "Gmail account"
         }
-      }
+      },
+      "webhookId": "eb29e0b5-b5ce-4b8a-9e26-08687b6c65a6"
     },
     {
       "parameters": {
         "operation": "executeQuery",
         "query": "-- Written after the nudge has gone. One per order, ever: the statement refuses a second because\n-- the order it belongs to already has one, and a customer who ignored the first will not be helped\n-- by a third.\n\nINSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\nSELECT $1::int, $2::text, 'asked', 'reminder', NULL, 'nudged after silence'\n WHERE NOT EXISTS (SELECT 1 FROM order_events e\n                    WHERE e.order_id = $1::int AND e.kind = 'asked' AND e.field = 'reminder')\nRETURNING order_id, new_value;",
         "options": {
-          "queryReplacement": "={{ [$json.order_id, $json.reply_to] }}"
+          "queryReplacement": "={{ [$('Write the nudge').item.json.order_id, $('Write the nudge').item.json.reply_to] }}"
         }
       },
       "id": "aaaa6500-0000-4000-8000-000000000006",
