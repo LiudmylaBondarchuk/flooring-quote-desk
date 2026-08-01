@@ -278,8 +278,10 @@ for (const item of $input.all()) {
   // facts across several emails, and every rule below that asks about "material and area" was
   // asking whether the customer said them again just now.
   const job = row.open_job && typeof row.open_job === 'object' ? row.open_job : {};
-  const jobReady = Boolean(job.material) && job.area !== null && job.area !== undefined
-    && Boolean(job.zone);
+  const jobKnowsMaterial = Boolean(job.material);
+  const jobKnowsArea = job.area !== null && job.area !== undefined;
+  const jobKnowsZone = Boolean(job.zone);
+  const jobReady = jobKnowsMaterial && jobKnowsArea && jobKnowsZone;
 
   const priorSignatures = Array.isArray(row.prior_signatures) ? row.prior_signatures : [];
   const sameSignature = !!material && areaOk && COMPARABLE_AREA.includes(quantity.status)
@@ -380,9 +382,16 @@ for (const item of $input.all()) {
   const assumptions = [];
 
   if (category === 'quote_request') {
-    if (!material) missing.push('material');
-    if (!areaOk) missing.push('area_sqft');
-    if (!zone) missing.push('location');
+    // Against the job, not against this letter. "Still interested" repeats nothing, and asked what
+    // it lacks the answer is everything -- which is how one row came to say the job is ready and
+    // that material, area and location are all still needed, in the same breath.
+    //
+    // Nothing prices or routes from this: the quote lane derives its own colour and permission from
+    // the order and keeps the letter's colour only as a record. The one thing that reads it is the
+    // second reader, which believed it and stopped a job that wanted nothing.
+    if (!material && !jobKnowsMaterial) missing.push('material');
+    if (!areaOk && !jobKnowsArea) missing.push('area_sqft');
+    if (!zone && !jobKnowsZone) missing.push('location');
 
     if (zone === 'out') reasons.push('outside the service area (Austin + 30 mi)');
     if (subfloor) reasons.push('subfloor/moisture flag — site survey needed');
