@@ -2019,7 +2019,12 @@ console.log('\nwhat the owner is told before a visit');
     ask(`SELECT owner_told_at IS NOT NULL FROM visits WHERE id = ${visitId}`), 't');
 
   // a moved visit is told about again, once the page for the new time exists -- the two go
-  // together, and a message naming a time the page contradicts is worse than a late message
+  // together, and a message naming a time the page contradicts is worse than a late message.
+  //
+  // Agreed an hour ago before it moves, on purpose: with the wait measured from the original
+  // agreement it is already over, and this check passes whether or not the rule works. That is how
+  // it read before a reviewer pointed at the fixture rather than at the code.
+  ask(`UPDATE visits SET agreed_at = now() - interval '1 hour' WHERE id = ${visitId}`);
   rowOf(visitSql('the-visit-moved'), [visitId, '2026-08-06T18:30:00+00:00']);
   check('a visit that moved is not told about while its page is the old one', mine().length, 0);
   ask(`UPDATE visits SET agreement_url = 'https://docs.google.com/document/d/moved/edit'
