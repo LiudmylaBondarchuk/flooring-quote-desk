@@ -26,6 +26,16 @@ const gitAsks = (...args) => {
     return null;
   }
 };
+// Runs something and hands back what it said, failure and all: a check that refuses to look at a
+// non-zero exit cannot tell "it failed" from "it would not start".
+const runs = (command, ...args) => {
+  try {
+    return { ok: true, out: execFileSync(command, args, { encoding: 'utf8', stdio: 'pipe' }) };
+  } catch (e) {
+    return { ok: false, out: `${e.stdout || ''}${e.stderr || ''}` };
+  }
+};
+
 const argv = process.argv.slice(2);
 
 const problems = [];
@@ -111,6 +121,41 @@ if (argv[0] === '--message') {
       'the ignore file lists it for a reason: notes and local configuration hold passwords, tokens '
       + 'and things written for one reader',
       'unstage it, and if it genuinely belongs here take it out of .gitignore deliberately');
+  }
+
+  // A message that says what was run has to have run it, and the only moment that can be checked is
+  // this one -- afterwards the tree moves and the claim is unfalsifiable. This exists because a
+  // commit in this repository carried "Audited: ... 1512 tests" while one of them was failing: the
+  // checks it described breaking had really been broken and watched, and the sentence about the
+  // suite was written from memory of a run several edits earlier. Nothing downstream could catch
+  // that: CI sees a later tree, and a reviewer reads the claim as evidence.
+  //
+  // Note what it can and cannot say. It runs the suite against the working tree, which is what is
+  // about to become this commit; it says nothing about the five harnesses, which need a database
+  // and are CI's business. A claim about those is still a claim on trust.
+  const audited = (message.match(/^Audited:[\s\S]*$/m) || [''])[0];
+  // Every number in it, not the first: a message may quote one it refuses as an example, and the
+  // first commit this rule ever saw did exactly that and was turned away for describing itself.
+  // A message lies when none of the counts it states is the one that came back.
+  const counted = [...audited.matchAll(/([\d,]+)\s+(?:tests|checks)\b/g)].map((m) => m[1]);
+  const claimsGreen = /\b(green|passe?[sd]?|passing)\b/i.test(audited);
+
+  if (audited && (counted.length || claimsGreen)) {
+    const ran = runs('node', '--test');
+    const passed = Number((ran.out.match(/^.?\s*pass\s+(\d+)/m) || [])[1] || 0);
+    const failed = Number((ran.out.match(/^.?\s*fail\s+(\d+)/m) || [])[1] || 0);
+
+    if (failed > 0) {
+      complain('this message says what was run, and the suite is not green',
+        `${failed} check(s) fail on the tree being committed, and the message reads as though `
+        + 'they do not. A sentence about a run is evidence to whoever reads it next',
+        'fix them, or say in the message what is failing and why this commit is still right');
+    } else if (counted.length && passed
+      && !counted.some((n) => Number(n.replace(/,/g, '')) === passed)) {
+      complain(`this message claims ${counted.join(' and ')} checks and the suite has ${passed}`,
+        'a number written from memory of an earlier run is the shape of claim this rule exists for',
+        `say ${passed}, or run them again and see`);
+    }
   }
 
   // A merge stages everything the other branch had as though this commit were adding it, and those
