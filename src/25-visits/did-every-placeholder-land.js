@@ -39,6 +39,8 @@ return $input.all().map((item, i) => {
       ...answer,
       visit_id: mine.visit_id,
       order_id: mine.order_id,
+      // carried through so the stamp can refuse a visit that moved while this was being made
+      agreed: mine.agreed,
       filled: wanted.length,
       agreement_url: `https://docs.google.com/document/d/${answer.documentId}/edit`,
     },

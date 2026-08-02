@@ -2056,14 +2056,25 @@ console.log('\nthe agreement that is printed before the door');
   check('and the row is left as it was found', mine()[0].template_id, templateId);
 
   // prepared once
-  rowOf(visitSql('say-where-the-agreement-is'), [visitId, 'https://docs.google.com/document/d/copy-1']);
+  rowOf(visitSql('say-where-the-agreement-is'),
+    [visitId, 'https://docs.google.com/document/d/copy-1', mine()[0].agreed]);
   check('a visit that has one stops waiting', mine().length, 0);
   check('and a second run stamps nothing', ask(
-    `WITH again AS (${fill(visitSql('say-where-the-agreement-is'), [visitId, 'https://docs.google.com/document/d/copy-2'])})
+    `WITH again AS (${fill(visitSql('say-where-the-agreement-is'),
+      [visitId, 'https://docs.google.com/document/d/copy-2', ask(`SELECT agreed FROM visits WHERE id = ${visitId}`)])})
      SELECT count(*) FROM again`), '0');
   check('the copy it kept is the first one',
     ask(`SELECT agreement_url FROM visits WHERE id = ${visitId}`),
     'https://docs.google.com/document/d/copy-1');
+
+  // moved between being read and being stamped: the page made for the old time is not filed
+  ask(`UPDATE visits SET agreement_url = NULL WHERE id = ${visitId}`);
+  const asRead = mine()[0];
+  ask(`UPDATE visits SET agreed = agreed + interval '1 day' WHERE id = ${visitId}`);
+  check('a visit that moved while its page was being made is not stamped with it', ask(
+    `WITH late AS (${fill(visitSql('say-where-the-agreement-is'),
+      [visitId, 'https://docs.google.com/document/d/stale', asRead.agreed])}) SELECT count(*) FROM late`), '0');
+  check('and it is still waiting for the page it now needs', mine().length, 1);
 
   // a visit that moves needs a page carrying the date it now has
   rowOf(visitSql('the-visit-moved'), [visitId, '2026-09-09T18:30:00+00:00']);
