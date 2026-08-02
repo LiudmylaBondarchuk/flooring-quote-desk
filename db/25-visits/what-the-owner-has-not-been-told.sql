@@ -26,6 +26,10 @@ SELECT v.id                                   AS visit_id,
        o.fixing_method,
        o.on_site_items,
        o.booking_code,
+       o.site_street,
+       o.site_city,
+       o.site_postcode,
+       v.agreement_url,
        -- a ballpark that actually went out. A draft or one still waiting on the owner's word has
        -- not been seen by anybody, and reading it out as "quoted by email" would send somebody to
        -- a door believing the customer expects a number nobody ever sent them.
@@ -53,5 +57,10 @@ SELECT v.id                                   AS visit_id,
  WHERE v.state = 'agreed'
    AND v.owner_told_at IS NULL
    AND v.agreed > now()
+   -- and not before the page for it exists, so one message carries everything: where to go, what
+   -- the job is, and the document to open at the door. Half an hour is the escape -- if whatever
+   -- makes that page is broken, the owner is told late rather than not at all, and the missing
+   -- link says so on its own.
+   AND (v.agreement_url IS NOT NULL OR v.agreed_at < now() - interval '30 minutes')
    AND o.state NOT IN ('done', 'lost')
  ORDER BY v.agreed;

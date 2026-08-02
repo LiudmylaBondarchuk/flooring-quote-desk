@@ -43,7 +43,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "// What a Google booking actually says, pulled out of the shape Google stores it in.\n//\n// Two things are wanted: who booked, and the code they typed. Both are in the event, and both are\n// in more than one place, which is the trap.\n//\n// The email is taken from the attendee list and never from the description. The description is\n// prose Google assembles, and it is written in the language of whoever is doing the booking: the\n// same booking page produced \"Zarezerwowane przez\" for one booking and \"Booked by\" for the next,\n// because a setting changed between them. Any rule keyed on those words breaks the day somebody\n// books from a different country.\n//\n// The code survives that, because the label is ours: \"Order code\" is what the booking form was\n// told to call the question, so it is the same string in every language Google renders around it.\n\nconst TAGS = /<br\\s*\\/?>|<\\/?[a-z][^>]*>/gi;\n\nconst plain = (html) => String(html || '')\n  .replace(TAGS, '\\n')\n  .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')\n  .replace(/&nbsp;/g, ' ').replace(/&#39;/g, \"'\").replace(/&quot;/g, '\"');\n\n// the answer is the first non-empty line after the label, which is how Google lays every one of\n// them out -- label, newline, answer\nconst answerTo = (description, label) => {\n  const lines = plain(description).split('\\n').map((line) => line.trim());\n  const at = lines.findIndex((line) => line.toLowerCase() === label.toLowerCase());\n  if (at === -1) return null;\n  const said = lines.slice(at + 1).find((line) => line !== '');\n  return said || null;\n};\n\n// A code is worth nothing unless it is one we could have issued. Accepting anything typed lets a\n// stray word match nothing slowly instead of nothing quickly, and puts junk in the logs.\n//\n// Five letters then two digits, with no separator in the issued form -- but people type what looks\n// right to them, so spaces, hyphens and dots are taken out before the shape is checked. Somebody\n// writing \"kqmnp 47\" has done nothing wrong and should not lose their booking over it.\nconst CODE = /^[ABCDEFGHJKMNPQRSTUVWXYZ]{5}[23456789]{2}$/;\nconst tidy = (typed) => String(typed || '').toUpperCase().replace(/[^A-Z0-9]/g, '');\n\nreturn $input.all().map((item, i) => {\n  const event = item.json || {};\n  const organiser = String(event.organizer?.email || '').toLowerCase();\n  const attendees = Array.isArray(event.attendees) ? event.attendees : [];\n\n  // the one who is not us. An appointment schedule puts the desk on every booking as organiser,\n  // so the guest is whoever is left.\n  const guest = attendees\n    .map((a) => String(a.email || '').toLowerCase())\n    .find((email) => email && email !== organiser) || null;\n\n  const typed = answerTo(event.description, 'Order code');\n  const cleaned = tidy(typed);\n  const code = CODE.test(cleaned) ? cleaned : null;\n\n  return {\n    json: {\n      event_id: event.id || null,\n      booked_email: guest,\n      booking_code: code,\n      code_as_typed: typed,\n      starts_at: event.start?.dateTime || null,\n      time_zone: event.start?.timeZone || null,\n      summary: event.summary || null,\n      // nothing to look a job up by at all. Said here rather than discovered by two queries that\n      // both return nothing.\n      nothing_to_go_on: !guest && !code,\n    },\n    pairedItem: { item: i },\n  };\n});\n"
+        "jsCode": "// What a Google booking actually says, pulled out of the shape Google stores it in.\n//\n// Two things are wanted: who booked, and the code they typed. Both are in the event, and both are\n// in more than one place, which is the trap.\n//\n// The email is taken from the attendee list and never from the description. The description is\n// prose Google assembles, and it is written in the language of whoever is doing the booking: the\n// same booking page produced \"Zarezerwowane przez\" for one booking and \"Booked by\" for the next,\n// because a setting changed between them. Any rule keyed on those words breaks the day somebody\n// books from a different country.\n//\n// The code survives that, because the label is ours: \"Order code\" is what the booking form was\n// told to call the question, so it is the same string in every language Google renders around it.\n\nconst TAGS = /<br\\s*\\/?>|<\\/?[a-z][^>]*>/gi;\n\nconst plain = (html) => String(html || '')\n  .replace(TAGS, '\\n')\n  .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')\n  .replace(/&nbsp;/g, ' ').replace(/&#39;/g, \"'\").replace(/&quot;/g, '\"');\n\n// the answer is the first non-empty line after the label, which is how Google lays every one of\n// them out -- label, newline, answer\nconst answerTo = (description, label) => {\n  const lines = plain(description).split('\\n').map((line) => line.trim());\n  const at = lines.findIndex((line) => line.toLowerCase() === label.toLowerCase());\n  if (at === -1) return null;\n  const said = lines.slice(at + 1).find((line) => line !== '');\n  return said || null;\n};\n\n// Where the work is, asked on the booking form rather than read out of a letter. A customer writes\n// \"Kyle TX\" in an email and means one of several places; here they type it with the deed in front\n// of them, and the answer is theirs rather than something extracted from prose.\n//\n// Three questions rather than one, because somebody given a single box writes \"123 Oak St\" and\n// stops -- and a street with no town is not somewhere anybody can drive to. The postcode earns its\n// place separately: the service area is kept by postcode as well as by name, so this is the one\n// form of the address the desk can check rather than believe.\n//\n// Labels are ours, so they survive whatever language Google renders the rest of the page in --\n// the same reason the code can be read from here and the guest's email cannot.\nconst oneLine = (said) => (said ? String(said).replace(/\\s+/g, ' ').trim() : null) || null;\n\n// A code is worth nothing unless it is one we could have issued. Accepting anything typed lets a\n// stray word match nothing slowly instead of nothing quickly, and puts junk in the logs.\n//\n// Five letters then two digits, with no separator in the issued form -- but people type what looks\n// right to them, so spaces, hyphens and dots are taken out before the shape is checked. Somebody\n// writing \"kqmnp 47\" has done nothing wrong and should not lose their booking over it.\nconst CODE = /^[ABCDEFGHJKMNPQRSTUVWXYZ]{5}[23456789]{2}$/;\nconst tidy = (typed) => String(typed || '').toUpperCase().replace(/[^A-Z0-9]/g, '');\n\nreturn $input.all().map((item, i) => {\n  const event = item.json || {};\n  const organiser = String(event.organizer?.email || '').toLowerCase();\n  const attendees = Array.isArray(event.attendees) ? event.attendees : [];\n\n  // the one who is not us. An appointment schedule puts the desk on every booking as organiser,\n  // so the guest is whoever is left.\n  const guest = attendees\n    .map((a) => String(a.email || '').toLowerCase())\n    .find((email) => email && email !== organiser) || null;\n\n  const typed = answerTo(event.description, 'Order code');\n  const cleaned = tidy(typed);\n  const code = CODE.test(cleaned) ? cleaned : null;\n\n  return {\n    json: {\n      event_id: event.id || null,\n      booked_email: guest,\n      booking_code: code,\n      code_as_typed: typed,\n      site_street: oneLine(answerTo(event.description, 'Street address')),\n      site_city: oneLine(answerTo(event.description, 'City')),\n      site_postcode: oneLine(answerTo(event.description, 'ZIP code')),\n      starts_at: event.start?.dateTime || null,\n      time_zone: event.start?.timeZone || null,\n      summary: event.summary || null,\n      // nothing to look a job up by at all. Said here rather than discovered by two queries that\n      // both return nothing.\n      nothing_to_go_on: !guest && !code,\n    },\n    pairedItem: { item: i },\n  };\n});\n"
       }
     },
     {
@@ -721,6 +721,29 @@
           "queryReplacement": "={{ [$json.visit_id, $json.agreement_url, $json.agreed] }}"
         }
       }
+    },
+    {
+      "id": "where-job",
+      "name": "Remember where the job is",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        480,
+        -160
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- What the customer typed on the booking form, kept against the job.\n--\n-- coalesce rather than assignment: a rebooking that leaves a question blank must not wipe what the\n-- last one answered. The newest thing said is the truth; silence is not a thing said.\n\nUPDATE orders\n   SET site_street   = coalesce($2::text, site_street),\n       site_city     = coalesce($3::text, site_city),\n       site_postcode = coalesce($4::text, site_postcode),\n       updated_at    = now()\n WHERE id = $1::int\nRETURNING id, site_street, site_city, site_postcode;\n",
+        "options": {
+          "queryReplacement": "={{ [$json.order_id, $('Read the booking').item.json.site_street, $('Read the booking').item.json.site_city, $('Read the booking').item.json.site_postcode] }}"
+        }
+      }
     }
   ],
   "connections": {
@@ -750,7 +773,7 @@
       "main": [
         [
           {
-            "node": "Write the booked visit",
+            "node": "Remember where the job is",
             "type": "main",
             "index": 0
           }
@@ -1003,6 +1026,17 @@
         [
           {
             "node": "Say where the agreement is",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remember where the job is": {
+      "main": [
+        [
+          {
+            "node": "Write the booked visit",
             "type": "main",
             "index": 0
           }
