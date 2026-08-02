@@ -2139,7 +2139,7 @@ console.log('\nthe agreement that is printed before the door');
   ask(`UPDATE reply_templates SET body = '${templateId}' WHERE key = 'agreement_template'`);
   check('and the row is left as it was found', afresh()[0].template_id, templateId);
 
-  // prepared once
+  // filed against the visit it was made for, and not filed a second time
   //
   // The time is sent the way the lane sends it, and that is the whole point of the helper. The row
   // leaves Postgres carrying microseconds and reaches the stamp having been through JSON, which

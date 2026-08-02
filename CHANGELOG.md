@@ -11,16 +11,22 @@ A conversation now outlives the email that started it, the price list is kept by
 owner rather than by a developer, and a price is computed and written down. The desk
 answers a customer for the first time — with a question, never with a figure.
 
-**The agreement is prepared exactly once, and this time it is true.** It was said here already,
-and it was wrong twice over. A visit was claimed by writing down where its copy had been put — a
-note made *after* the copy existed on Drive, so two runs overlapping inside the seconds a copy takes
-both found a visit with no page and both made one. And the note was never written anyway: the time
-it was filed against left the database carrying microseconds and arrived carrying thousandths, so it
-was compared against a value it could never equal. Ten copies of one agreement in twenty minutes,
-every run reporting success. A visit is taken now before anything is copied, in one statement, so
-two runs arriving together give it to exactly one of them; the claim lets go after half an hour, so
-a bad afternoon at Google costs a delay rather than a page that never comes; and a visit that is
-moved is free at once, because its page prints a date that is no longer true.
+**Two runs no longer make two copies of one agreement.** This entry claimed the copy was already
+"prepared once", and it was wrong twice over. A visit was claimed by writing down where its copy had
+been put — a note made *after* the copy existed on Drive, so two runs overlapping inside the seconds
+a copy takes both found a visit with no page and both made one. And the note was never written
+anyway: the time it was filed against left the database carrying microseconds and arrived carrying
+thousandths, so it was compared against a value it could never equal. Ten copies of one agreement in
+twenty minutes, every run reporting success.
+
+A visit is taken now before anything is copied, in one statement, so two runs arriving together give
+it to exactly one of them. That is a lease and not a promise, and the difference is worth saying
+plainly: it lasts half an hour, and a run that copies the document and then dies before recording
+where it put it will see that visit offered again when the half hour is up. One stray copy in the
+owner's Drive is the price of the alternative, which is a visit whose page never comes at all
+because a single bad afternoon at Google left the claim standing for ever. A visit that is moved is
+freed at once rather than waiting the lease out, because its page prints a date that is no longer
+true.
 
 **The desk knows where to drive.** It knew a town — whatever an extractor pulled out of prose, so
 "Kyle TX" in a sentence and no street at all — and somebody was expected to find a house with that.
