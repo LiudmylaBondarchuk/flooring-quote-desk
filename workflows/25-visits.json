@@ -744,6 +744,84 @@
           "queryReplacement": "={{ [$json.order_id, $('Read the booking').item.json.site_street, $('Read the booking').item.json.site_city, $('Read the booking').item.json.site_postcode] }}"
         }
       }
+    },
+    {
+      "id": "sure-gate",
+      "name": "Is anybody sure whose job this is?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        -320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "sure",
+              "leftValue": "={{ $json.needs_a_person }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "unplaceable",
+      "name": "Say nobody can place this booking",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        -420
+      ],
+      "parameters": {
+        "jsCode": "// A booking the desk will not place by itself, said to the owner rather than resolved.\n//\n// Two ways it happens. An email and a code point at different jobs, and whichever were picked would\n// be picked against evidence. Or something was typed into the code field that leads nowhere — a\n// slip, or a code for a job that is already closed — and the email would carry it silently, which\n// is right until the day somebody has two jobs open.\n//\n// Nothing is written and nothing is booked. The customer has Google's own confirmation and believes\n// they have an appointment, so this is not a thing to sit in a queue: it is somebody's next five\n// minutes.\n\nconst WHERE_THE_WORK_IS = 'America/Chicago';\n\nconst when = (iso) => {\n  const at = new Date(iso);\n  if (Number.isNaN(at.getTime())) return null;\n  return `${at.toLocaleDateString('en-US', {\n    timeZone: WHERE_THE_WORK_IS, weekday: 'long', month: 'long', day: 'numeric',\n  })}, ${at.toLocaleTimeString('en-US', {\n    timeZone: WHERE_THE_WORK_IS, hour: 'numeric', minute: '2-digit',\n  }).toLowerCase().replace(/\\s/g, '')}`;\n};\n\nreturn $input.all().map((item, i) => {\n  const row = item.json || {};\n  const booking = $('Read the booking').all()[i]?.json || {};\n  const at = when(booking.starts_at);\n\n  const why = row.matched_by === 'they disagree'\n    ? 'the address they booked from and the code they typed point at different jobs'\n    : 'the code they typed does not belong to any open job';\n\n  const message = [\n    `🙋 *A booking nobody can place — ${at || 'time unreadable'}*`,\n    `✉️ ${booking.booked_email || 'no address on the booking'}`,\n    '',\n    why,\n    '',\n    `Typed as the code: \\`${booking.code_as_typed || 'nothing'}\\``,\n    `The address matches job: ${row.by_email || 'none'}`,\n    `The code matches job: ${row.by_code || 'none'}`,\n    '',\n    'Nothing has been booked and nothing written. Google has told them they have an appointment,',\n    'so this is somebody\\'s next five minutes rather than a queue.',\n  ].join('\\n');\n\n  return { json: { ...row, message }, pairedItem: { item: i } };\n});\n"
+      }
+    },
+    {
+      "id": "unplaceable-slack",
+      "name": "Ask the owner to place it",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        960,
+        -420
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "9PIPMFjEMDlisYyQ",
+          "name": "Slack account"
+        }
+      },
+      "parameters": {
+        "authentication": "accessToken",
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#visits",
+          "mode": "name"
+        },
+        "text": "={{ $json.message }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      }
     }
   ],
   "connections": {
@@ -773,7 +851,7 @@
       "main": [
         [
           {
-            "node": "Remember where the job is",
+            "node": "Is anybody sure whose job this is?",
             "type": "main",
             "index": 0
           }
@@ -1037,6 +1115,35 @@
         [
           {
             "node": "Write the booked visit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is anybody sure whose job this is?": {
+      "main": [
+        [
+          {
+            "node": "Remember where the job is",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Say nobody can place this booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Say nobody can place this booking": {
+      "main": [
+        [
+          {
+            "node": "Ask the owner to place it",
             "type": "main",
             "index": 0
           }
