@@ -1591,7 +1591,8 @@ console.log('\na booking on the calendar finding the job it belongs to');
                     FROM generate_series(1, 2)))
       RETURNING id) SELECT id FROM made`));
   const codeOf = (id) => ask(`SELECT booking_code FROM orders WHERE id = ${id}`);
-  const whose = (email, code) => rowOf(visitSql('whose-job-is-this'), [email, code]);
+  const whose = (email, code, typed = code) =>
+    rowOf(visitSql('whose-job-is-this'), [email, code, typed]);
 
   const mine = orderWith('customer@example.com', 'quoted');
   check('every order is issued a code, five letters then two digits',
@@ -1614,6 +1615,18 @@ console.log('\na booking on the calendar finding the job it belongs to');
   check('an email and a code pointing at different jobs goes to a person',
     disagree.needs_a_person, 't');
   check('and picks neither of them', disagree.matched_by, 'they disagree');
+
+  // A code typed and leading nowhere is the customer disagreeing with what the email would say.
+  // Nobody notices a typo on their own booking, and the email is right up until the day somebody
+  // has two jobs open.
+  const mistyped = whose('customer@example.com', '', 'KQMNP 4');
+  check('a code typed with a slip in it goes to a person', mistyped.needs_a_person, 't');
+  check('and it says what happened', mistyped.matched_by, 'they typed a code that matches nothing');
+  const wellFormedButStale = whose('customer@example.com', 'ZZZZZ99', 'ZZZZZ99');
+  check('so does a code that reads properly and belongs to no open job',
+    wellFormedButStale.needs_a_person, 't');
+  check('typing nothing at all is not disagreement',
+    whose('customer@example.com', '', '').needs_a_person, 'f');
 
   // a finished job is not reopened by somebody booking against it
   ask(`UPDATE orders SET state = 'done', closed_at = now() WHERE id = ${other}`);
@@ -2035,9 +2048,11 @@ console.log('\nthe agreement that is printed before the door');
 
   const orderId = Number(ask(`WITH made AS (
       INSERT INTO orders (thread_id, state, contact_email, material_category, area_sqft, area_unit,
-                          area_status, city, zone, existing_floor_action, on_site_items, booking_code)
+                          area_status, city, zone, existing_floor_action, on_site_items, booking_code,
+                          site_street, site_city, site_postcode)
       VALUES ('t-agree', 'survey_needed', 'agree@example.com', 'Laminate', 400, 'sqft', 'known',
-              'Kyle, TX', 'core', 'remove_first', '{stairs,subfloor}', 'AGRDX23')
+              'Kyle, TX', 'core', 'remove_first', '{stairs,subfloor}', 'AGRDX23',
+              '18 Willow Bend', 'Kyle', '78640')
       RETURNING id) SELECT id FROM made`));
   const visitId = Number(ask(`WITH made AS (
       INSERT INTO visits (order_id, state, offered, agreed, agreed_at)
@@ -2049,12 +2064,16 @@ console.log('\nthe agreement that is printed before the door');
 
   const ready = compose(mine()[0]);
   check('there is an agreement to prepare', ready.ready_to_prepare, true);
-  check('nine placeholders, and nine replacements asked of the document',
-    [Object.keys(ready.replacements).length, ready.requests.length], [9, 9]);
+  check('every placeholder has a value, and one replacement is asked for each',
+    [Object.keys(ready.replacements).length, ready.requests.length], [10, 10]);
+  // the town extracted from a letter and the address typed with the deed in hand must not
+  // contradict each other on a page somebody signs
+  check('the city and the address both come off the booking, not off a letter',
+    [ready.replacements.city, ready.replacements.address], ['Kyle', '18 Willow Bend, 78640']);
   check('the job is in it, from the order rather than a letter',
     [ready.replacements.material, ready.replacements.area_discussed,
-     ready.replacements.city, ready.replacements.existing_floor],
-    ['Laminate', 'about 400 sqft', 'Kyle, TX', 'the old floor is taken out first']);
+     ready.replacements.existing_floor],
+    ['Laminate', 'about 400 sqft', 'the old floor is taken out first']);
   check('what the visit has to settle is in words a customer reads',
     ready.replacements.settled_on_site, 'the stairs, what is under the old floor');
   // the one thing that must never be on that page

@@ -11,6 +11,12 @@
 --
 -- Only open jobs. A booking against a job already finished is a person's puzzle, not a row to
 -- update, and matching one would move a visit onto work that is over.
+--
+-- And what they typed matters even when it matches nothing. A code that came back unreadable, or
+-- readable and belonging to no open job, is a customer telling us something that disagrees with
+-- what we would otherwise conclude -- and the ordinary conclusion is the email, which is right up
+-- until the day somebody has two jobs open. Typing nothing is not disagreement; typing something
+-- that leads nowhere is.
 
 WITH by_email AS (
   SELECT o.id
@@ -36,14 +42,17 @@ SELECT (SELECT id FROM by_email)                                  AS by_email,
          WHEN (SELECT id FROM by_email) IS NOT NULL
           AND (SELECT id FROM by_code) IS NOT NULL
           AND (SELECT id FROM by_email) <> (SELECT id FROM by_code) THEN 'they disagree'
+         WHEN btrim($3::text) <> '' AND (SELECT id FROM by_code) IS NULL
+           THEN 'they typed a code that matches nothing'
          WHEN (SELECT id FROM by_email) IS NOT NULL THEN 'the email'
          WHEN (SELECT id FROM by_code)  IS NOT NULL THEN 'the code'
          ELSE 'nothing matched'
        END                                                        AS matched_by,
        -- an email and a code pointing at different jobs is the one case where having two ways in
        -- is worse than having one: whichever we picked, we would be picking against evidence
-       ((SELECT id FROM by_email) IS NOT NULL
-        AND (SELECT id FROM by_code) IS NOT NULL
-        AND (SELECT id FROM by_email) <> (SELECT id FROM by_code)) AS needs_a_person,
+       (((SELECT id FROM by_email) IS NOT NULL
+         AND (SELECT id FROM by_code) IS NOT NULL
+         AND (SELECT id FROM by_email) <> (SELECT id FROM by_code))
+        OR (btrim($3::text) <> '' AND (SELECT id FROM by_code) IS NULL))  AS needs_a_person,
        (SELECT contact_email FROM orders
          WHERE id = coalesce((SELECT id FROM by_email), (SELECT id FROM by_code))) AS write_to;

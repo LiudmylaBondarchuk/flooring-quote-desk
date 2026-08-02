@@ -23,6 +23,9 @@ SELECT v.id                                   AS visit_id,
        o.existing_floor_action,
        o.on_site_items,
        o.booking_code,
+       o.site_street,
+       o.site_city,
+       o.site_postcode,
        (SELECT body FROM reply_templates WHERE key = 'agreement_template') AS template_id
   FROM visits v
   JOIN orders o ON o.id = v.order_id
