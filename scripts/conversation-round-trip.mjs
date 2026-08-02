@@ -2008,6 +2008,70 @@ console.log('\nwhat the owner is told before a visit');
     waiting().filter((r) => Number(r.order_id) === bareId).length, 0);
 }
 
+console.log('\nthe agreement that is printed before the door');
+{
+  const visitSql = (n) => read('db', '25-visits', `${n}.sql`).replace(/;\s*$/, '');
+  const source = read('src', '25-visits', 'write-the-agreement.js');
+  const compose = (row) => new Function('$input', source)({ all: () => [{ json: row }] })[0].json;
+  const waiting = () => JSON.parse(ask(
+    `SELECT coalesce(json_agg(t), '[]'::json) FROM (${visitSql('which-visits-need-an-agreement')}) t`));
+
+  const orderId = Number(ask(`WITH made AS (
+      INSERT INTO orders (thread_id, state, contact_email, material_category, area_sqft, area_unit,
+                          area_status, city, zone, existing_floor_action, on_site_items, booking_code)
+      VALUES ('t-agree', 'survey_needed', 'agree@example.com', 'Laminate', 400, 'sqft', 'known',
+              'Kyle, TX', 'core', 'remove_first', '{stairs,subfloor}', 'AGRDX23')
+      RETURNING id) SELECT id FROM made`));
+  const visitId = Number(ask(`WITH made AS (
+      INSERT INTO visits (order_id, state, offered, agreed, agreed_at)
+      VALUES (${orderId}, 'agreed', '["the booking page"]'::jsonb, now() + interval '3 days', now())
+      RETURNING id) SELECT id FROM made`));
+
+  const mine = () => waiting().filter((r) => Number(r.visit_id) === visitId);
+  check('a visit with no agreement yet is waiting for one', mine().length, 1);
+
+  const ready = compose(mine()[0]);
+  check('there is an agreement to prepare', ready.ready_to_prepare, true);
+  check('nine placeholders, and nine replacements asked of the document',
+    [Object.keys(ready.replacements).length, ready.requests.length], [9, 9]);
+  check('the job is in it, from the order rather than a letter',
+    [ready.replacements.material, ready.replacements.area_discussed,
+     ready.replacements.city, ready.replacements.existing_floor],
+    ['Laminate', 'about 400 sqft', 'Kyle, TX', 'the old floor is taken out first']);
+  check('what the visit has to settle is in words a customer reads',
+    ready.replacements.settled_on_site, 'the stairs, what is under the old floor');
+  // the one thing that must never be on that page
+  check('no price of any kind reaches the agreement',
+    Object.values(ready.replacements).some((v) => /\$|\d{3,}\s*(to|-)\s*\$?\d/.test(String(v))), false);
+
+  // the template is a row, and the lane refuses rather than guesses when it is gone. Its value is
+  // taken from the row rather than written here: a check carrying its own copy of a thing the
+  // database holds is the drift it is supposed to be watching for.
+  const templateId = ask("SELECT body FROM reply_templates WHERE key = 'agreement_template'");
+  check('the template id is read from the row, not from the code', mine()[0].template_id, templateId);
+  ask("UPDATE reply_templates SET body = '' WHERE key = 'agreement_template'");
+  check('with no template there is nothing to copy, and it says so',
+    compose({ ...mine()[0], template_id: '' }).why_not, 'there is no agreement template to copy');
+  ask(`UPDATE reply_templates SET body = '${templateId}' WHERE key = 'agreement_template'`);
+  check('and the row is left as it was found', mine()[0].template_id, templateId);
+
+  // prepared once
+  rowOf(visitSql('say-where-the-agreement-is'), [visitId, 'https://docs.google.com/document/d/copy-1']);
+  check('a visit that has one stops waiting', mine().length, 0);
+  check('and a second run stamps nothing', ask(
+    `WITH again AS (${fill(visitSql('say-where-the-agreement-is'), [visitId, 'https://docs.google.com/document/d/copy-2'])})
+     SELECT count(*) FROM again`), '0');
+  check('the copy it kept is the first one',
+    ask(`SELECT agreement_url FROM visits WHERE id = ${visitId}`),
+    'https://docs.google.com/document/d/copy-1');
+
+  // nothing is printed for a door nobody is going to
+  ask(`UPDATE visits SET agreement_url = NULL, state = 'lapsed' WHERE id = ${visitId}`);
+  check('a cancelled visit gets no agreement', mine().length, 0);
+  ask(`UPDATE visits SET state = 'agreed', agreed = now() - interval '2 hours' WHERE id = ${visitId}`);
+  check('and neither does one whose hour has gone by', mine().length, 0);
+}
+
 console.log(`\n${failed === 0 ? 'all checks passed' : `${failed} check(s) FAILED`}`);
 
 try {
