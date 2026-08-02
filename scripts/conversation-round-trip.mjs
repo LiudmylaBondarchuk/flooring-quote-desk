@@ -1950,17 +1950,20 @@ console.log('\nwhat the owner is told before a visit');
   check('the job is in it, from the order rather than a letter',
     ['Laminate', 'about 400 sqft', 'the old floor comes out', 'Kyle, TX']
       .every((part) => said.message.includes(part)), true);
-  check('what was quoted is in it, and called a ballpark',
-    said.message.includes('Quoted by email: $1,760 to $4,400')
+  check('what was quoted is in it, under its own heading, and called a ballpark',
+    said.message.includes('*Quoted by email*\n$1,760 to $4,400')
     && said.message.includes('a ballpark, not a commitment'), true);
   check('what the visit must settle is named with a rate and marked as not counted',
-    said.message.includes('stairs — $45 to $80 per each, named to the customer and not counted'), true);
+    said.message.includes('• stairs — $45 to $80 per each — named to the customer, not counted'), true);
   check('and what to bring follows from the job rather than a fixed list',
     ['Laminate samples', 'levelling compound sample', 'tread gauge', 'a look under a corner']
       .every((thing) => said.message.includes(thing)), true);
   // the rule this whole thing is under
   check('it says on its face that it is not for the customer',
     said.message.includes('Not for the customer'), true);
+  // these arrive one after another in a channel; the first line is what separates one from the next
+  check('it opens with the job and the time, in a line that stands out',
+    said.message.split('\n')[0], '📋 *Job ' + orderId + ' — Tuesday, August 4, 1:30pm*');
 
   // a price nobody has seen is not what the customer is expecting
   ask(`INSERT INTO offers (order_id, kind, status, total_low, total_high)
@@ -1980,7 +1983,7 @@ console.log('\nwhat the owner is told before a visit');
                now(), 'e-bare-told') RETURNING id) SELECT id FROM made`);
   const bare = compose(waiting().find((r) => Number(r.order_id) === bareId));
   check('a job that has said almost nothing still gets something usable',
-    ['floor not said yet', 'no size given — measure everything', 'Quoted by email: nothing yet.']
+    ['floor not said yet', 'no size given — measure everything', '*Quoted by email*\nnothing yet.']
       .every((part) => bare.message.includes(part)), true);
   check('and nobody is told to bring samples of nothing', bare.message.includes('samples'), false);
 

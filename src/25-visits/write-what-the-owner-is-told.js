@@ -77,28 +77,35 @@ return $input.all().map((item, i) => {
   // the customer already has in mind before saying a firm number out loud. It is here and nowhere
   // near the agreement, which is the customer's and carries only the price agreed at the door.
   const quoted = ballpark && ballpark.low !== null && ballpark.low !== undefined
-    ? `Quoted by email: ${money(ballpark.low)} to ${money(ballpark.high)}`
+    ? `${money(ballpark.low)} to ${money(ballpark.high)}`
       + ' — a ballpark, not a commitment. The firm price is yours to give on the day.'
-    : 'Quoted by email: nothing yet.';
+    : 'nothing yet.';
 
   const settleHere = onSite.map((thing) => {
     const rate = rates[thing];
     const range = rate ? ` — ${money(rate.val_low)} to ${money(rate.val_high)} per ${rate.unit}` : '';
-    return `  ${thing}${range}, named to the customer and not counted`;
+    return `• ${thing}${range} — named to the customer, not counted`;
   });
 
+  // Written to be found rather than read: these arrive one after another in a channel, and until
+  // they had a heading and headed sections two of them ran together into one wall of sentences with
+  // no visible seam. The first line is the one somebody reads standing up.
   const message = [
-    `Visit ${at} · ${where}`,
-    `Job ${row.order_id}${row.booking_code ? ` · code ${row.booking_code}` : ''}`
-      + `${row.contact_email ? ` · ${row.contact_email}` : ''}`,
+    `📋 *Job ${row.order_id} — ${at}*`,
+    `📍 ${where}`,
+    `✉️ ${row.contact_email || 'no address'}${row.booking_code ? `  ·  code \`${row.booking_code}\`` : ''}`,
     '',
+    '*The job*',
     job,
+    '',
+    '*Quoted by email*',
     quoted,
-    ...(settleHere.length ? ['', 'To settle on site:', ...settleHere] : []),
+    ...(settleHere.length ? ['', '*To settle on site*', ...settleHere] : []),
     '',
-    `Bring: ${toBring(row, onSite).join(', ')}`,
+    '*Bring*',
+    toBring(row, onSite).join(', '),
     '',
-    'Not for the customer. Written when the visit was agreed, from the job as it stood then.',
+    '_Not for the customer. Written when the visit was agreed, from the job as it stood then._',
   ].join('\n');
 
   return {
