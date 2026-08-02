@@ -2065,6 +2065,12 @@ console.log('\nthe agreement that is printed before the door');
     ask(`SELECT agreement_url FROM visits WHERE id = ${visitId}`),
     'https://docs.google.com/document/d/copy-1');
 
+  // a visit that moves needs a page carrying the date it now has
+  rowOf(visitSql('the-visit-moved'), [visitId, '2026-09-09T18:30:00+00:00']);
+  check('a visit that moved is waiting for a new agreement', mine().length, 1);
+  check('and the new one carries the new date',
+    compose(mine()[0]).replacements.visit_date.includes('September 9'), true);
+
   // nothing is printed for a door nobody is going to
   ask(`UPDATE visits SET agreement_url = NULL, state = 'lapsed' WHERE id = ${visitId}`);
   check('a cancelled visit gets no agreement', mine().length, 0);
