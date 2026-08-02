@@ -8,11 +8,16 @@
 // Google answers a batch of replacements with one reply each, saying how many occurrences it
 // changed. Nought means the placeholder this asked for is not in that document.
 
-const asked = $('Write the agreement').item.json.requests || [];
-const wanted = asked.map((r) => r.replaceAllText.containsText.text);
+// Paired by position, never by $('...').item. This node runs over every waiting visit at once, and
+// a linked item is one item: two visits in a run would both be checked against the first one's
+// placeholders and both stamped against the first one's visit. Position is what pairs them, because
+// the copy and the fill preserve the order the statement returned.
+const prepared = $('Write the agreement').all();
 
 return $input.all().map((item, i) => {
   const answer = item.json || {};
+  const mine = prepared[i]?.json || {};
+  const wanted = (mine.requests || []).map((r) => r.replaceAllText.containsText.text);
   const replies = Array.isArray(answer.replies) ? answer.replies : [];
 
   // A reply carries no count at all when nothing changed, so absent and nought are the same thing.
@@ -20,7 +25,7 @@ return $input.all().map((item, i) => {
   const missing = wanted.filter((_, n) => !(landed[n] > 0));
 
   if (missing.length) {
-    throw new Error(`the agreement for visit ${$('Write the agreement').item.json.visit_id} was `
+    throw new Error(`the agreement for visit ${mine.visit_id} was `
       + `copied with ${missing.length} placeholder(s) unfilled: ${missing.join(', ')}. `
       + 'Either the template no longer contains them, or they are spelled differently in it. '
       + 'The copy is on Drive and is not fit to print.');
@@ -32,8 +37,8 @@ return $input.all().map((item, i) => {
   return {
     json: {
       ...answer,
-      visit_id: $('Write the agreement').item.json.visit_id,
-      order_id: $('Write the agreement').item.json.order_id,
+      visit_id: mine.visit_id,
+      order_id: mine.order_id,
       filled: wanted.length,
       agreement_url: `https://docs.google.com/document/d/${answer.documentId}/edit`,
     },
