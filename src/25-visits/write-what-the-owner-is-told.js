@@ -60,8 +60,12 @@ return $input.all().map((item, i) => {
     };
   }
 
-  const where = `${row.city || 'somewhere not established'}`
-    + `${row.zone ? ` (${row.zone} of the service area)` : ''}`;
+  // The address the customer typed on the booking form, and the city off the job only when they
+  // have not booked yet. A town on its own is not somewhere anybody can drive to, and until this
+  // was asked for on the form it was all the desk had.
+  const booked = [row.site_street, row.site_city, row.site_postcode].filter(Boolean).join(', ');
+  const where = booked
+    || `${row.city || 'somewhere not established'}${row.zone ? ` (${row.zone} of the service area)` : ''}`;
 
   const job = [
     row.material_category || 'floor not said yet',
@@ -104,8 +108,9 @@ return $input.all().map((item, i) => {
     '',
     '*Bring*',
     toBring(row, onSite).join(', '),
-    '',
-    '_Not for the customer. Written when the visit was agreed, from the job as it stood then._',
+    // The page to sign, from the same message. The two were built apart and knew nothing of each
+    // other: a briefing arrived, and the document sat on a drive somewhere to be hunted for.
+    ...(row.agreement_url ? ['', `📄 <${row.agreement_url}|The page to sign at the door>`] : []),
   ].join('\n');
 
   return {

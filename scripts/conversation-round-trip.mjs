@@ -1929,16 +1929,18 @@ console.log('\nwhat the owner is told before a visit');
   const orderId = Number(ask(`WITH made AS (
       INSERT INTO orders (thread_id, state, contact_email, material_category, area_sqft, area_unit,
                           area_status, city, zone, existing_floor_action, old_floor_removal,
-                          on_site_items, booking_code)
+                          on_site_items, booking_code, site_street, site_city, site_postcode)
       VALUES ('t-told', 'survey_needed', 'told@example.com', 'Laminate', 400, 'sqft', 'known',
-              'Kyle, TX', 'core', 'remove_first', true, '{stairs,subfloor}', 'TQDXM23')
+              'Kyle, TX', 'core', 'remove_first', true, '{stairs,subfloor}', 'TQDXM23',
+              '12 Cypress Row', 'Kyle', '78640')
       RETURNING id) SELECT id FROM made`));
   ask(`INSERT INTO offers (order_id, kind, status, total_low, total_high)
        VALUES (${orderId}, 'ballpark', 'sent', 1760, 4400)`);
   const visitId = Number(ask(`WITH made AS (
-      INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id)
+      INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id,
+                          agreement_url)
       VALUES (${orderId}, 'agreed', '["the booking page"]'::jsonb, '2026-08-04T18:30:00+00:00',
-              now(), 'e-told')
+              now(), 'e-told', 'https://docs.google.com/document/d/told/edit')
       RETURNING id) SELECT id FROM made`));
 
   const mine = () => waiting().filter((r) => Number(r.visit_id) === visitId);
@@ -1948,7 +1950,7 @@ console.log('\nwhat the owner is told before a visit');
   check('there is something to say', said.ready_to_tell, true);
   check('the time is in Texas', said.message.includes('Tuesday, August 4, 1:30pm'), true);
   check('the job is in it, from the order rather than a letter',
-    ['Laminate', 'about 400 sqft', 'the old floor comes out', 'Kyle, TX']
+    ['Laminate', 'about 400 sqft', 'the old floor comes out']
       .every((part) => said.message.includes(part)), true);
   check('what was quoted is in it, under its own heading, and called a ballpark',
     said.message.includes('*Quoted by email*\n$1,760 to $4,400')
@@ -1958,9 +1960,11 @@ console.log('\nwhat the owner is told before a visit');
   check('and what to bring follows from the job rather than a fixed list',
     ['Laminate samples', 'levelling compound sample', 'tread gauge', 'a look under a corner']
       .every((thing) => said.message.includes(thing)), true);
-  // the rule this whole thing is under
-  check('it says on its face that it is not for the customer',
-    said.message.includes('Not for the customer'), true);
+  // where to drive, which is the one thing a town name never answered
+  check('the address the customer typed is what it says, not the town from a letter',
+    said.message.includes('📍 12 Cypress Row, Kyle, 78640'), true);
+  check('and the page to sign is in the same message',
+    said.message.includes('|The page to sign at the door>'), true);
   // these arrive one after another in a channel; the first line is what separates one from the next
   check('it opens with the job and the time, in a line that stands out',
     said.message.split('\n')[0], '📋 *Job ' + orderId + ' — Tuesday, August 4, 1:30pm*');
@@ -1978,10 +1982,16 @@ console.log('\nwhat the owner is told before a visit');
       INSERT INTO orders (thread_id, state, contact_email, city, zone)
       VALUES ('t-bare-told', 'survey_needed', 'bare@example.com', 'Buda, TX', 'core')
       RETURNING id) SELECT id FROM made`));
+  // agreed an hour ago and still without a page: the escape, so a broken drive delays the message
+  // rather than swallowing it
   ask(`WITH made AS (INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id)
        VALUES (${bareId}, 'agreed', '["the booking page"]'::jsonb, '2026-08-05T18:30:00+00:00',
-               now(), 'e-bare-told') RETURNING id) SELECT id FROM made`);
+               now() - interval '1 hour', 'e-bare-told') RETURNING id) SELECT id FROM made`);
+  check('a visit with no page yet is still told about once it has waited',
+    waiting().filter((r) => Number(r.order_id) === bareId).length, 1);
   const bare = compose(waiting().find((r) => Number(r.order_id) === bareId));
+  check('and the message says nothing about a page that does not exist',
+    bare.message.includes('The page to sign'), false);
   check('a job that has said almost nothing still gets something usable',
     ['floor not said yet', 'no size given — measure everything', '*Quoted by email*\nnothing yet.']
       .every((part) => bare.message.includes(part)), true);
@@ -1995,10 +2005,14 @@ console.log('\nwhat the owner is told before a visit');
   check('the moment it kept is the first one',
     ask(`SELECT owner_told_at IS NOT NULL FROM visits WHERE id = ${visitId}`), 't');
 
-  // a moved visit is told about again, with the time it now has
+  // a moved visit is told about again, once the page for the new time exists -- the two go
+  // together, and a message naming a time the page contradicts is worse than a late message
   rowOf(visitSql('the-visit-moved'), [visitId, '2026-08-06T18:30:00+00:00']);
-  check('a visit that moved is waiting to be told about again', mine().length, 1);
-  check('and what is said carries the new time',
+  check('a visit that moved is not told about while its page is the old one', mine().length, 0);
+  ask(`UPDATE visits SET agreement_url = 'https://docs.google.com/document/d/moved/edit'
+        WHERE id = ${visitId}`);
+  check('and is waiting again as soon as the new page exists', mine().length, 1);
+  check('what is said carries the new time',
     compose(mine()[0]).message.includes('Thursday, August 6, 1:30pm'), true);
 
   // an hour that has passed is not something to prepare for
