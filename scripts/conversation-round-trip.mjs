@@ -2140,12 +2140,22 @@ console.log('\nthe agreement that is printed before the door');
   check('and the row is left as it was found', afresh()[0].template_id, templateId);
 
   // prepared once
-  rowOf(visitSql('say-where-the-agreement-is'),
-    [visitId, 'https://docs.google.com/document/d/copy-1', afresh()[0].agreed]);
+  //
+  // The time is sent the way the lane sends it, and that is the whole point of the helper. The row
+  // leaves Postgres carrying microseconds and reaches the stamp having been through JSON, which
+  // keeps milliseconds -- so what is compared against the column is not what came out of it.
+  // Reading the time straight back out of the database, which is what this check used to do, hands
+  // the statement a value nothing in production ever hands it, and passes for that reason alone.
+  const asTheLaneSendsIt = (t) => JSON.parse(JSON.stringify(new Date(t)));
+  check('the page is filed against the visit it was made for', ask(
+    `WITH stamped AS (${fill(visitSql('say-where-the-agreement-is'),
+      [visitId, 'https://docs.google.com/document/d/copy-1', asTheLaneSendsIt(afresh()[0].agreed)])})
+     SELECT count(*) FROM stamped`), '1');
   check('a visit that has one is not taken again, claim or no claim', afresh().length, 0);
   check('and a second run stamps nothing', ask(
     `WITH again AS (${fill(visitSql('say-where-the-agreement-is'),
-      [visitId, 'https://docs.google.com/document/d/copy-2', ask(`SELECT agreed FROM visits WHERE id = ${visitId}`)])})
+      [visitId, 'https://docs.google.com/document/d/copy-2',
+       asTheLaneSendsIt(ask(`SELECT agreed FROM visits WHERE id = ${visitId}`))])})
      SELECT count(*) FROM again`), '0');
   check('the copy it kept is the first one',
     ask(`SELECT agreement_url FROM visits WHERE id = ${visitId}`),
@@ -2157,8 +2167,18 @@ console.log('\nthe agreement that is printed before the door');
   ask(`UPDATE visits SET agreed = agreed + interval '1 day' WHERE id = ${visitId}`);
   check('a visit that moved while its page was being made is not stamped with it', ask(
     `WITH late AS (${fill(visitSql('say-where-the-agreement-is'),
-      [visitId, 'https://docs.google.com/document/d/stale', asRead.agreed])}) SELECT count(*) FROM late`), '0');
+      [visitId, 'https://docs.google.com/document/d/stale',
+       asTheLaneSendsIt(asRead.agreed)])}) SELECT count(*) FROM late`), '0');
   check('and it is still waiting for the page it now needs', afresh().length, 1);
+  // The loosening has a floor. Comparing to the millisecond is what lets the value survive the
+  // trip; comparing any coarser would start calling a visit that genuinely moved the same visit,
+  // which is the guard above, undone from underneath.
+  const aMillisecondOut = new Date(new Date(
+    ask(`SELECT agreed FROM visits WHERE id = ${visitId}`)).getTime() + 1).toISOString();
+  check('a time a millisecond out is not the time the page was made for', ask(
+    `WITH near AS (${fill(visitSql('say-where-the-agreement-is'),
+      [visitId, 'https://docs.google.com/document/d/near', aMillisecondOut])})
+     SELECT count(*) FROM near`), '0');
 
   // a visit that moves needs a page carrying the date it now has, and needs it now: the claim held
   // by whoever was making the old page must not keep it waiting out the half hour
