@@ -11,6 +11,36 @@ A conversation now outlives the email that started it, the price list is kept by
 owner rather than by a developer, and a price is computed and written down. The desk
 answers a customer for the first time — with a question, never with a figure.
 
+**The desk knows where to drive.** It knew a town — whatever an extractor pulled out of prose, so
+"Kyle TX" in a sentence and no street at all — and somebody was expected to find a house with that.
+The address on the agreement was a blank line filled in at the door, which was an honest description
+of how much this knew. It is asked on the booking form now, where the customer types it with the
+deed in front of them: three questions rather than one, because a single box gets "123 Oak Street"
+and stops, and a street with no town is not somewhere anybody can drive to. The postcode is kept
+apart because the service area is held by postcode as well as by name — the one part of an address
+this desk can check rather than believe.
+
+Read by a label this project chose, the same way the booking code is. Google renders its own prose
+in whichever language the person booking used, so nothing may key on its words; "Street address" is
+ours and comes back unchanged. It sits beside the city and zone a price was worked out from rather
+than replacing them: a booking arriving later must not quietly move the ground a quote stands on.
+
+**And the briefing carries it, along with the page to sign.** Those two lanes were built apart and
+knew nothing of each other — a message arrived, and the document sat on a drive somewhere to be
+hunted for at the door. One message now, and it waits for the page to exist; half an hour is the
+escape, so a broken drive makes the owner late rather than uninformed. A moved visit says nothing
+until its new page is ready, because a message naming a time the page contradicts is worse than a
+message that is late. The line saying it was not for the customer is gone: it went out on every
+message into a channel one person can see, and what guards that rule is the check refusing to
+compose any customer letter from it.
+
+**A booking whose code leads nowhere goes to a person.** The code was read, found unreadable, and
+dropped; the booking matched on the email and looked like an ordinary success. That is right up
+until somebody has two jobs open, when the email picks the newest and the mistyped code — which
+pointed at the other one — was the only evidence the guess was wrong. Something typed that cannot be
+read as a code, and something read perfectly well that belongs to no open job, both go to a person
+now. Typing nothing is not disagreement and still matches on the email.
+
 **The agreement is ready before the door.** A visit was agreed, the owner knew what they were
 driving to, and whatever got signed at the house was written out by hand. A copy of the firm's own
 agreement is prepared now for every agreed visit: the template is a Google Doc the owner writes and

@@ -63,7 +63,12 @@ return $input.all().map((item, i) => {
     job_number: String(row.order_id),
     booking_code: row.booking_code || 'not established',
     visit_date: at,
-    city: row.city || 'not established',
+    // Both of these come off the booking form before they come off a letter. The city extracted
+    // from prose and the address typed with the deed in hand can disagree, and a page that names
+    // one town in one line and another in the next is a page somebody argues with at the door.
+    city: row.site_city || row.city || 'not established',
+    address: [row.site_street, row.site_postcode].filter(Boolean).join(', ')
+      || 'to be written in below',
     material: row.material_category || 'not said yet',
     area_discussed: row.area_sqft
       ? `about ${number(row.area_sqft)} ${row.area_unit || 'sqft'}`

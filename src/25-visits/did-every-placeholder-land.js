@@ -8,15 +8,18 @@
 // Google answers a batch of replacements with one reply each, saying how many occurrences it
 // changed. Nought means the placeholder this asked for is not in that document.
 
-// Paired by position, never by $('...').item. This node runs over every waiting visit at once, and
-// a linked item is one item: two visits in a run would both be checked against the first one's
-// placeholders and both stamped against the first one's visit. Position is what pairs them, because
-// the copy and the fill preserve the order the statement returned.
-const prepared = $('Write the agreement').all();
+// Paired by n8n's own item linking, never by $('...').item and never by position.
+//
+// One linked item is one item: two visits in a run would both be checked against the first one's
+// placeholders and both stamped against the first one's visit. But position is wrong too, and for
+// the opposite reason -- a gate stands between the composer and this, and a gate compacts. One
+// visit that is not ready to prepare, followed by one that is, and the second arrives here at
+// index nought while it was index one up there. Every placeholder then belongs to somebody else,
+// and the copy that gets stamped is stamped against the wrong visit.
 
 return $input.all().map((item, i) => {
   const answer = item.json || {};
-  const mine = prepared[i]?.json || {};
+  const mine = $('Write the agreement').itemMatching(i)?.json || {};
   const wanted = (mine.requests || []).map((r) => r.replaceAllText.containsText.text);
   const replies = Array.isArray(answer.replies) ? answer.replies : [];
 

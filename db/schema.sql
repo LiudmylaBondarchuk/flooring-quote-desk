@@ -48,6 +48,13 @@ CREATE TABLE orders (
     on_site_items     text[]      NOT NULL DEFAULT '{}',
     booking_code      text,
 
+    -- where the work is, as the customer typed it on the booking form. Kept apart from city and
+    -- zone, which are what a price was worked out from: a booking arriving later must not quietly
+    -- move the ground a quote already stands on.
+    site_street       text,
+    site_city         text,
+    site_postcode     text,
+
     CONSTRAINT orders_state_known CHECK (state IN (
         'new', 'needs_info', 'quoted', 'negotiating',
         'booked', 'done', 'lost', 'survey_needed')),

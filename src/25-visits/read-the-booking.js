@@ -19,15 +19,39 @@ const plain = (html) => String(html || '')
   .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
   .replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
 
-// the answer is the first non-empty line after the label, which is how Google lays every one of
-// them out -- label, newline, answer
+// Every question this booking form asks. Needed here rather than only at the call sites, because
+// the answer to one is found by knowing where the next begins.
+const LABELS = ['Booked by', 'Order code', 'Street address', 'City', 'ZIP code'];
+
+// The answer is the first non-empty line after the label -- Google lays them out as label, newline,
+// answer, with blank lines between from the markup.
+//
+// Unless that line is the next question. A form answer left blank leaves its label with nothing
+// under it, and taking the next non-empty line then reaches past the gap and picks up the following
+// label as though somebody had typed it: a blank street becomes "City", which is then written to
+// the job and printed on the page a customer signs. Blank has to come back as blank.
 const answerTo = (description, label) => {
   const lines = plain(description).split('\n').map((line) => line.trim());
   const at = lines.findIndex((line) => line.toLowerCase() === label.toLowerCase());
   if (at === -1) return null;
   const said = lines.slice(at + 1).find((line) => line !== '');
-  return said || null;
+  if (!said) return null;
+  const isAnotherQuestion = LABELS.some((l) => l.toLowerCase() === said.toLowerCase());
+  return isAnotherQuestion ? null : said;
 };
+
+// Where the work is, asked on the booking form rather than read out of a letter. A customer writes
+// "Kyle TX" in an email and means one of several places; here they type it with the deed in front
+// of them, and the answer is theirs rather than something extracted from prose.
+//
+// Three questions rather than one, because somebody given a single box writes "123 Oak St" and
+// stops -- and a street with no town is not somewhere anybody can drive to. The postcode earns its
+// place separately: the service area is kept by postcode as well as by name, so this is the one
+// form of the address the desk can check rather than believe.
+//
+// Labels are ours, so they survive whatever language Google renders the rest of the page in --
+// the same reason the code can be read from here and the guest's email cannot.
+const oneLine = (said) => (said ? String(said).replace(/\s+/g, ' ').trim() : null) || null;
 
 // A code is worth nothing unless it is one we could have issued. Accepting anything typed lets a
 // stray word match nothing slowly instead of nothing quickly, and puts junk in the logs.
@@ -59,6 +83,9 @@ return $input.all().map((item, i) => {
       booked_email: guest,
       booking_code: code,
       code_as_typed: typed,
+      site_street: oneLine(answerTo(event.description, 'Street address')),
+      site_city: oneLine(answerTo(event.description, 'City')),
+      site_postcode: oneLine(answerTo(event.description, 'ZIP code')),
       starts_at: event.start?.dateTime || null,
       time_zone: event.start?.timeZone || null,
       summary: event.summary || null,

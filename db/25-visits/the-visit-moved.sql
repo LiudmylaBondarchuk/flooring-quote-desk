@@ -17,8 +17,16 @@
 -- set does not leave a stale copy beside a fresh one, it leaves the stale one as the only one there
 -- will ever be. The previous copy stays on Drive under its own name and date.
 
+-- agreed_at moves with it. It is when this visit was agreed for the time it now has, and two lanes
+-- measure a wait from it: the confirmation a quarter of an hour later, and the half hour after
+-- which the owner is told even though no page exists yet. Left at the original agreement, both of
+-- those waits are already over the moment a visit moves -- so a briefing goes out naming the new
+-- time while the page still carries the old one, which is the exact thing the wait was added to
+-- prevent.
+
 UPDATE visits
    SET agreed = $2::timestamptz,
+       agreed_at = now(),
        confirmed_at = NULL,
        owner_told_at = NULL,
        agreement_url = NULL

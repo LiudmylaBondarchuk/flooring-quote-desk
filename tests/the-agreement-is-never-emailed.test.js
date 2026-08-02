@@ -61,11 +61,11 @@ test('no statement behind a customer letter selects where the agreement is', () 
   }
 });
 
-// Nine placeholders in the document, nine values built for it. The document is not in this
+// Ten placeholders in the document, ten values built for it. The document is not in this
 // repository and cannot be read from here, so what is pinned is the count and the names the code
 // believes in — the lane itself refuses a copy where any of them failed to land, which is the part
 // that catches the document being edited.
-test('the values built for the agreement are the nine the document asks for', () => {
+test('the values built for the agreement are the ones the document asks for', () => {
   const source = readFileSync(join(root, 'src', '25-visits', 'write-the-agreement.js'), 'utf8');
   const compose = new Function('$input', source);
   const built = compose({ all: () => [{ json: {
@@ -73,10 +73,10 @@ test('the values built for the agreement are the nine the document asks for', ()
   } }] })[0].json;
 
   assert.deepEqual(Object.keys(built.replacements).sort(), [
-    'area_discussed', 'booking_code', 'city', 'customer_email',
-    'existing_floor', 'material', 'settled_on_site', 'visit_date',
-  ].concat('job_number').sort());
-  assert.equal(built.requests.length, 9);
+    'address', 'area_discussed', 'booking_code', 'city', 'customer_email',
+    'existing_floor', 'job_number', 'material', 'settled_on_site', 'visit_date',
+  ]);
+  assert.equal(built.requests.length, 10);
   for (const r of built.requests) {
     assert.match(r.replaceAllText.containsText.text, /^\{\{[a-z_]+\}\}$/);
     assert.equal(r.replaceAllText.containsText.matchCase, true);

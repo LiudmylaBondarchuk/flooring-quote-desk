@@ -1591,7 +1591,8 @@ console.log('\na booking on the calendar finding the job it belongs to');
                     FROM generate_series(1, 2)))
       RETURNING id) SELECT id FROM made`));
   const codeOf = (id) => ask(`SELECT booking_code FROM orders WHERE id = ${id}`);
-  const whose = (email, code) => rowOf(visitSql('whose-job-is-this'), [email, code]);
+  const whose = (email, code, typed = code) =>
+    rowOf(visitSql('whose-job-is-this'), [email, code, typed]);
 
   const mine = orderWith('customer@example.com', 'quoted');
   check('every order is issued a code, five letters then two digits',
@@ -1614,6 +1615,18 @@ console.log('\na booking on the calendar finding the job it belongs to');
   check('an email and a code pointing at different jobs goes to a person',
     disagree.needs_a_person, 't');
   check('and picks neither of them', disagree.matched_by, 'they disagree');
+
+  // A code typed and leading nowhere is the customer disagreeing with what the email would say.
+  // Nobody notices a typo on their own booking, and the email is right up until the day somebody
+  // has two jobs open.
+  const mistyped = whose('customer@example.com', '', 'KQMNP 4');
+  check('a code typed with a slip in it goes to a person', mistyped.needs_a_person, 't');
+  check('and it says what happened', mistyped.matched_by, 'they typed a code that matches nothing');
+  const wellFormedButStale = whose('customer@example.com', 'ZZZZZ99', 'ZZZZZ99');
+  check('so does a code that reads properly and belongs to no open job',
+    wellFormedButStale.needs_a_person, 't');
+  check('typing nothing at all is not disagreement',
+    whose('customer@example.com', '', '').needs_a_person, 'f');
 
   // a finished job is not reopened by somebody booking against it
   ask(`UPDATE orders SET state = 'done', closed_at = now() WHERE id = ${other}`);
@@ -1929,16 +1942,18 @@ console.log('\nwhat the owner is told before a visit');
   const orderId = Number(ask(`WITH made AS (
       INSERT INTO orders (thread_id, state, contact_email, material_category, area_sqft, area_unit,
                           area_status, city, zone, existing_floor_action, old_floor_removal,
-                          on_site_items, booking_code)
+                          on_site_items, booking_code, site_street, site_city, site_postcode)
       VALUES ('t-told', 'survey_needed', 'told@example.com', 'Laminate', 400, 'sqft', 'known',
-              'Kyle, TX', 'core', 'remove_first', true, '{stairs,subfloor}', 'TQDXM23')
+              'Kyle, TX', 'core', 'remove_first', true, '{stairs,subfloor}', 'TQDXM23',
+              '12 Cypress Row', 'Kyle', '78640')
       RETURNING id) SELECT id FROM made`));
   ask(`INSERT INTO offers (order_id, kind, status, total_low, total_high)
        VALUES (${orderId}, 'ballpark', 'sent', 1760, 4400)`);
   const visitId = Number(ask(`WITH made AS (
-      INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id)
+      INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id,
+                          agreement_url)
       VALUES (${orderId}, 'agreed', '["the booking page"]'::jsonb, '2026-08-04T18:30:00+00:00',
-              now(), 'e-told')
+              now(), 'e-told', 'https://docs.google.com/document/d/told/edit')
       RETURNING id) SELECT id FROM made`));
 
   const mine = () => waiting().filter((r) => Number(r.visit_id) === visitId);
@@ -1948,19 +1963,24 @@ console.log('\nwhat the owner is told before a visit');
   check('there is something to say', said.ready_to_tell, true);
   check('the time is in Texas', said.message.includes('Tuesday, August 4, 1:30pm'), true);
   check('the job is in it, from the order rather than a letter',
-    ['Laminate', 'about 400 sqft', 'the old floor comes out', 'Kyle, TX']
+    ['Laminate', 'about 400 sqft', 'the old floor comes out']
       .every((part) => said.message.includes(part)), true);
-  check('what was quoted is in it, and called a ballpark',
-    said.message.includes('Quoted by email: $1,760 to $4,400')
+  check('what was quoted is in it, under its own heading, and called a ballpark',
+    said.message.includes('*Quoted by email*\n$1,760 to $4,400')
     && said.message.includes('a ballpark, not a commitment'), true);
   check('what the visit must settle is named with a rate and marked as not counted',
-    said.message.includes('stairs — $45 to $80 per each, named to the customer and not counted'), true);
+    said.message.includes('• stairs — $45 to $80 per each — named to the customer, not counted'), true);
   check('and what to bring follows from the job rather than a fixed list',
     ['Laminate samples', 'levelling compound sample', 'tread gauge', 'a look under a corner']
       .every((thing) => said.message.includes(thing)), true);
-  // the rule this whole thing is under
-  check('it says on its face that it is not for the customer',
-    said.message.includes('Not for the customer'), true);
+  // where to drive, which is the one thing a town name never answered
+  check('the address the customer typed is what it says, not the town from a letter',
+    said.message.includes('📍 12 Cypress Row, Kyle, 78640'), true);
+  check('and the page to sign is in the same message',
+    said.message.includes('|The page to sign at the door>'), true);
+  // these arrive one after another in a channel; the first line is what separates one from the next
+  check('it opens with the job and the time, in a line that stands out',
+    said.message.split('\n')[0], '📋 *Job ' + orderId + ' — Tuesday, August 4, 1:30pm*');
 
   // a price nobody has seen is not what the customer is expecting
   ask(`INSERT INTO offers (order_id, kind, status, total_low, total_high)
@@ -1975,12 +1995,18 @@ console.log('\nwhat the owner is told before a visit');
       INSERT INTO orders (thread_id, state, contact_email, city, zone)
       VALUES ('t-bare-told', 'survey_needed', 'bare@example.com', 'Buda, TX', 'core')
       RETURNING id) SELECT id FROM made`));
+  // agreed an hour ago and still without a page: the escape, so a broken drive delays the message
+  // rather than swallowing it
   ask(`WITH made AS (INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id)
        VALUES (${bareId}, 'agreed', '["the booking page"]'::jsonb, '2026-08-05T18:30:00+00:00',
-               now(), 'e-bare-told') RETURNING id) SELECT id FROM made`);
+               now() - interval '1 hour', 'e-bare-told') RETURNING id) SELECT id FROM made`);
+  check('a visit with no page yet is still told about once it has waited',
+    waiting().filter((r) => Number(r.order_id) === bareId).length, 1);
   const bare = compose(waiting().find((r) => Number(r.order_id) === bareId));
+  check('and the message says nothing about a page that does not exist',
+    bare.message.includes('The page to sign'), false);
   check('a job that has said almost nothing still gets something usable',
-    ['floor not said yet', 'no size given — measure everything', 'Quoted by email: nothing yet.']
+    ['floor not said yet', 'no size given — measure everything', '*Quoted by email*\nnothing yet.']
       .every((part) => bare.message.includes(part)), true);
   check('and nobody is told to bring samples of nothing', bare.message.includes('samples'), false);
 
@@ -1992,10 +2018,19 @@ console.log('\nwhat the owner is told before a visit');
   check('the moment it kept is the first one',
     ask(`SELECT owner_told_at IS NOT NULL FROM visits WHERE id = ${visitId}`), 't');
 
-  // a moved visit is told about again, with the time it now has
+  // a moved visit is told about again, once the page for the new time exists -- the two go
+  // together, and a message naming a time the page contradicts is worse than a late message.
+  //
+  // Agreed an hour ago before it moves, on purpose: with the wait measured from the original
+  // agreement it is already over, and this check passes whether or not the rule works. That is how
+  // it read before a reviewer pointed at the fixture rather than at the code.
+  ask(`UPDATE visits SET agreed_at = now() - interval '1 hour' WHERE id = ${visitId}`);
   rowOf(visitSql('the-visit-moved'), [visitId, '2026-08-06T18:30:00+00:00']);
-  check('a visit that moved is waiting to be told about again', mine().length, 1);
-  check('and what is said carries the new time',
+  check('a visit that moved is not told about while its page is the old one', mine().length, 0);
+  ask(`UPDATE visits SET agreement_url = 'https://docs.google.com/document/d/moved/edit'
+        WHERE id = ${visitId}`);
+  check('and is waiting again as soon as the new page exists', mine().length, 1);
+  check('what is said carries the new time',
     compose(mine()[0]).message.includes('Thursday, August 6, 1:30pm'), true);
 
   // an hour that has passed is not something to prepare for
@@ -2018,9 +2053,11 @@ console.log('\nthe agreement that is printed before the door');
 
   const orderId = Number(ask(`WITH made AS (
       INSERT INTO orders (thread_id, state, contact_email, material_category, area_sqft, area_unit,
-                          area_status, city, zone, existing_floor_action, on_site_items, booking_code)
+                          area_status, city, zone, existing_floor_action, on_site_items, booking_code,
+                          site_street, site_city, site_postcode)
       VALUES ('t-agree', 'survey_needed', 'agree@example.com', 'Laminate', 400, 'sqft', 'known',
-              'Kyle, TX', 'core', 'remove_first', '{stairs,subfloor}', 'AGRDX23')
+              'Kyle, TX', 'core', 'remove_first', '{stairs,subfloor}', 'AGRDX23',
+              '18 Willow Bend', 'Kyle', '78640')
       RETURNING id) SELECT id FROM made`));
   const visitId = Number(ask(`WITH made AS (
       INSERT INTO visits (order_id, state, offered, agreed, agreed_at)
@@ -2032,12 +2069,16 @@ console.log('\nthe agreement that is printed before the door');
 
   const ready = compose(mine()[0]);
   check('there is an agreement to prepare', ready.ready_to_prepare, true);
-  check('nine placeholders, and nine replacements asked of the document',
-    [Object.keys(ready.replacements).length, ready.requests.length], [9, 9]);
+  check('every placeholder has a value, and one replacement is asked for each',
+    [Object.keys(ready.replacements).length, ready.requests.length], [10, 10]);
+  // the town extracted from a letter and the address typed with the deed in hand must not
+  // contradict each other on a page somebody signs
+  check('the city and the address both come off the booking, not off a letter',
+    [ready.replacements.city, ready.replacements.address], ['Kyle', '18 Willow Bend, 78640']);
   check('the job is in it, from the order rather than a letter',
     [ready.replacements.material, ready.replacements.area_discussed,
-     ready.replacements.city, ready.replacements.existing_floor],
-    ['Laminate', 'about 400 sqft', 'Kyle, TX', 'the old floor is taken out first']);
+     ready.replacements.existing_floor],
+    ['Laminate', 'about 400 sqft', 'the old floor is taken out first']);
   check('what the visit has to settle is in words a customer reads',
     ready.replacements.settled_on_site, 'the stairs, what is under the old floor');
   // the one thing that must never be on that page
