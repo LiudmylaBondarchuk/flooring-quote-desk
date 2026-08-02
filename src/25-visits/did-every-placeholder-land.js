@@ -26,12 +26,16 @@ return $input.all().map((item, i) => {
       + 'The copy is on Drive and is not fit to print.');
   }
 
+  // The address of the copy, built from the id Google answered with rather than from anything this
+  // lane carried in: what is stamped against the visit has to be the document that was actually
+  // written to, not the one it was asked to write to.
   return {
     json: {
       ...answer,
       visit_id: $('Write the agreement').item.json.visit_id,
       order_id: $('Write the agreement').item.json.order_id,
       filled: wanted.length,
+      agreement_url: `https://docs.google.com/document/d/${answer.documentId}/edit`,
     },
     pairedItem: { item: i },
   };

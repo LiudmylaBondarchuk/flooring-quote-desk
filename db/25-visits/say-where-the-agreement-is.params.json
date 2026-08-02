@@ -1,3 +1,3 @@
 {
-  "queryReplacement": "={{ [$('Write the agreement').item.json.visit_id, $json.id] }}"
+  "queryReplacement": "={{ [$json.visit_id, $json.agreement_url] }}"
 }
