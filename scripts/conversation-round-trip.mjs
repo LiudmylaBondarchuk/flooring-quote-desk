@@ -1,5 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -2048,8 +2049,16 @@ console.log('\nthe agreement that is printed before the door');
   const visitSql = (n) => read('db', '25-visits', `${n}.sql`).replace(/;\s*$/, '');
   const source = read('src', '25-visits', 'write-the-agreement.js');
   const compose = (row) => new Function('$input', source)({ all: () => [{ json: row }] })[0].json;
-  const waiting = () => JSON.parse(ask(
-    `SELECT coalesce(json_agg(t), '[]'::json) FROM (${visitSql('which-visits-need-an-agreement')}) t`));
+
+  // Asking what needs a page and claiming it are one statement, so this is a run of the lane
+  // rather than a look at the database: two calls are two runs, and the second is meant to find
+  // the first one already holding the visit. The rows land in a temp table on the way past because
+  // a statement that writes cannot be selected from as though it were a view.
+  const claim = visitSql('claim-the-visits-that-need-an-agreement');
+  const runs = () => JSON.parse(execFileSync('psql',
+    [url, '-q', '-t', '-A', '-c',
+      `CREATE TEMP TABLE took AS ${claim};\nSELECT coalesce(json_agg(took), '[]'::json) FROM took;`],
+    { encoding: 'utf8' }).trim());
 
   const orderId = Number(ask(`WITH made AS (
       INSERT INTO orders (thread_id, state, contact_email, material_category, area_sqft, area_unit,
@@ -2064,10 +2073,44 @@ console.log('\nthe agreement that is printed before the door');
       VALUES (${orderId}, 'agreed', '["the booking page"]'::jsonb, now() + interval '3 days', now())
       RETURNING id) SELECT id FROM made`));
 
-  const mine = () => waiting().filter((r) => Number(r.visit_id) === visitId);
-  check('a visit with no agreement yet is waiting for one', mine().length, 1);
+  const mine = (rows) => rows.filter((r) => Number(r.visit_id) === visitId);
+  // This harness runs the lane over one visit many times, and the claim is deliberately in the way
+  // of that. Letting go of it is how the next check starts where a first run would -- and it is
+  // written out each time rather than hidden inside runs(), because a claim quietly lifted is the
+  // whole guard quietly switched off.
+  const afresh = () => {
+    ask(`UPDATE visits SET agreement_started_at = NULL WHERE id = ${visitId}`);
+    return mine(runs());
+  };
 
-  const ready = compose(mine()[0]);
+  // the claim, which is the thing that stops a second copy being made rather than recorded
+  check('a visit with no page yet is taken by a run', mine(runs()).length, 1);
+  check('and a run arriving behind it takes nothing', mine(runs()).length, 0);
+
+  // not a lock nobody can lift: one failure at Google must not leave a visit pageless for ever
+  ask(`UPDATE visits SET agreement_started_at = now() - interval '29 minutes' WHERE id = ${visitId}`);
+  check('a claim taken not quite half an hour ago still holds', mine(runs()).length, 0);
+  ask(`UPDATE visits SET agreement_started_at = now() - interval '31 minutes' WHERE id = ${visitId}`);
+  check('and one taken longer ago than that has let go', mine(runs()).length, 1);
+
+  // Everything else here runs one statement at a time, which is the arrangement the old guard
+  // looked safe in. This is the arrangement it was not: two runs of the lane deciding at once,
+  // which is how ten copies of one agreement were made in twenty minutes.
+  ask(`UPDATE visits SET agreement_started_at = NULL WHERE id = ${visitId}`);
+  const together = ['a', 'b'].map((tag) => {
+    const file = join(tmpdir(), `flooring-agreement-race-${tag}.sql`);
+    writeFileSync(file, `SELECT pg_sleep(0.4);\nCREATE TEMP TABLE took AS ${claim};\n`
+      + `SELECT count(*) FROM took WHERE visit_id = ${visitId};\n`);
+    return { file, out: join(tmpdir(), `flooring-agreement-race-${tag}.out`) };
+  });
+  execFileSync('sh', ['-c', together
+    .map(({ file, out }) => `( psql "${url}" -q -t -A -f ${file} > ${out} 2>&1 ) &`)
+    .join(' ') + ' wait']);
+  const apiece = together.map(({ out }) => Number(readFileSync(out, 'utf8').trim().split('\n').pop()));
+  check('two runs arriving at once, and exactly one of them takes the visit',
+    apiece.reduce((a, b) => a + b, 0), 1);
+
+  const ready = compose(afresh()[0]);
   check('there is an agreement to prepare', ready.ready_to_prepare, true);
   check('every placeholder has a value, and one replacement is asked for each',
     [Object.keys(ready.replacements).length, ready.requests.length], [10, 10]);
@@ -2089,17 +2132,17 @@ console.log('\nthe agreement that is printed before the door');
   // taken from the row rather than written here: a check carrying its own copy of a thing the
   // database holds is the drift it is supposed to be watching for.
   const templateId = ask("SELECT body FROM reply_templates WHERE key = 'agreement_template'");
-  check('the template id is read from the row, not from the code', mine()[0].template_id, templateId);
+  check('the template id is read from the row, not from the code', ready.template_id, templateId);
   ask("UPDATE reply_templates SET body = '' WHERE key = 'agreement_template'");
   check('with no template there is nothing to copy, and it says so',
-    compose({ ...mine()[0], template_id: '' }).why_not, 'there is no agreement template to copy');
+    compose({ ...ready, template_id: '' }).why_not, 'there is no agreement template to copy');
   ask(`UPDATE reply_templates SET body = '${templateId}' WHERE key = 'agreement_template'`);
-  check('and the row is left as it was found', mine()[0].template_id, templateId);
+  check('and the row is left as it was found', afresh()[0].template_id, templateId);
 
   // prepared once
   rowOf(visitSql('say-where-the-agreement-is'),
-    [visitId, 'https://docs.google.com/document/d/copy-1', mine()[0].agreed]);
-  check('a visit that has one stops waiting', mine().length, 0);
+    [visitId, 'https://docs.google.com/document/d/copy-1', afresh()[0].agreed]);
+  check('a visit that has one is not taken again, claim or no claim', afresh().length, 0);
   check('and a second run stamps nothing', ask(
     `WITH again AS (${fill(visitSql('say-where-the-agreement-is'),
       [visitId, 'https://docs.google.com/document/d/copy-2', ask(`SELECT agreed FROM visits WHERE id = ${visitId}`)])})
@@ -2110,24 +2153,27 @@ console.log('\nthe agreement that is printed before the door');
 
   // moved between being read and being stamped: the page made for the old time is not filed
   ask(`UPDATE visits SET agreement_url = NULL WHERE id = ${visitId}`);
-  const asRead = mine()[0];
+  const asRead = afresh()[0];
   ask(`UPDATE visits SET agreed = agreed + interval '1 day' WHERE id = ${visitId}`);
   check('a visit that moved while its page was being made is not stamped with it', ask(
     `WITH late AS (${fill(visitSql('say-where-the-agreement-is'),
       [visitId, 'https://docs.google.com/document/d/stale', asRead.agreed])}) SELECT count(*) FROM late`), '0');
-  check('and it is still waiting for the page it now needs', mine().length, 1);
+  check('and it is still waiting for the page it now needs', afresh().length, 1);
 
-  // a visit that moves needs a page carrying the date it now has
+  // a visit that moves needs a page carrying the date it now has, and needs it now: the claim held
+  // by whoever was making the old page must not keep it waiting out the half hour
   rowOf(visitSql('the-visit-moved'), [visitId, '2026-09-09T18:30:00+00:00']);
-  check('a visit that moved is waiting for a new agreement', mine().length, 1);
+  const moved = mine(runs());
+  check('a visit that moved is taken again at once, without waiting out the claim on the page it left',
+    moved.length, 1);
   check('and the new one carries the new date',
-    compose(mine()[0]).replacements.visit_date.includes('September 9'), true);
+    compose(moved[0]).replacements.visit_date.includes('September 9'), true);
 
   // nothing is printed for a door nobody is going to
   ask(`UPDATE visits SET agreement_url = NULL, state = 'lapsed' WHERE id = ${visitId}`);
-  check('a cancelled visit gets no agreement', mine().length, 0);
+  check('a cancelled visit gets no agreement', afresh().length, 0);
   ask(`UPDATE visits SET state = 'agreed', agreed = now() - interval '2 hours' WHERE id = ${visitId}`);
-  check('and neither does one whose hour has gone by', mine().length, 0);
+  check('and neither does one whose hour has gone by', afresh().length, 0);
 }
 
 console.log(`\n${failed === 0 ? 'all checks passed' : `${failed} check(s) FAILED`}`);
