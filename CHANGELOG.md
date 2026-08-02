@@ -11,6 +11,26 @@ A conversation now outlives the email that started it, the price list is kept by
 owner rather than by a developer, and a price is computed and written down. The desk
 answers a customer for the first time — with a question, never with a figure.
 
+**The agreement is ready before the door.** A visit was agreed, the owner knew what they were
+driving to, and whatever got signed at the house was written out by hand. A copy of the firm's own
+agreement is prepared now for every agreed visit: the template is a Google Doc the owner writes and
+formats themselves, the desk copies it and fills the nine placeholders in the copy from the job, and
+the copy's address is kept against the visit so it is prepared once.
+
+Nothing in the code composes a word of it. Rewriting the agreement means editing that document, and
+the file id is a row for the same reason the booking page is — moving it is an UPDATE, not a deploy.
+No price of any kind reaches the page. The ballpark belongs in what the owner is told; a figure from
+an email printed on something somebody signs is an argument waiting at the door, and the only number
+on it is written there once the floor has been measured. What is not known prints as words rather
+than as a blank, because a page that says "not said yet" is filled in at the door and a blank is a
+page nobody notices is incomplete.
+
+The failure worth guarding is the owner editing their own document. Rename a placeholder in it and
+nothing fails anywhere: the copy is made, the replacement finds no such text, and a customer is
+handed a page with a placeholder printed on it. Google answers each replacement with how many
+occurrences it changed, so nought means what was asked for is not in that document — and the copy is
+refused rather than printed.
+
 **The owner is told what they are driving to, before they knock.** A visit was agreed and nothing
 prepared anybody for it: an address in a calendar entry, and everything else — what was asked for,
 how big, what was quoted, what cannot be measured from an email — spread across a mailbox and a

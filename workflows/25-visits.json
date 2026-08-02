@@ -370,7 +370,7 @@
       },
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- The customer moved the booking, so the visit follows it.\n--\n-- The letter that already went out named the old time, and this does not send another: when the\n-- desk cancels or moves anything the owner writes herself, and when a customer moves their own\n-- booking Google has already told them what they now have. A third letter from us would be the\n-- machine talking over both.\n--\n-- confirmed_at is cleared, so a moved visit is written about once more by the ordinary path -- the\n-- customer has a letter naming a time that is no longer the time.\n\n-- owner_told_at goes with it. What the owner was told names a time, and after this that time is\n-- wrong: the customer has been moved and whoever is driving out has not. Clearing it puts the visit\n-- back in front of the lane, which says it again with the time it now has.\n\nUPDATE visits\n   SET agreed = $2::timestamptz,\n       confirmed_at = NULL,\n       owner_told_at = NULL\n WHERE id = $1::int\n   AND state = 'agreed'\n   AND agreed IS DISTINCT FROM $2::timestamptz\nRETURNING id, order_id, agreed;\n",
+        "query": "-- The customer moved the booking, so the visit follows it.\n--\n-- The letter that already went out named the old time, and this does not send another: when the\n-- desk cancels or moves anything the owner writes herself, and when a customer moves their own\n-- booking Google has already told them what they now have. A third letter from us would be the\n-- machine talking over both.\n--\n-- confirmed_at is cleared, so a moved visit is written about once more by the ordinary path -- the\n-- customer has a letter naming a time that is no longer the time.\n\n-- owner_told_at goes with it. What the owner was told names a time, and after this that time is\n-- wrong: the customer has been moved and whoever is driving out has not. Clearing it puts the visit\n-- back in front of the lane, which says it again with the time it now has.\n--\n-- And agreement_url with both. The copy prepared for this visit prints the old date on the page\n-- somebody signs, and the lane that prepares one asks for visits that have none -- so leaving it\n-- set does not leave a stale copy beside a fresh one, it leaves the stale one as the only one there\n-- will ever be. The previous copy stays on Drive under its own name and date.\n\nUPDATE visits\n   SET agreed = $2::timestamptz,\n       confirmed_at = NULL,\n       owner_told_at = NULL,\n       agreement_url = NULL\n WHERE id = $1::int\n   AND state = 'agreed'\n   AND agreed IS DISTINCT FROM $2::timestamptz\nRETURNING id, order_id, agreed;\n",
         "options": {
           "queryReplacement": "={{ [$json.visit_id, $json.now_at] }}"
         }
@@ -436,7 +436,7 @@
       },
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Everything the owner is told before a visit, for agreed visits nobody has been told about.\n--\n-- Read off the job, never off the newest letter. A customer says \"laminate, Kyle TX\" one day and\n-- \"about 400 sq ft\" the next, and a message built from either letter alone sends somebody out\n-- knowing half of it.\n--\n-- Only agreed visits still ahead of us, and only those nobody has been told about: owner_told_at\n-- being null is what makes this run once. A visit that lapsed gets nothing -- nobody is driving\n-- anywhere.\n--\n-- Ahead of us means ahead of now. This is read before somebody knocks, so a visit whose hour has\n-- passed has nothing to prepare for: if the lane were down across the appointment, catching up\n-- afterwards would announce a visit that already happened.\n\nSELECT v.id                                   AS visit_id,\n       v.order_id,\n       v.agreed,\n       o.contact_email,\n       o.city,\n       o.zone,\n       o.material_category,\n       o.area_sqft,\n       o.area_unit,\n       o.existing_floor_action,\n       o.old_floor_removal,\n       o.fixing_method,\n       o.on_site_items,\n       o.booking_code,\n       -- a ballpark that actually went out. A draft or one still waiting on the owner's word has\n       -- not been seen by anybody, and reading it out as \"quoted by email\" would send somebody to\n       -- a door believing the customer expects a number nobody ever sent them.\n       (SELECT jsonb_build_object('low', f.total_low, 'high', f.total_high, 'kind', f.kind)\n          FROM offers f\n         WHERE f.order_id = o.id\n           AND f.kind = 'ballpark'\n           AND f.status IN ('sent', 'accepted', 'declined', 'expired')\n         ORDER BY f.created_at DESC\n         LIMIT 1)                             AS ballpark,\n       -- the rates for what the visit has to settle, from the price list rather than from anywhere\n       -- a number could have been typed by hand\n       (coalesce((SELECT jsonb_object_agg(b.component,\n                    jsonb_build_object('label', b.product, 'unit', b.unit,\n                                       'val_low', b.rate_low, 'val_high', b.rate_high))\n                    FROM price_bands b\n                   WHERE b.active AND b.component = 'stairs'), '{}'::jsonb)\n        || coalesce((SELECT jsonb_build_object('subfloor',\n                       jsonb_build_object('label', 'levelling and moisture work', 'unit', 'sqft',\n                                          'val_low', r.val_low, 'val_high', r.val_high))\n                       FROM pricing_rules r\n                      WHERE r.rule_key = 'subfloor_leveling'), '{}'::jsonb)) AS on_site_rates\n  FROM visits v\n  JOIN orders o ON o.id = v.order_id\n WHERE v.state = 'agreed'\n   AND v.owner_told_at IS NULL\n   AND v.agreed > now()\n   AND o.state NOT IN ('done', 'lost')\n ORDER BY v.agreed;\n",
+        "query": "-- Everything the owner is told before a visit, for agreed visits nobody has been told about.\n--\n-- Read off the job, never off the newest letter. A customer says \"laminate, Kyle TX\" one day and\n-- \"about 400 sq ft\" the next, and a message built from either letter alone sends somebody out\n-- knowing half of it.\n--\n-- Only agreed visits still ahead of us, and only those nobody has been told about: owner_told_at\n-- being null is what makes this run once. A visit that lapsed gets nothing -- nobody is driving\n-- anywhere.\n--\n-- Ahead of us means ahead of now. This is read before somebody knocks, so a visit whose hour has\n-- passed has nothing to prepare for: if the lane were down across the appointment, catching up\n-- afterwards would announce a visit that already happened.\n\nSELECT v.id                                   AS visit_id,\n       v.order_id,\n       v.agreed,\n       o.contact_email,\n       o.city,\n       o.zone,\n       o.material_category,\n       o.area_sqft,\n       o.area_unit,\n       o.existing_floor_action,\n       o.old_floor_removal,\n       o.fixing_method,\n       o.on_site_items,\n       o.booking_code,\n       -- a ballpark that actually went out. A draft or one still waiting on the owner's word has\n       -- not been seen by anybody, and reading it out as \"quoted by email\" would send somebody to\n       -- a door believing the customer expects a number nobody ever sent them.\n       (SELECT jsonb_build_object('low', f.total_low, 'high', f.total_high, 'kind', f.kind)\n          FROM offers f\n         WHERE f.order_id = o.id\n           AND f.kind = 'ballpark'\n           AND f.status IN ('sent', 'accepted', 'declined', 'expired')\n         ORDER BY f.created_at DESC\n         LIMIT 1)                             AS ballpark,\n       -- the rates for what the visit has to settle, from the price list rather than from anywhere\n       -- a number could have been typed by hand\n       (coalesce((SELECT jsonb_object_agg(b.component,\n                    jsonb_build_object('label', b.product, 'unit', b.unit,\n                                       'val_low', b.rate_low, 'val_high', b.rate_high))\n                    FROM price_bands b\n                   WHERE b.active AND b.component = 'stairs'), '{}'::jsonb)\n        || coalesce((SELECT jsonb_build_object('subfloor',\n                       jsonb_build_object('label', 'levelling and moisture work', 'unit', 'sqft',\n                                          'val_low', r.val_low, 'val_high', r.val_high))\n                       FROM pricing_rules r\n                      WHERE r.rule_key = 'subfloor_leveling'), '{}'::jsonb)) AS on_site_rates\n  FROM visits v\n  JOIN orders o ON o.id = v.order_id\n WHERE v.state = 'agreed'\n   AND v.owner_told_at IS NULL\n   AND v.agreed > now()\n   AND o.state NOT IN ('done', 'lost')\n ORDER BY v.agreed;",
         "options": {
           "queryReplacement": "={{ [] }}"
         }
@@ -541,6 +541,184 @@
         "query": "-- The owner has been told, and this is when. Guarded so a second run finds nothing to stamp rather\n-- than saying the same visit again in the same channel.\n\nUPDATE visits\n   SET owner_told_at = now()\n WHERE id = $1::int\n   AND owner_told_at IS NULL\nRETURNING id, order_id, owner_told_at;\n",
         "options": {
           "queryReplacement": "={{ [$('Write what the owner is told').item.json.visit_id] }}"
+        }
+      }
+    },
+    {
+      "id": "agr-clock",
+      "name": "Time to prepare the agreement",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        1300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "agr-needs",
+      "name": "Which visits need an agreement",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        1300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- The job facts that go on the agreement, for agreed visits that have no copy of it yet.\n--\n-- Read off the job, never off the newest letter -- the same reason as everywhere else here: a\n-- customer says \"laminate, Kyle TX\" one day and \"about 400 sq ft\" the next, and a document built\n-- from either letter alone goes to a door with half the job on it.\n--\n-- No price of any kind is selected, and that is deliberate. The ballpark belongs in what the owner\n-- is told and nowhere near the page a customer signs: a number from an email, printed on an\n-- agreement, is an argument waiting at the door. The only price on that page is the one written\n-- there by hand once the floor has been measured.\n--\n-- Only visits still ahead of us, and only those without a copy: agreement_url being null is what\n-- makes this run once.\n\nSELECT v.id                                   AS visit_id,\n       v.order_id,\n       v.agreed,\n       o.contact_email,\n       o.city,\n       o.material_category,\n       o.area_sqft,\n       o.area_unit,\n       o.existing_floor_action,\n       o.on_site_items,\n       o.booking_code,\n       (SELECT body FROM reply_templates WHERE key = 'agreement_template') AS template_id\n  FROM visits v\n  JOIN orders o ON o.id = v.order_id\n WHERE v.state = 'agreed'\n   AND v.agreement_url IS NULL\n   AND v.agreed > now()\n   AND o.state NOT IN ('done', 'lost')\n ORDER BY v.agreed;\n",
+        "options": {
+          "queryReplacement": "={{ [] }}"
+        }
+      }
+    },
+    {
+      "id": "agr-write",
+      "name": "Write the agreement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        1300
+      ],
+      "parameters": {
+        "jsCode": "// What goes into the copy of the agreement that is printed for a visit.\n//\n// The document itself is the owner's, written and formatted by hand; this only says what each\n// {{placeholder}} in it becomes. Nothing here composes prose — a change to the wording of the\n// agreement is a change to that document and never to this file, which is the whole reason it is a\n// document rather than a template in the database.\n//\n// Everything is read off the job rather than the newest letter, and everything that is not known is\n// said as words rather than left blank: a printed page reading \"not said yet\" is a page somebody\n// fills in at the door, and a blank is a page nobody notices is incomplete.\n//\n// No price appears here at all. The ballpark belongs in what the owner is told; the only figure on\n// the page a customer signs is written on it by hand after the floor has been measured.\n\nconst WHERE_THE_WORK_IS = 'America/Chicago';\n\nconst when = (iso) => {\n  const at = new Date(iso);\n  if (Number.isNaN(at.getTime())) return null;\n  const day = at.toLocaleDateString('en-US', {\n    timeZone: WHERE_THE_WORK_IS, weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',\n  });\n  const time = at.toLocaleTimeString('en-US', {\n    timeZone: WHERE_THE_WORK_IS, hour: 'numeric', minute: '2-digit',\n  }).toLowerCase().replace(/\\s/g, '');\n  return `${day}, ${time}`;\n};\n\nconst number = (n) => Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });\n\nconst SPELLED = {\n  remove_first: 'the old floor is taken out first',\n  over_existing: 'the new floor goes over what is there',\n};\n\n// What the visit has to settle, in words a customer reads on the page they sign. The rates for\n// these are the owner's business and stay out of it.\nconst SPELLED_ON_SITE = {\n  stairs: 'the stairs',\n  subfloor: 'what is under the old floor',\n};\n\nreturn $input.all().map((item, i) => {\n  const row = item.json || {};\n  const at = when(row.agreed);\n  const onSite = Array.isArray(row.on_site_items) ? row.on_site_items : [];\n\n  if (!row.visit_id || !at || !row.template_id) {\n    return {\n      json: {\n        ...row,\n        ready_to_prepare: false,\n        why_not: !row.template_id\n          ? 'there is no agreement template to copy'\n          : 'the visit has no readable time',\n      },\n      pairedItem: { item: i },\n    };\n  }\n\n  const replacements = {\n    customer_email: row.contact_email || 'not established',\n    job_number: String(row.order_id),\n    booking_code: row.booking_code || 'not established',\n    visit_date: at,\n    city: row.city || 'not established',\n    material: row.material_category || 'not said yet',\n    area_discussed: row.area_sqft\n      ? `about ${number(row.area_sqft)} ${row.area_unit || 'sqft'}`\n      : 'not given yet',\n    existing_floor: row.existing_floor_action\n      ? (SPELLED[row.existing_floor_action] || row.existing_floor_action)\n      : 'to be decided on site',\n    settled_on_site: onSite.length\n      ? onSite.map((thing) => SPELLED_ON_SITE[thing] || thing).join(', ')\n      : 'nothing outstanding — everything was measurable from the email',\n  };\n\n  // The job and the date, so a folder of these is readable without opening any of them, and a copy\n  // left behind by a visit that moved is obvious beside the one that replaced it.\n  const fileName = `Agreement — job ${row.order_id} — ${at.split(',')[1].trim()} ${at.split(',')[2].trim()}`;\n\n  return {\n    json: {\n      ...row,\n      ready_to_prepare: true,\n      why_not: null,\n      file_name: fileName,\n      replacements,\n      // what the Docs API is asked to do, one replacement per placeholder, built here so the node\n      // carries no knowledge of what the document says\n      requests: Object.entries(replacements).map(([key, value]) => ({\n        replaceAllText: {\n          containsText: { text: `{{${key}}}`, matchCase: true },\n          replaceText: String(value),\n        },\n      })),\n    },\n    pairedItem: { item: i },\n  };\n});\n"
+      }
+    },
+    {
+      "id": "agr-ready",
+      "name": "Is there an agreement to prepare?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        1300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ready",
+              "leftValue": "={{ $json.ready_to_prepare }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "agr-copy",
+      "name": "Copy the template",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        960,
+        1220
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": null,
+          "name": "Google Drive account"
+        }
+      },
+      "parameters": {
+        "operation": "copy",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.template_id }}",
+          "mode": "id"
+        },
+        "name": "={{ $json.file_name }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "agr-fill",
+      "name": "Fill the copy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        1220
+      ],
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": null,
+          "name": "Google Docs account"
+        }
+      },
+      "parameters": {
+        "method": "POST",
+        "url": "=https://docs.googleapis.com/v1/documents/{{ $json.id }}:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDocsOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ requests: $('Write the agreement').item.json.requests }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "agr-landed",
+      "name": "Did every placeholder land?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        1220
+      ],
+      "parameters": {
+        "jsCode": "// Whether every placeholder in the copy was actually filled.\n//\n// The document is the owner's and they edit it. Rename {{material}} in it, or delete the line it\n// sits on, and nothing anywhere fails: the copy is made, the replacement finds no such text, and a\n// customer is handed a page with {{material}} printed on it, or with a fact silently missing from\n// it. That is the failure this exists for, and it is invisible from every other angle.\n//\n// Google answers a batch of replacements with one reply each, saying how many occurrences it\n// changed. Nought means the placeholder this asked for is not in that document.\n\n// Paired by position, never by $('...').item. This node runs over every waiting visit at once, and\n// a linked item is one item: two visits in a run would both be checked against the first one's\n// placeholders and both stamped against the first one's visit. Position is what pairs them, because\n// the copy and the fill preserve the order the statement returned.\nconst prepared = $('Write the agreement').all();\n\nreturn $input.all().map((item, i) => {\n  const answer = item.json || {};\n  const mine = prepared[i]?.json || {};\n  const wanted = (mine.requests || []).map((r) => r.replaceAllText.containsText.text);\n  const replies = Array.isArray(answer.replies) ? answer.replies : [];\n\n  // A reply carries no count at all when nothing changed, so absent and nought are the same thing.\n  const landed = replies.map((r) => Number(r?.replaceAllText?.occurrencesChanged || 0));\n  const missing = wanted.filter((_, n) => !(landed[n] > 0));\n\n  if (missing.length) {\n    throw new Error(`the agreement for visit ${mine.visit_id} was `\n      + `copied with ${missing.length} placeholder(s) unfilled: ${missing.join(', ')}. `\n      + 'Either the template no longer contains them, or they are spelled differently in it. '\n      + 'The copy is on Drive and is not fit to print.');\n  }\n\n  // The address of the copy, built from the id Google answered with rather than from anything this\n  // lane carried in: what is stamped against the visit has to be the document that was actually\n  // written to, not the one it was asked to write to.\n  return {\n    json: {\n      ...answer,\n      visit_id: mine.visit_id,\n      order_id: mine.order_id,\n      // carried through so the stamp can refuse a visit that moved while this was being made\n      agreed: mine.agreed,\n      filled: wanted.length,\n      agreement_url: `https://docs.google.com/document/d/${answer.documentId}/edit`,\n    },\n    pairedItem: { item: i },\n  };\n});\n"
+      }
+    },
+    {
+      "id": "agr-said",
+      "name": "Say where the agreement is",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1680,
+        1220
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- The copy exists, and this is where. Guarded so a second run finds nothing to stamp rather than\n-- pointing a visit at a second copy of itself.\n--\n-- And guarded on the time it was prepared for. Copying a document and filling it takes seconds, and\n-- a customer can move the booking inside them: without this, the page printing the old date would be\n-- filed against the moved visit, and agreement_url being set would then stop the right one ever\n-- being prepared. If the visit moved while this was being made, nothing is stamped, the copy is left\n-- on Drive under its own date, and the next run prepares the page the visit now needs.\n\nUPDATE visits\n   SET agreement_url = $2::text\n WHERE id = $1::int\n   AND agreement_url IS NULL\n   AND state = 'agreed'\n   AND agreed = $3::timestamptz\nRETURNING id, order_id, agreement_url;\n",
+        "options": {
+          "queryReplacement": "={{ [$json.visit_id, $json.agreement_url, $json.agreed] }}"
         }
       }
     }
@@ -747,6 +925,84 @@
         [
           {
             "node": "Say the owner was told",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Time to prepare the agreement": {
+      "main": [
+        [
+          {
+            "node": "Which visits need an agreement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which visits need an agreement": {
+      "main": [
+        [
+          {
+            "node": "Write the agreement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the agreement": {
+      "main": [
+        [
+          {
+            "node": "Is there an agreement to prepare?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is there an agreement to prepare?": {
+      "main": [
+        [
+          {
+            "node": "Copy the template",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Copy the template": {
+      "main": [
+        [
+          {
+            "node": "Fill the copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fill the copy": {
+      "main": [
+        [
+          {
+            "node": "Did every placeholder land?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Did every placeholder land?": {
+      "main": [
+        [
+          {
+            "node": "Say where the agreement is",
             "type": "main",
             "index": 0
           }
