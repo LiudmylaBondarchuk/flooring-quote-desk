@@ -285,6 +285,10 @@ CREATE TABLE visits (
     -- null until a copy of the agreement has been prepared for this visit; never emailed, it is
     -- signed on paper at the door
     agreement_url text,
+    -- when a run last claimed this visit to prepare that copy. Taken before anything is copied,
+    -- because agreement_url is written after the copy exists and cannot stop a run already
+    -- underway. Cleared when a visit moves, and expires after half an hour
+    agreement_started_at timestamptz,
 
     CONSTRAINT visits_state_known CHECK (state IN ('offered', 'agreed', 'lapsed')),
     -- one direction only: an agreed visit has a time, and a cancelled one keeps the time it

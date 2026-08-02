@@ -370,7 +370,7 @@
       },
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- The customer moved the booking, so the visit follows it.\n--\n-- The letter that already went out named the old time, and this does not send another: when the\n-- desk cancels or moves anything the owner writes herself, and when a customer moves their own\n-- booking Google has already told them what they now have. A third letter from us would be the\n-- machine talking over both.\n--\n-- confirmed_at is cleared, so a moved visit is written about once more by the ordinary path -- the\n-- customer has a letter naming a time that is no longer the time.\n\n-- owner_told_at goes with it. What the owner was told names a time, and after this that time is\n-- wrong: the customer has been moved and whoever is driving out has not. Clearing it puts the visit\n-- back in front of the lane, which says it again with the time it now has.\n--\n-- And agreement_url with both. The copy prepared for this visit prints the old date on the page\n-- somebody signs, and the lane that prepares one asks for visits that have none -- so leaving it\n-- set does not leave a stale copy beside a fresh one, it leaves the stale one as the only one there\n-- will ever be. The previous copy stays on Drive under its own name and date.\n\n-- agreed_at moves with it. It is when this visit was agreed for the time it now has, and two lanes\n-- measure a wait from it: the confirmation a quarter of an hour later, and the half hour after\n-- which the owner is told even though no page exists yet. Left at the original agreement, both of\n-- those waits are already over the moment a visit moves -- so a briefing goes out naming the new\n-- time while the page still carries the old one, which is the exact thing the wait was added to\n-- prevent.\n\nUPDATE visits\n   SET agreed = $2::timestamptz,\n       agreed_at = now(),\n       confirmed_at = NULL,\n       owner_told_at = NULL,\n       agreement_url = NULL\n WHERE id = $1::int\n   AND state = 'agreed'\n   AND agreed IS DISTINCT FROM $2::timestamptz\nRETURNING id, order_id, agreed;\n",
+        "query": "-- The customer moved the booking, so the visit follows it.\n--\n-- The letter that already went out named the old time, and this does not send another: when the\n-- desk cancels or moves anything the owner writes herself, and when a customer moves their own\n-- booking Google has already told them what they now have. A third letter from us would be the\n-- machine talking over both.\n--\n-- confirmed_at is cleared, so a moved visit is written about once more by the ordinary path -- the\n-- customer has a letter naming a time that is no longer the time.\n\n-- owner_told_at goes with it. What the owner was told names a time, and after this that time is\n-- wrong: the customer has been moved and whoever is driving out has not. Clearing it puts the visit\n-- back in front of the lane, which says it again with the time it now has.\n--\n-- And agreement_url with both. The copy prepared for this visit prints the old date on the page\n-- somebody signs, and the lane that prepares one asks for visits that have none -- so leaving it\n-- set does not leave a stale copy beside a fresh one, it leaves the stale one as the only one there\n-- will ever be. The previous copy stays on Drive under its own name and date.\n--\n-- And the claim on it, for the same reason one step earlier. A visit that moves needs its page\n-- remade now, and a claim taken by the run that was making the old one would hold it for half an\n-- hour -- so the customer moves their booking and the desk sits still until a timer it has no\n-- business waiting for runs out.\n\n-- agreed_at moves with it. It is when this visit was agreed for the time it now has, and two lanes\n-- measure a wait from it: the confirmation a quarter of an hour later, and the half hour after\n-- which the owner is told even though no page exists yet. Left at the original agreement, both of\n-- those waits are already over the moment a visit moves -- so a briefing goes out naming the new\n-- time while the page still carries the old one, which is the exact thing the wait was added to\n-- prevent.\n\nUPDATE visits\n   SET agreed = $2::timestamptz,\n       agreed_at = now(),\n       confirmed_at = NULL,\n       owner_told_at = NULL,\n       agreement_url = NULL,\n       agreement_started_at = NULL\n WHERE id = $1::int\n   AND state = 'agreed'\n   AND agreed IS DISTINCT FROM $2::timestamptz\nRETURNING id, order_id, agreed;\n",
         "options": {
           "queryReplacement": "={{ [$json.visit_id, $json.now_at] }}"
         }
@@ -566,7 +566,7 @@
     },
     {
       "id": "agr-needs",
-      "name": "Which visits need an agreement",
+      "name": "Claim the visits that need an agreement",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
@@ -581,7 +581,7 @@
       },
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- The job facts that go on the agreement, for agreed visits that have no copy of it yet.\n--\n-- Read off the job, never off the newest letter -- the same reason as everywhere else here: a\n-- customer says \"laminate, Kyle TX\" one day and \"about 400 sq ft\" the next, and a document built\n-- from either letter alone goes to a door with half the job on it.\n--\n-- No price of any kind is selected, and that is deliberate. The ballpark belongs in what the owner\n-- is told and nowhere near the page a customer signs: a number from an email, printed on an\n-- agreement, is an argument waiting at the door. The only price on that page is the one written\n-- there by hand once the floor has been measured.\n--\n-- Only visits still ahead of us, and only those without a copy: agreement_url being null is what\n-- makes this run once.\n\nSELECT v.id                                   AS visit_id,\n       v.order_id,\n       v.agreed,\n       o.contact_email,\n       o.city,\n       o.material_category,\n       o.area_sqft,\n       o.area_unit,\n       o.existing_floor_action,\n       o.on_site_items,\n       o.booking_code,\n       o.site_street,\n       o.site_city,\n       o.site_postcode,\n       (SELECT body FROM reply_templates WHERE key = 'agreement_template') AS template_id\n  FROM visits v\n  JOIN orders o ON o.id = v.order_id\n WHERE v.state = 'agreed'\n   AND v.agreement_url IS NULL\n   AND v.agreed > now()\n   AND o.state NOT IN ('done', 'lost')\n ORDER BY v.agreed;\n",
+        "query": "-- The job facts that go on the agreement, for agreed visits that have no copy of it yet -- and, in\n-- the same breath, the claim that says this run is the one making it.\n--\n-- Asking and claiming are one statement on purpose. When they were two -- a read, then a copy on\n-- Drive, then a write saying the copy exists -- everything between the read and the write was\n-- unguarded, and copying a document and filling ten placeholders lives in there. Two runs\n-- overlapping inside those seconds both saw a visit with no page and both made one. Ten copies of\n-- one agreement in twenty minutes, every run reporting success.\n--\n-- An UPDATE takes a row lock, so of two runs arriving together one waits, then re-checks these\n-- conditions against the row the other just wrote -- and finds agreement_started_at set, and takes\n-- nothing. That re-check is why every condition is in this statement's own WHERE rather than in a\n-- subquery it selects from: the conditions Postgres re-tests are the ones written here.\n--\n-- The half hour is the escape. A claim that never lifted would turn one failure at Google into a\n-- visit with no page for ever, which is a worse trade than the copies it prevents. It is far longer\n-- than the seconds this lane needs and far shorter than the wait before anybody drives anywhere.\n--\n-- Read off the job, never off the newest letter -- the same reason as everywhere else here: a\n-- customer says \"laminate, Kyle TX\" one day and \"about 400 sq ft\" the next, and a document built\n-- from either letter alone goes to a door with half the job on it.\n--\n-- No price of any kind is selected, and that is deliberate. The ballpark belongs in what the owner\n-- is told and nowhere near the page a customer signs: a number from an email, printed on an\n-- agreement, is an argument waiting at the door. The only price on that page is the one written\n-- there by hand once the floor has been measured.\n\nWITH claimed AS (\n    UPDATE visits v\n       SET agreement_started_at = now()\n     WHERE v.state = 'agreed'\n       AND v.agreement_url IS NULL\n       AND v.agreed > now()\n       AND (v.agreement_started_at IS NULL\n            OR v.agreement_started_at < now() - interval '30 minutes')\n       AND EXISTS (SELECT 1 FROM orders o\n                    WHERE o.id = v.order_id\n                      AND o.state NOT IN ('done', 'lost'))\n    RETURNING v.id, v.order_id, v.agreed\n)\nSELECT c.id                                   AS visit_id,\n       c.order_id,\n       c.agreed,\n       o.contact_email,\n       o.city,\n       o.material_category,\n       o.area_sqft,\n       o.area_unit,\n       o.existing_floor_action,\n       o.on_site_items,\n       o.booking_code,\n       o.site_street,\n       o.site_city,\n       o.site_postcode,\n       (SELECT body FROM reply_templates WHERE key = 'agreement_template') AS template_id\n  FROM claimed c\n  JOIN orders o ON o.id = c.order_id\n ORDER BY c.agreed;\n",
         "options": {
           "queryReplacement": "={{ [] }}"
         }
@@ -716,7 +716,7 @@
       },
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- The copy exists, and this is where. Guarded so a second run finds nothing to stamp rather than\n-- pointing a visit at a second copy of itself.\n--\n-- And guarded on the time it was prepared for. Copying a document and filling it takes seconds, and\n-- a customer can move the booking inside them: without this, the page printing the old date would be\n-- filed against the moved visit, and agreement_url being set would then stop the right one ever\n-- being prepared. If the visit moved while this was being made, nothing is stamped, the copy is left\n-- on Drive under its own date, and the next run prepares the page the visit now needs.\n\nUPDATE visits\n   SET agreement_url = $2::text\n WHERE id = $1::int\n   AND agreement_url IS NULL\n   AND state = 'agreed'\n   AND agreed = $3::timestamptz\nRETURNING id, order_id, agreement_url;\n",
+        "query": "-- The copy exists, and this is where. Guarded so a second run finds nothing to stamp rather than\n-- pointing a visit at a second copy of itself.\n--\n-- And guarded on the time it was prepared for. Copying a document and filling it takes seconds, and\n-- a customer can move the booking inside them: without this, the page printing the old date would be\n-- filed against the moved visit, and agreement_url being set would then stop the right one ever\n-- being prepared. If the visit moved while this was being made, nothing is stamped, the copy is left\n-- on Drive under its own date, and the next run prepares the page the visit now needs.\n--\n-- To the millisecond, and on both sides, because that is the precision that survives the journey.\n-- The time leaves this column with microseconds on it and reaches here having been through JSON,\n-- which keeps thousandths: 12:13:55.395 was being compared against 12:13:55.395481 and never\n-- matched. Nothing failed. agreement_url stayed null, the next run saw a visit with no page and\n-- made another copy, and the run before it reported success -- ten copies of one agreement in\n-- twenty minutes. Comparing what did not survive the trip is not a stricter guard, it is a guard\n-- that is always false.\n--\n-- A millisecond is still far finer than the thing being guarded against. A visit is moved by a\n-- person clicking a different slot on a booking page; two times a customer could pick are minutes\n-- apart at the very least, and a rebooking that landed inside the same thousandth of a second\n-- would be the same appointment.\n\nUPDATE visits\n   SET agreement_url = $2::text\n WHERE id = $1::int\n   AND agreement_url IS NULL\n   AND state = 'agreed'\n   AND date_trunc('milliseconds', agreed) = date_trunc('milliseconds', $3::timestamptz)\nRETURNING id, order_id, agreement_url;\n",
         "options": {
           "queryReplacement": "={{ [$json.visit_id, $json.agreement_url, $json.agreed] }}"
         }
@@ -1036,18 +1036,7 @@
       "main": [
         [
           {
-            "node": "Which visits need an agreement",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Which visits need an agreement": {
-      "main": [
-        [
-          {
-            "node": "Write the agreement",
+            "node": "Claim the visits that need an agreement",
             "type": "main",
             "index": 0
           }
@@ -1144,6 +1133,17 @@
         [
           {
             "node": "Ask the owner to place it",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim the visits that need an agreement": {
+      "main": [
+        [
+          {
+            "node": "Write the agreement",
             "type": "main",
             "index": 0
           }
