@@ -9,4 +9,7 @@ UPDATE orders
        site_postcode = coalesce($4::text, site_postcode),
        updated_at    = now()
  WHERE id = $1::int
-RETURNING id, site_street, site_city, site_postcode;
+-- order_id rather than id, because the next node in the lane binds $json.order_id and a column
+-- named anything else arrives there as nothing. The visit insert then refuses an empty parameter
+-- and no visit is recorded -- a booking that vanishes, from a rename.
+RETURNING id AS order_id, site_street, site_city, site_postcode;
