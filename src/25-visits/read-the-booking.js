@@ -19,14 +19,25 @@ const plain = (html) => String(html || '')
   .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
   .replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
 
-// the answer is the first non-empty line after the label, which is how Google lays every one of
-// them out -- label, newline, answer
+// Every question this booking form asks. Needed here rather than only at the call sites, because
+// the answer to one is found by knowing where the next begins.
+const LABELS = ['Booked by', 'Order code', 'Street address', 'City', 'ZIP code'];
+
+// The answer is the first non-empty line after the label -- Google lays them out as label, newline,
+// answer, with blank lines between from the markup.
+//
+// Unless that line is the next question. A form answer left blank leaves its label with nothing
+// under it, and taking the next non-empty line then reaches past the gap and picks up the following
+// label as though somebody had typed it: a blank street becomes "City", which is then written to
+// the job and printed on the page a customer signs. Blank has to come back as blank.
 const answerTo = (description, label) => {
   const lines = plain(description).split('\n').map((line) => line.trim());
   const at = lines.findIndex((line) => line.toLowerCase() === label.toLowerCase());
   if (at === -1) return null;
   const said = lines.slice(at + 1).find((line) => line !== '');
-  return said || null;
+  if (!said) return null;
+  const isAnotherQuestion = LABELS.some((l) => l.toLowerCase() === said.toLowerCase());
+  return isAnotherQuestion ? null : said;
 };
 
 // Where the work is, asked on the booking form rather than read out of a letter. A customer writes
