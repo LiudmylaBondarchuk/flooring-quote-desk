@@ -11,6 +11,17 @@ A conversation now outlives the email that started it, the price list is kept by
 owner rather than by a developer, and a price is computed and written down. The desk
 answers a customer for the first time — with a question, never with a figure.
 
+**The agreement is prepared exactly once, and this time it is true.** It was said here already,
+and it was wrong twice over. A visit was claimed by writing down where its copy had been put — a
+note made *after* the copy existed on Drive, so two runs overlapping inside the seconds a copy takes
+both found a visit with no page and both made one. And the note was never written anyway: the time
+it was filed against left the database carrying microseconds and arrived carrying thousandths, so it
+was compared against a value it could never equal. Ten copies of one agreement in twenty minutes,
+every run reporting success. A visit is taken now before anything is copied, in one statement, so
+two runs arriving together give it to exactly one of them; the claim lets go after half an hour, so
+a bad afternoon at Google costs a delay rather than a page that never comes; and a visit that is
+moved is free at once, because its page prints a date that is no longer true.
+
 **The desk knows where to drive.** It knew a town — whatever an extractor pulled out of prose, so
 "Kyle TX" in a sentence and no street at all — and somebody was expected to find a house with that.
 The address on the agreement was a blank line filled in at the door, which was an honest description
@@ -44,8 +55,8 @@ now. Typing nothing is not disagreement and still matches on the email.
 **The agreement is ready before the door.** A visit was agreed, the owner knew what they were
 driving to, and whatever got signed at the house was written out by hand. A copy of the firm's own
 agreement is prepared now for every agreed visit: the template is a Google Doc the owner writes and
-formats themselves, the desk copies it and fills the nine placeholders in the copy from the job, and
-the copy's address is kept against the visit so it is prepared once.
+formats themselves, the desk copies it and fills the ten placeholders in the copy from the job, and
+the copy's address is kept against the visit so it can be found again.
 
 Nothing in the code composes a word of it. Rewriting the agreement means editing that document, and
 the file id is a row for the same reason the booking page is — moving it is an UPDATE, not a deploy.
