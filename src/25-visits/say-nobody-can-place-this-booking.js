@@ -23,7 +23,12 @@ const when = (iso) => {
 
 return $input.all().map((item, i) => {
   const row = item.json || {};
-  const booking = $('Read the booking').all()[i]?.json || {};
+  // itemMatching, never all()[i]. A gate stands between this and the booking that produced it, and
+  // a gate compacts: one placeable booking followed by an unplaceable one leaves the second at
+  // index nought here while it was index one up there. Pairing by position then puts another
+  // customer's address and typed code into this alert -- the one shape of mistake that is worse
+  // than the mistake being reported.
+  const booking = $('Read the booking').itemMatching(i)?.json || {};
   const at = when(booking.starts_at);
 
   const why = row.matched_by === 'they disagree'
