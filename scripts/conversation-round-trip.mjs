@@ -89,6 +89,28 @@ const TOUCHES = ['quote_request', 'existing_project', 'scheduling', 'offer_respo
 // Two scenarios reaching for the same message id read each other's rows and pass anyway -- which
 // is how a check on one customer's address came back with another's. An id is used once here.
 const idsUsed = new Set();
+// Visits are pinned to the clock, never to a date. Two of the statements only return a visit whose
+// hour has not passed, so a fixture written as an absolute date passes until that hour and fails
+// every run after it -- which is what this one did, at 18:30 UTC on the day it was written.
+//
+// The wording expected of the composers is derived from the same instant rather than typed, for
+// the same reason: a weekday typed into a check expires exactly as the fixture does.
+const aheadUtc = (days, hour = 18, minute = 30) => {
+  const at = new Date();
+  at.setUTCDate(at.getUTCDate() + days);
+  at.setUTCHours(hour, minute, 0, 0);
+  return at.toISOString();
+};
+const texasDay = (iso) => new Date(iso).toLocaleDateString('en-US',
+  { timeZone: 'America/Chicago', weekday: 'long', month: 'long', day: 'numeric' });
+const texasTime = (iso) => new Date(iso).toLocaleTimeString('en-US',
+  { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' }).toLowerCase().replace(/\s/g, '');
+
+const VISIT_SOON = aheadUtc(1);
+const VISIT_NEXT = aheadUtc(2);
+const VISIT_LATER = aheadUtc(3);
+const VISIT_FAR = aheadUtc(36);
+
 const arrive = ({ id, thread, from, text, extracted, headers, labels }) => {
   if (idsUsed.has(id)) throw new Error(`the message id ${id} is already used by another scenario`);
   idsUsed.add(id);
@@ -1666,8 +1688,8 @@ console.log('\nsaying something about a booking, a quarter of an hour later');
       RETURNING id) SELECT id FROM made`));
   const visitId = Number(ask(`WITH made AS (
       INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id)
-      VALUES (${orderId}, 'agreed', '["2026-08-04T18:30:00+00:00"]'::jsonb,
-              '2026-08-04T18:30:00+00:00', now() - interval '20 minutes', 'e-1')
+      VALUES (${orderId}, 'agreed', to_jsonb(ARRAY['${VISIT_SOON}']),
+              '${VISIT_SOON}', now() - interval '20 minutes', 'e-1')
       RETURNING id) SELECT id FROM made`));
 
   check('a booking older than the wait is waiting to be answered', waiting(15).length, 1);
@@ -1681,7 +1703,7 @@ console.log('\nsaying something about a booking, a quarter of an hour later');
   // stored as an instant; printed where the work is. The same booking reads half past eight in the
   // evening in Warsaw and half past one in the afternoon to the person driving to it.
   check('the time is written in Texas, not wherever it was booked from',
-    letter.subject, 'Visit booked — Tuesday, August 4 at 1:30pm');
+    letter.subject, `Visit booked — ${texasDay(VISIT_SOON)} at ${texasTime(VISIT_SOON)}`);
   check('the job is repeated back as the desk holds it',
     letter.body.includes('Floor: Laminate') && letter.body.includes('Area: about 400 sqft')
     && letter.body.includes('Where: Kyle, TX'), true);
@@ -1700,8 +1722,8 @@ console.log('\nsaying something about a booking, a quarter of an hour later');
       VALUES ('t-word-2', 'lost', 'gone@example.com', 'LVP', 'Buda, TX', 'core', now())
       RETURNING id) SELECT id FROM made`));
   ask(`INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id)
-       VALUES (${stale}, 'agreed', '["2026-08-04T18:30:00+00:00"]'::jsonb,
-               '2026-08-04T18:30:00+00:00', now() - interval '20 minutes', 'e-2')`);
+       VALUES (${stale}, 'agreed', to_jsonb(ARRAY['${VISIT_SOON}']),
+               '${VISIT_SOON}', now() - interval '20 minutes', 'e-2')`);
   check('a job let go before the letter went out is not written to', waiting(15).length, 0);
 
   // and the refusals the letter states about itself
@@ -1953,7 +1975,7 @@ console.log('\nwhat the owner is told before a visit');
   const visitId = Number(ask(`WITH made AS (
       INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id,
                           agreement_url)
-      VALUES (${orderId}, 'agreed', '["the booking page"]'::jsonb, '2026-08-04T18:30:00+00:00',
+      VALUES (${orderId}, 'agreed', '["the booking page"]'::jsonb, '${VISIT_SOON}',
               now(), 'e-told', 'https://docs.google.com/document/d/told/edit')
       RETURNING id) SELECT id FROM made`));
 
@@ -1962,7 +1984,8 @@ console.log('\nwhat the owner is told before a visit');
 
   const said = compose(mine()[0]);
   check('there is something to say', said.ready_to_tell, true);
-  check('the time is in Texas', said.message.includes('Tuesday, August 4, 1:30pm'), true);
+  check('the time is in Texas',
+    said.message.includes(`${texasDay(VISIT_SOON)}, ${texasTime(VISIT_SOON)}`), true);
   check('the job is in it, from the order rather than a letter',
     ['Laminate', 'about 400 sqft', 'the old floor comes out']
       .every((part) => said.message.includes(part)), true);
@@ -1981,7 +2004,8 @@ console.log('\nwhat the owner is told before a visit');
     said.message.includes('|The page to sign at the door>'), true);
   // these arrive one after another in a channel; the first line is what separates one from the next
   check('it opens with the job and the time, in a line that stands out',
-    said.message.split('\n')[0], '📋 *Job ' + orderId + ' — Tuesday, August 4, 1:30pm*');
+    said.message.split('\n')[0],
+    `📋 *Job ${orderId} — ${texasDay(VISIT_SOON)}, ${texasTime(VISIT_SOON)}*`);
 
   // a price nobody has seen is not what the customer is expecting
   ask(`INSERT INTO offers (order_id, kind, status, total_low, total_high)
@@ -1999,7 +2023,7 @@ console.log('\nwhat the owner is told before a visit');
   // agreed an hour ago and still without a page: the escape, so a broken drive delays the message
   // rather than swallowing it
   ask(`WITH made AS (INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id)
-       VALUES (${bareId}, 'agreed', '["the booking page"]'::jsonb, '2026-08-05T18:30:00+00:00',
+       VALUES (${bareId}, 'agreed', '["the booking page"]'::jsonb, '${VISIT_NEXT}',
                now() - interval '1 hour', 'e-bare-told') RETURNING id) SELECT id FROM made`);
   check('a visit with no page yet is still told about once it has waited',
     waiting().filter((r) => Number(r.order_id) === bareId).length, 1);
@@ -2026,13 +2050,13 @@ console.log('\nwhat the owner is told before a visit');
   // agreement it is already over, and this check passes whether or not the rule works. That is how
   // it read before a reviewer pointed at the fixture rather than at the code.
   ask(`UPDATE visits SET agreed_at = now() - interval '1 hour' WHERE id = ${visitId}`);
-  rowOf(visitSql('the-visit-moved'), [visitId, '2026-08-06T18:30:00+00:00']);
+  rowOf(visitSql('the-visit-moved'), [visitId, VISIT_LATER]);
   check('a visit that moved is not told about while its page is the old one', mine().length, 0);
   ask(`UPDATE visits SET agreement_url = 'https://docs.google.com/document/d/moved/edit'
         WHERE id = ${visitId}`);
   check('and is waiting again as soon as the new page exists', mine().length, 1);
   check('what is said carries the new time',
-    compose(mine()[0]).message.includes('Thursday, August 6, 1:30pm'), true);
+    compose(mine()[0]).message.includes(`${texasDay(VISIT_LATER)}, ${texasTime(VISIT_LATER)}`), true);
 
   // an hour that has passed is not something to prepare for
   ask(`UPDATE visits SET agreed = now() - interval '2 hours' WHERE id = ${visitId}`);
@@ -2182,12 +2206,12 @@ console.log('\nthe agreement that is printed before the door');
 
   // a visit that moves needs a page carrying the date it now has, and needs it now: the claim held
   // by whoever was making the old page must not keep it waiting out the half hour
-  rowOf(visitSql('the-visit-moved'), [visitId, '2026-09-09T18:30:00+00:00']);
+  rowOf(visitSql('the-visit-moved'), [visitId, VISIT_FAR]);
   const moved = mine(runs());
   check('a visit that moved is taken again at once, without waiting out the claim on the page it left',
     moved.length, 1);
   check('and the new one carries the new date',
-    compose(moved[0]).replacements.visit_date.includes('September 9'), true);
+    compose(moved[0]).replacements.visit_date.includes(texasDay(VISIT_FAR).split(', ')[1]), true);
 
   // nothing is printed for a door nobody is going to
   ask(`UPDATE visits SET agreement_url = NULL, state = 'lapsed' WHERE id = ${visitId}`);
