@@ -53,19 +53,26 @@ noted AS (
   RETURNING 1
 ),
 judged AS (
+  -- Only when there is something to compare on both sides. A missing letter_text means the drafted
+  -- wording was never recorded, and an empty body means nothing came back -- neither is evidence
+  -- that she rewrote anything. Without this the statement answered "rejected" to both, which puts
+  -- "we do not know" into the one count that exists to say how often the arithmetic is overruled,
+  -- and does it in the direction that flatters nobody.
   INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)
   SELECT m.order_id, $1::text,
-         CASE WHEN regexp_replace(btrim(coalesce(l.body, '')), '\s+', ' ', 'g')
-                 = regexp_replace(btrim(coalesce(p.letter_text, '')), '\s+', ' ', 'g')
+         CASE WHEN regexp_replace(btrim(l.body), '\s+', ' ', 'g')
+                 = regexp_replace(btrim(p.letter_text), '\s+', ' ', 'g')
               THEN 'approved' ELSE 'rejected' END,
          'letter_text',
          'the wording the desk proposed',
-         CASE WHEN regexp_replace(btrim(coalesce(l.body, '')), '\s+', ' ', 'g')
-                 = regexp_replace(btrim(coalesce(p.letter_text, '')), '\s+', ' ', 'g')
+         CASE WHEN regexp_replace(btrim(l.body), '\s+', ' ', 'g')
+                 = regexp_replace(btrim(p.letter_text), '\s+', ' ', 'g')
               THEN 'sent as it was drafted' ELSE 'rewritten before it was sent' END
     FROM moved m
     JOIN the_letter l ON true
     JOIN proposed   p ON true
+   WHERE p.letter_text IS NOT NULL
+     AND btrim(l.body) <> ''
   RETURNING kind
 )
 SELECT

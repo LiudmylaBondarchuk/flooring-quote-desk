@@ -1405,6 +1405,31 @@ console.log('\nwhat she sends is what the record keeps, even when she changed it
     ask(`SELECT count(*) FROM order_events WHERE field = 'letter_text' AND kind = 'approved'`), '1');
 }
 
+console.log('\nwith nothing to compare, nothing is claimed about who wrote what');
+{
+  arrive({
+    id: 'appr3', thread: 'th-appr3', from: 'ivy@example.com', subject: 'Hello',
+    text: 'lvp, 300 sq ft, buda tx',
+    extracted: { intent: 'new_quote', material: 'lvp', area_sqft: 300, area_unit: 'sqft',
+      city: 'buda', evidence: { material: 'lvp', area_sqft: '300', area_unit: 'sq ft', city: 'buda' } },
+  });
+  const priced = priceIt('appr3');
+  const [letter] = composeQuotes(whatTheQuoteNeeds('appr3', priced.written.offer_id));
+  putForward('appr3', priced.written.offer_id, 'th-appr3', letter.the_letter_itself);
+  // the drafted wording never reached the offer: a failure between making the draft and recording
+  // it. What was proposed is now unknown, which is not the same as knowing she changed it.
+  ask(`UPDATE offers SET letter_text = NULL WHERE id = ${priced.written.offer_id}`);
+
+  arrive({ id: 'sent3', thread: 'th-appr3', from: 'flooring.demo.austin@gmail.com',
+    text: letter.the_letter_itself, extracted: { intent: 'other', evidence: {} } });
+  takeItOn('sent3');
+  const went = sayItWentOut('sent3', priced.written.offer_id);
+  check('the quote still counts as sent', went.now_sent, 't');
+  check('but nothing is claimed about whether she rewrote it', went.she_said, '');
+  check('and no event pretends to know', ask(
+    `SELECT count(*) FROM order_events WHERE gmail_message_id = 'sent3' AND field = 'letter_text'`), '0');
+}
+
 console.log('\na letter in a thread with nothing waiting is not a quote going out');
 {
   arrive({ id: 'stray1', thread: 'th-nothing', from: 'flooring.demo.austin@gmail.com',
