@@ -872,6 +872,10 @@ console.log('\nthe states the letter only claimed to handle');
 
 console.log('\na template nobody wrote is refused rather than sent empty');
 {
+  // Kept before it is removed, and put back exactly. Retyping it here left the database holding a
+  // shortened copy for every check that ran afterwards, and put a sentence a customer reads into
+  // this file -- which is the drift the repository refuses by name.
+  const wasThere = ask("SELECT body FROM reply_templates WHERE key = 'needs_both'");
   run(['-c', "DELETE FROM reply_templates WHERE key = 'needs_both'"]);
   const a = arrive({
     id: 'w2', thread: 'th-w2', from: 'vic@example.com',
@@ -888,8 +892,10 @@ console.log('\na template nobody wrote is refused rather than sent empty');
   check('an empty letter is refused, not sent', refused, true);
   // put it back as it was, permission included: the column defaults to false, so a row restored
   // without it can no longer reach a customer, which is the right default and the wrong test
-  run(['-c', "INSERT INTO reply_templates (key, body, sends_automatically) VALUES ('needs_both',"
-    + " 'Thanks for getting in touch. Two things and I can put a number on it.', true)"]);
+  run(['-c', "INSERT INTO reply_templates (key, body, sends_automatically) VALUES ('needs_both', $$"
+    + wasThere + "$$, true)"]);
+  check('and the row is left as it was found',
+    ask("SELECT body FROM reply_templates WHERE key = 'needs_both'"), wasThere);
 }
 
 console.log('\na customer who answers half of it gets asked for the rest');
@@ -1261,8 +1267,18 @@ console.log('\na question about what the firm does gets an answer');
   check('the desk knows what was asked about', d1.service_asked_about, 'laminate');
   check('and that it is worth answering', d1.worth_answering, true);
   const [a1] = answerAll(d1);
-  check('the answer is the one stored in services',
-    a1.body.startsWith('Yes, we install laminate.'), true);
+  // Every other letter acknowledges the person before it says anything, and this is the one most
+  // likely to be the first thing anybody reads from the firm. It used to open with the answer.
+  //
+  // The wording is read from the row rather than written here. A check carrying its own copy of a
+  // sentence the database holds is the drift it is supposed to be watching for, and this repository
+  // refuses it by name.
+  const greeting = ask("SELECT body FROM reply_templates WHERE key = 'service_answer_opening'");
+  check('the letter greets before it answers', a1.body.startsWith(greeting), true);
+  check('and the answer is the one stored in services',
+    a1.body.includes('Yes, we install laminate.'), true);
+  check('the greeting comes before the answer',
+    a1.body.indexOf(greeting) < a1.body.indexOf('Yes, we install laminate'), true);
   check('and it asks what a price would need', a1.asks_for_more, true);
   check('in the words a person wrote',
     /roughly how many square feet/.test(a1.body), true);
@@ -1295,6 +1311,7 @@ console.log('\na question about what the firm does gets an answer');
     extracted: { intent: 'pre_sales_question', evidence: {} },
   });
   const [a2] = answerAll(deserves('ask2'));
+  check('a refusal is greeted the same way', a2.body.startsWith(greeting), true);
   check('a service the firm does not offer is answered too',
     /do not install tile/.test(a2.body), true);
   check('and is not followed by asking for the size', a2.asks_for_more, false);

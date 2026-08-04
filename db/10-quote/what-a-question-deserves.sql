@@ -18,6 +18,12 @@ what_we_said AS (
     FROM services s
    WHERE lower(s.label) = lower((SELECT service_asked_about FROM asked))
 ),
+first_words AS (
+  -- Every other letter this desk sends acknowledges the person before it says anything. This one
+  -- went straight to "Yes, we install laminate", which reads as brisk to somebody who has just
+  -- written in -- and it is the letter most likely to be the first thing anybody sees from the firm.
+  SELECT body FROM reply_templates WHERE key = 'service_answer_opening'
+),
 next_words AS (
   SELECT body FROM reply_templates WHERE key = 'after_a_service_answer'
 ),
@@ -55,6 +61,7 @@ SELECT
   a.service_asked_about,
   w.we_do,
   w.answer,
+  (SELECT body FROM first_words)                      AS opening,
   (SELECT body FROM next_words)                       AS what_next,
   (SELECT body FROM signature)                        AS signature,
   (SELECT bands FROM rates)                           AS bands,
