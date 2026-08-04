@@ -188,6 +188,15 @@ const composeQuotes = (...needs) => new Function('$input', '$', quoteLetterSourc
   { all: () => needs.map((json) => ({ json })) },
   (name) => { throw new Error(`the quote letter reached back to ${name} instead of reading its input`); },
 ).map((r) => r.json);
+// The line that tells the owner a draft is waiting. Paired by n8n's own item linking, so the fake
+// $() here answers itemMatching rather than a bare .item -- pairing by position is the mistake it
+// has to be able to fail on.
+const waitingSource = read('src', '10-quote', 'say-a-quote-is-waiting.js');
+const sayWaiting = (needs, drafted) => new Function('$input', '$', waitingSource)(
+  { all: () => drafted.map((json) => ({ json })) },
+  (name) => ({ itemMatching: (i) => ({ json: name === 'Compose the quote' ? drafted[i] : needs[i] }) }),
+).map((r) => r.json);
+
 const putForward = (id, offerId, thread, letter) =>
   rowOf(quoteSql('say-the-offer-was-put-forward'), [id, offerId, thread, letter]);
 
@@ -1150,6 +1159,27 @@ console.log('\ntwo quotes in one poll are both written');
     [letters[0].write_to, letters[1].write_to], ['walt@example.com', 'xena@example.com']);
   check('and neither carries the other\'s figure',
     letters[0].the_letter_itself === letters[1].the_letter_itself, false);
+
+  // the notification that a draft exists, which is the only thing that says so at all
+  const needs = [whatTheQuoteNeeds('quote2', one.written.offer_id),
+                 whatTheQuoteNeeds('quote3', two.written.offer_id)];
+  const said = sayWaiting(needs, letters);
+  check('one line for each draft', said.length, 2);
+  check('each names the customer whose draft it is',
+    [said[0].message.includes('walt@example.com'), said[1].message.includes('xena@example.com')],
+    [true, true]);
+  check('and neither names the other',
+    [said[0].message.includes('xena@example.com'), said[1].message.includes('walt@example.com')],
+    [false, false]);
+  check('each carries its own figures, from the offer rather than the letter',
+    [said[0].message.includes(String(Math.round(needs[0].total_high)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')),
+     said[1].message.includes(String(Math.round(needs[1].total_high)).replace(/\B(?=(\d{3})+(?!\d))/g, ','))],
+    [true, true]);
+  // the customer must never read this line, so it must never be the letter
+  check('and the letter itself is nowhere in it',
+    said[0].message.includes(letters[0].the_letter_itself), false);
+  check('it says where to find the draft',
+    said[0].message.includes('in your drafts'), true);
 }
 
 console.log('\nan order that has gone quiet is chased once, then let go');

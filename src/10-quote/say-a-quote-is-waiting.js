@@ -10,7 +10,8 @@
 // reaches for what the owner is told, and composing both in one place would put this sentence one
 // mistaken variable away from the draft.
 //
-// It never carries the letter. The letter lives in exactly one place, which is the draft about to be sent: two copies of it would be two things to keep in step.
+// It never carries the letter. The letter lives in exactly one place, which is the draft about to
+// be sent: two copies of it would be two things to keep in step.
 
 const money = (n) => `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
