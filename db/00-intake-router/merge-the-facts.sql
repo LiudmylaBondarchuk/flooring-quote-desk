@@ -56,22 +56,63 @@ applied AS (
      AND (SELECT row FROM before) IS NOT NULL
   RETURNING o.*
 ),
-linked AS (
-  UPDATE messages SET order_id = $2::int
-   WHERE gmail_message_id = $1 AND $2::int IS NOT NULL
-  RETURNING 1
-),
 logged AS (
   INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)
   SELECT $2::int, $1, CASE WHEN c.old_value IS NULL THEN 'merged' ELSE 'corrected' END,
          c.field, c.old_value, c.new_value
     FROM changes c
   RETURNING 1
+),
+-- Whether this letter is the one that completed the job, which is a question only this statement
+-- can answer.
+--
+-- The gate decides where a letter goes before the facts it carries have been merged, so it judges
+-- the job as it stood a moment ago. A customer asked for the size, who answers with the size and
+-- nothing else, is a letter naming no material and no town -- and the gate quite correctly files it
+-- as somebody carrying on a conversation, and sends it to a lane that has nothing to do with a job
+-- in that state. The desk asks for what it needs, gets it, and says nothing back.
+--
+-- The order after the merge is what settles it, and it is right here. Only where a price is the
+-- thing that was waiting: an offer already exists means this is not that moment, out of area means
+-- there is no price to give, and a closed job is not reopened by a late letter.
+--
+-- Kept to the categories the gate would itself have called ready. Anything it decided earlier in
+-- its ladder -- a complaint, an answer to an offer, money, a date -- was decided on words in this
+-- letter rather than on the state of the job, and is not for this to overturn.
+ready AS (
+  SELECT coalesce(a.id IS NOT NULL
+         AND a.material_category IS NOT NULL
+         AND a.area_sqft IS NOT NULL
+         AND a.zone IS NOT NULL
+         AND a.zone <> 'out'
+         AND a.state NOT IN ('booked', 'done', 'lost')
+         AND $4::text IN ('existing_project', 'unknown')
+         AND NOT EXISTS (SELECT 1 FROM offers f WHERE f.order_id = a.id), false) AS price_is_what_was_waiting
+    FROM applied a
+   -- reads logged, so the change log is forced to run first, for the same reason applied reads
+   -- before. Pulling on applied from here is enough to make the planner run the update early, and
+   -- then the locking read in before returns the row this statement has just written -- so a
+   -- corrected value looks like the value it always had and is never logged as a correction.
+   WHERE (SELECT count(*) FROM logged) >= 0
+),
+linked AS (
+  UPDATE messages SET
+    order_id     = $2::int,
+    -- and the record says the same thing the routing does, in the same breath: leaving route at
+    -- what the gate said would make the only account of why a letter went where it went disagree
+    -- with where it actually went.
+    route        = CASE WHEN (SELECT price_is_what_was_waiting FROM ready)
+                        THEN 'quote' ELSE route END,
+    matched_rule = CASE WHEN (SELECT price_is_what_was_waiting FROM ready)
+                        THEN 'the_job_is_ready' ELSE matched_rule END
+   WHERE gmail_message_id = $1 AND $2::int IS NOT NULL
+  RETURNING route
 )
 SELECT
   $1::text                                   AS gmail_message_id,
   $4::text                                   AS category,
-  $5::text                                   AS route,
+  coalesce((SELECT route FROM linked), $5::text)
+                                             AS route,
   $6::text                                   AS handling,
   $7::text                                   AS gate_color,
   a.id                                       AS order_id,
