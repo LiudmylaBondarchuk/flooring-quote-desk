@@ -1409,12 +1409,13 @@ console.log('\na job a person must see is still not priced, whatever the last le
       evidence: { material: 'laminate', city: 'kyle' } },
   });
   check('the first letter is held back', first.decision.auto_blocked, true);
-  arrive({
+  const completes = arrive({
     id: 'held2', thread: 'th-held', from: 'bea@example.com',
     text: 'it is about 400 sq ft',
     extracted: { intent: 'new_quote', area_sqft: 400, area_unit: 'sqft',
       evidence: { area_sqft: '400', area_unit: 'sq ft' } },
   });
+  check('the letter that completes a held job is not sent to be priced', completes.merged.route, 'project');
   const priced = priceIt('held2');
   check('the order now has everything', Number(orderOf(first.order_id).area_sqft), 400);
   check('and it is still not priced', priced.quote.priceable, false);
