@@ -581,7 +581,8 @@
           "id": null,
           "name": "Gmail account"
         }
-      }
+      },
+      "webhookId": "31466e9c-3344-4c1c-8a31-9224ec48d213"
     },
     {
       "parameters": {
@@ -612,7 +613,8 @@
           "id": null,
           "name": "Slack account"
         }
-      }
+      },
+      "webhookId": "2cdf5385-b354-4541-9496-798a65b6216f"
     },
     {
       "parameters": {
@@ -884,6 +886,7 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "errorWorkflow": "90 Errors — Flooring"
+    "errorWorkflow": "90 Errors — Flooring",
+    "binaryMode": "separate"
   }
 }
