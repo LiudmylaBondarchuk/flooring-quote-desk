@@ -4,19 +4,19 @@
 -- here is the desk reading its own post. What is being looked for is narrower than it used to be:
 -- not a word of assent somewhere in the letter, but one particular letter having left.
 --
--- The old shape asked "did she say send it" and read her answer with a pattern. That is gone.
--- A quote now waits in her drafts, in the customer's own conversation, and she sends it herself --
+-- The old shape asked "did the owner say send it" and read the reply with a pattern. That is gone.
+-- A quote now waits in the owner's drafts, in the customer's own conversation, and the owner sends it --
 -- so the sending IS the answer, and there is nothing left to interpret. A pattern that had to
 -- decide whether "ok" meant yes cannot be wrong about this any more, because it is no longer asked.
--- It also cannot refuse a quote because she wrote "let me change one word", which is what `change`
+-- It also cannot refuse a quote because the owner wrote "let me change one word", which is what `change`
 -- being a word of refusal used to do.
 --
 -- What identifies it: an offer waiting on this thread, and this letter going out in it. Between
--- drafting a quote and her sending it the desk puts nothing else into that conversation -- the
+-- drafting a quote and its sending the desk puts nothing else into that conversation -- the
 -- branch that asks a customer for what is missing cannot fire for an order that is already quoted,
 -- because nothing is missing from it. So the next letter out of that thread is the quote.
 --
--- Being wrong here costs bookkeeping and never a customer: what reaches them is whatever she
+-- Being wrong here costs bookkeeping and never a customer: what reaches them is whatever the owner
 -- pressed send on, and no row in this database can add to that or take it away.
 
 WITH this_letter AS (
@@ -50,7 +50,7 @@ SELECT
   w.total_low, w.total_high,
   t.contact_email,
   $2::text                                        AS customer_thread_id,
-  -- What she actually sent is this message's own body, and it stays there rather than being copied
+  -- What was actually sent is this message's own body, and it stays there rather than being copied
   -- onto the offer. Comparing the two to spot an edit was tried and cannot work: what comes back
   -- has been through the reader that strips quoted history and squeezes runs of spaces, so an
   -- untouched letter returns different from the one that was drafted.

@@ -1,7 +1,7 @@
-// The line that tells the owner a quote is sitting in her drafts.
+// The line that tells the owner a quote is sitting in the owner's drafts.
 //
-// It exists because a draft announces itself to nobody. The letter the desk used to mail her
-// arrived in her inbox and was impossible to miss; a draft lies in a folder until somebody
+// It exists because a draft announces itself to nobody. The letter the desk used to send
+// arrived in the inbox and was impossible to miss; a draft lies in a folder until somebody
 // remembers to look, and a quote nobody remembers is a customer nobody answered.
 //
 // Written here rather than beside the letter itself, and that separation is the point. This carries
@@ -10,8 +10,7 @@
 // reaches for what the owner is told, and composing both in one place would put this sentence one
 // mistaken variable away from the draft.
 //
-// It never carries the letter. The letter lives in exactly one place, which is the draft she is
-// about to send: two copies of it would be two things to keep in step.
+// It never carries the letter. The letter lives in exactly one place, which is the draft about to be sent: two copies of it would be two things to keep in step.
 
 const money = (n) => `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 

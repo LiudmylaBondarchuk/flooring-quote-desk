@@ -1,5 +1,5 @@
 -- Written after the customer's copy has gone, never before -- and now it has genuinely gone before
--- this runs, because the owner sent it herself. This records what happened; it cannot cause it.
+-- this runs, because the owner sent it. This records what happened; it cannot cause it.
 --
 -- Only an offer still waiting moves. A second letter in the same thread finds it already sent and
 -- changes nothing.
@@ -11,7 +11,7 @@
 -- left as it was drafted: the two are different facts and overwriting one with the other destroys
 -- the only evidence that they ever differed.
 --
--- WHETHER SHE REWROTE IT. An event, kind 'approved' or 'rejected' -- two kinds this schema has
+-- WHETHER THE WORDING WAS REWRITTEN. An event, kind 'approved' or 'rejected' -- two kinds this schema has
 -- always allowed and nothing has ever written. Counting them answers "how often does the owner
 -- overrule the arithmetic", which is a question about whether the desk is any good, and there is
 -- nowhere else it could be counted from.
@@ -20,7 +20,7 @@
 -- back has been through the reader that strips quoted history and collapses runs of spaces, so an
 -- untouched letter returns with its indentation flattened and compares unequal to the one that was
 -- drafted. Comparing them raw called every single letter a rewrite. The letters differ in their
--- spacing every time and in their words only when she changed them; this compares the words.
+-- spacing every time and in their words only when the owner changed them; this compares the words.
 
 WITH the_letter AS (
   SELECT m.gmail_message_id, m.order_id, m.body
@@ -55,7 +55,7 @@ noted AS (
 judged AS (
   -- Only when there is something to compare on both sides. A missing letter_text means the drafted
   -- wording was never recorded, and an empty body means nothing came back -- neither is evidence
-  -- that she rewrote anything. Without this the statement answered "rejected" to both, which puts
+  -- that anything was rewritten. Without this the statement answered "rejected" to both, which puts
   -- "we do not know" into the one count that exists to say how often the arithmetic is overruled,
   -- and does it in the direction that flatters nobody.
   INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)

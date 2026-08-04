@@ -1,14 +1,14 @@
 // A letter carrying a price, written for the customer and left where only the owner can send it.
 //
-// It is composed here and put in her mailbox as a draft, in the customer's own conversation. She
-// reads it, edits whatever she wants to edit, and presses send. Nothing here decides that it goes:
+// It is composed here and put in the owner's mailbox as a draft, in the customer's own conversation.
+// The owner reads it, changes whatever wants changing, and presses send. Nothing here decides that it goes:
 // the draft has no way of leaving on its own, which is a stronger guarantee than the one this
-// replaced. That one mailed the letter to herself and read her answer with a pattern -- so a figure
+// replaced. That one mailed the letter to the owner and read the reply with a pattern -- so a figure
 // reached a customer whenever the pattern matched, and "almost right, let me change a word" was
 // read as a refusal, because `change` is one of the words that means no.
 //
 // One thing comes out of this node: the letter the customer would read. Telling the owner that a
-// draft is waiting is a separate step in a separate file, and deliberately so -- what is said to her
+// draft is waiting is a separate step in a separate file, and deliberately so -- what is said to the owner
 // carries figures and what the firm is unsure of, and a check in this repository refuses to let the
 // two be written a few lines apart. Composing both here would put the owner's sentence one mistaken
 // variable away from the customer's letter.
@@ -72,7 +72,7 @@ return $input.all().map((item, i) => {
     town].filter(Boolean).join(', ');
 
   // What the customer would read, and the whole of what the draft contains. No note to the owner
-  // wrapped around it any more: she is reading it inside her own mail client, about to send it, and
+  // wrapped around it any more: it is read inside the owner's own mail client, about to be sent, and
   // anything above it would be one deleted paragraph away from reaching the customer.
   const forTheCustomer = `${q.opening}\n\n${job}\n\n${readable(breakdown.lines)}\n\n`
     + `All in: ${range}.\n\n${q.closing}${q.signature || ''}`;
