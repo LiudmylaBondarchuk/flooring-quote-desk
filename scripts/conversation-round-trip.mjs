@@ -89,12 +89,38 @@ const TOUCHES = ['quote_request', 'existing_project', 'scheduling', 'offer_respo
 // Two scenarios reaching for the same message id read each other's rows and pass anyway -- which
 // is how a check on one customer's address came back with another's. An id is used once here.
 const idsUsed = new Set();
-const arrive = ({ id, thread, from, text, extracted, headers, labels }) => {
+// Visits are pinned to the clock, never to a date. Two of the statements only return a visit whose
+// hour has not passed, so a fixture written as an absolute date passes until that hour and fails
+// every run after it -- which is what this one did, at 18:30 UTC on the day it was written.
+//
+// The wording expected of the composers is derived from the same instant rather than typed, for
+// the same reason: a weekday typed into a check expires exactly as the fixture does.
+const aheadUtc = (days, hour = 18, minute = 30) => {
+  const at = new Date();
+  at.setUTCDate(at.getUTCDate() + days);
+  at.setUTCHours(hour, minute, 0, 0);
+  return at.toISOString();
+};
+const texasDay = (iso) => new Date(iso).toLocaleDateString('en-US',
+  { timeZone: 'America/Chicago', weekday: 'long', month: 'long', day: 'numeric' });
+const texasTime = (iso) => new Date(iso).toLocaleTimeString('en-US',
+  { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' }).toLowerCase().replace(/\s/g, '');
+
+const VISIT_SOON = aheadUtc(1);
+const VISIT_NEXT = aheadUtc(2);
+const VISIT_LATER = aheadUtc(3);
+const VISIT_FAR = aheadUtc(36);
+
+const arrive = ({ id, thread, from, text, subject, extracted, headers, labels }) => {
   if (idsUsed.has(id)) throw new Error(`the message id ${id} is already used by another scenario`);
   idsUsed.add(id);
   const [prepared] = node(prepareSource, [{
     id, threadId: thread, labelIds: labels || ['INBOX'],
     from: { value: [{ address: from, name: from.split('@')[0] }] },
+    // Only where a scenario gives one. A subject is text the gate reads like any other, so
+    // handing every fixture the same words would quietly reclassify scenarios that were written
+    // to have nothing readable in them.
+    subject: subject || '',
     text, html: '', headers: headers || {},
   }]);
   run(['-c', fill(logSql, logParams(prepared.json))]);
@@ -162,6 +188,15 @@ const composeQuotes = (...needs) => new Function('$input', '$', quoteLetterSourc
   { all: () => needs.map((json) => ({ json })) },
   (name) => { throw new Error(`the quote letter reached back to ${name} instead of reading its input`); },
 ).map((r) => r.json);
+// The line that tells the owner a draft is waiting. Paired by n8n's own item linking, so the fake
+// $() here answers itemMatching rather than a bare .item -- pairing by position is the mistake it
+// has to be able to fail on.
+const waitingSource = read('src', '10-quote', 'say-a-quote-is-waiting.js');
+const sayWaiting = (needs, drafted) => new Function('$input', '$', waitingSource)(
+  { all: () => drafted.map((json) => ({ json })) },
+  (name) => ({ itemMatching: (i) => ({ json: name === 'Compose the quote' ? drafted[i] : needs[i] }) }),
+).map((r) => r.json);
+
 const putForward = (id, offerId, thread, letter) =>
   rowOf(quoteSql('say-the-offer-was-put-forward'), [id, offerId, thread, letter]);
 
@@ -171,13 +206,8 @@ const approvalSql = (n) => read('db', '60-approval', `${n}.sql`).replace(/;\s*$/
 const approvalHandoff = params(join('db', '60-approval', 'accept-handoff.params.json'));
 const takeItOn = (id) => rowOf(approvalSql('accept-handoff'),
   approvalHandoff({ gmail_message_id: id }));
-const readSource = read('src', '60-approval', 'did-she-say-send-it.js');
 const whatItAnswers = (id, thread) => JSON.parse(ask(
   `SELECT row_to_json(t) FROM (${fill(approvalSql('what-this-reply-answers'), [id, thread])}) t`));
-const didSheSaySendIt = (...answers) => new Function('$input', '$', readSource)(
-  { all: () => answers.map((json) => ({ json })) },
-  (name) => { throw new Error(`the reading reached back to ${name} instead of its input`); },
-).map((r) => r.json);
 const sayItWentOut = (id, offerId) =>
   rowOf(approvalSql('say-the-quote-went-out'), [id, offerId]);
 const recordAsk = (id, orderId, asking) => rowOf(quoteSql('say-we-asked'), [id, orderId, asking]);
@@ -923,10 +953,10 @@ console.log('\nour own letter coming back into the mailbox');
   });
   check('the gate knows it is ours', ourOwn.decision.category, 'owner_reply');
   check('it goes to the lane that reads answers', ourOwn.decision.route, 'approval');
-  // which is where it stops: that lane looks for an offer waiting in this very thread, and the
-  // desk's own words are not an assent to anything
-  const [readOurs] = didSheSaySendIt(whatItAnswers('l2', 'th-loop'));
-  check('and our own letter is not read as an approval', readOurs.approved, false);
+  // which is where it stops: that lane looks for an offer waiting in this very thread, and there
+  // is none, so nothing this letter says can be mistaken for a quote going out
+  check('and our own letter is not read as a quote leaving',
+    whatItAnswers('l2', 'th-loop').the_quote_went_out, false);
   check('and nothing is handled', ourOwn.decision.handling, 'none');
   // It is linked to the conversation's order, which is right: our own letter belongs to that
   // exchange and a person reading the thread should see it. What matters is that it carries nothing
@@ -1074,13 +1104,12 @@ console.log('\na price becomes a letter, and it only ever reaches the owner');
     Number(needs.total_low), Number(priced.quote.total_low));
 
   const [letter] = composeQuotes(needs);
-  check('it goes to the owner', letter.to, 'flooring.demo.austin@gmail.com');
-  check('and says so plainly', letter.reaches_the_customer, false);
-  check('the subject names who it is for', /vera@example\.com/.test(letter.subject), true);
-  check('the owner is told it has not been sent',
-    /has not been sent/.test(letter.body), true);
-  check('the letter for the customer is in there, whole',
-    letter.body.includes(letter.the_letter_itself), true);
+  check('it is addressed to the customer', letter.write_to, 'vera@example.com');
+  check('and it waits in their own conversation', letter.thread_id, needs.thread_id);
+  check('the draft is the customer letter and nothing else',
+    letter.body, letter.the_letter_itself);
+  check('with nothing wrapped round it for the owner to delete',
+    /has not been sent/.test(letter.body), false);
   check('with the words a person wrote, not the code',
     /Thanks for the details/.test(letter.the_letter_itself), true);
   check('and it is signed', letter.the_letter_itself.trimEnd().endsWith(signature()), true);
@@ -1127,9 +1156,30 @@ console.log('\ntwo quotes in one poll are both written');
                                 whatTheQuoteNeeds('quote3', two.written.offer_id));
   check('both were written', letters.length, 2);
   check('each names its own customer',
-    [letters[0].for_whom, letters[1].for_whom], ['walt@example.com', 'xena@example.com']);
+    [letters[0].write_to, letters[1].write_to], ['walt@example.com', 'xena@example.com']);
   check('and neither carries the other\'s figure',
     letters[0].the_letter_itself === letters[1].the_letter_itself, false);
+
+  // the notification that a draft exists, which is the only thing that says so at all
+  const needs = [whatTheQuoteNeeds('quote2', one.written.offer_id),
+                 whatTheQuoteNeeds('quote3', two.written.offer_id)];
+  const said = sayWaiting(needs, letters);
+  check('one line for each draft', said.length, 2);
+  check('each names the customer whose draft it is',
+    [said[0].message.includes('walt@example.com'), said[1].message.includes('xena@example.com')],
+    [true, true]);
+  check('and neither names the other',
+    [said[0].message.includes('xena@example.com'), said[1].message.includes('walt@example.com')],
+    [false, false]);
+  check('each carries its own figures, from the offer rather than the letter',
+    [said[0].message.includes(String(Math.round(needs[0].total_high)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')),
+     said[1].message.includes(String(Math.round(needs[1].total_high)).replace(/\B(?=(\d{3})+(?!\d))/g, ','))],
+    [true, true]);
+  // the customer must never read this line, so it must never be the letter
+  check('and the letter itself is nowhere in it',
+    said[0].message.includes(letters[0].the_letter_itself), false);
+  check('it says where to find the draft',
+    said[0].message.includes('in your drafts'), true);
 }
 
 console.log('\nan order that has gone quiet is chased once, then let go');
@@ -1300,44 +1350,57 @@ console.log('\nthe owner says send it, and only then does the customer get a pri
 {
   const a = arrive({
     id: 'appr1', thread: 'th-appr1', from: 'yuri@example.com',
+    // a subject with no word any rule reads, so this scenario tests the draft's threading and
+    // not, by accident, what the gate makes of a different sentence
+    subject: 'Hello',
     text: 'lvp, 350 sq ft, in kyle tx',
     extracted: { intent: 'new_quote', material: 'lvp', area_sqft: 350, area_unit: 'sqft',
       city: 'kyle', evidence: { material: 'lvp', area_sqft: '350', area_unit: 'sq ft', city: 'kyle' } },
   });
   const priced = priceIt('appr1');
   const [letter] = composeQuotes(whatTheQuoteNeeds('appr1', priced.written.offer_id));
-  putForward('appr1', priced.written.offer_id, 'th-owner-1', letter.the_letter_itself);
+  // the draft is the customer's letter, in the customer's conversation. Nothing about it is
+  // addressed to her -- she is the one holding it, not the one receiving it.
+  check('the draft is addressed to the customer', letter.write_to, 'yuri@example.com');
+  check('and it goes into their own conversation', letter.thread_id, 'th-appr1');
+  check('carrying the subject it is replying to', /^Re: /.test(letter.subject), true);
+  // Gmail attaches a draft to a thread only when the subject matches, so a letter that arrived
+  // without one has to stay without one rather than be given something invented.
+  check('and an empty subject stays empty rather than being invented',
+    composeQuotes({ ...whatTheQuoteNeeds('appr1', priced.written.offer_id), subject: '' })[0].subject, '');
+  putForward('appr1', priced.written.offer_id, 'th-appr1', letter.the_letter_itself);
 
-  // her answer arrives like any other email, from the desk's own address, in the thread the
-  // letter went out in
-  arrive({ id: 'yes1', thread: 'th-owner-1', from: 'flooring.demo.austin@gmail.com',
-    text: 'send it', extracted: { intent: 'other', evidence: {} } });
-  const taken = takeItOn('yes1');
+  // she presses send. It reaches the mailbox again like every other letter the desk sends, in the
+  // customer's thread, because that is where the draft was.
+  arrive({ id: 'sent1', thread: 'th-appr1', from: 'flooring.demo.austin@gmail.com',
+    text: letter.the_letter_itself, extracted: { intent: 'other', evidence: {} } });
+  const taken = takeItOn('sent1');
   check('the lane takes the message on', taken.handled_by, '60 Approval — Flooring');
   check('into a status the database allows', taken.status, 'closed');
-  const answers = whatItAnswers('yes1', 'th-owner-1');
+  const answers = whatItAnswers('sent1', 'th-appr1');
   check('the offer waiting in that thread is found', Number(answers.offer_id), Number(priced.written.offer_id));
-  check('and it knows who it is for', answers.contact_email, 'yuri@example.com');
-  check('with a message of theirs to reply to', answers.reply_to, 'appr1');
+  check('and it knows who it was for', answers.contact_email, 'yuri@example.com');
+  check('the sending is the answer, and it is read as one', answers.the_quote_went_out, true);
 
-  const [read1] = didSheSaySendIt(answers);
-  check('she said send it', read1.approved, true);
-  check('what goes out is the letter she read', read1.body, letter.the_letter_itself);
-  check('to the customer, not to her', read1.to, 'yuri@example.com');
-
-  const went = sayItWentOut('yes1', priced.written.offer_id);
+  const went = sayItWentOut('sent1', priced.written.offer_id);
   check('the offer is sent', went.now_sent, 't');
   check('and the order records the move', went.change_recorded, 't');
+  check('sent as drafted, so the desk was not overruled', went.she_said, 'approved');
+  check('and what the customer read is tied to the offer it answers',
+    went.letter_tied_to_offer, 't');
+  check('so the letter they actually received is one join away',
+    ask(`SELECT gmail_message_id FROM messages WHERE offer_id = ${priced.written.offer_id} AND is_outbound`),
+    'sent1');
   check('the offer says so itself',
     ask(`SELECT status FROM offers WHERE id = ${priced.written.offer_id}`), 'sent');
 
-  const twice = sayItWentOut('yes1', priced.written.offer_id);
-  check('a second reply in the thread sends nothing again', twice.now_sent, 'f');
-  const after = whatItAnswers('yes1', 'th-owner-1');
-  check('and there is nothing left waiting there', after.an_offer_is_waiting, false);
+  const twice = sayItWentOut('sent1', priced.written.offer_id);
+  check('a second letter in the thread sends nothing again', twice.now_sent, 'f');
+  check('and there is nothing left waiting there',
+    whatItAnswers('sent1', 'th-appr1').the_quote_went_out, false);
 }
 
-console.log('\nanything short of yes sends nothing');
+console.log('\nwhat she sends is what the record keeps, even when she changed it');
 {
   const a = arrive({
     id: 'appr2', thread: 'th-appr2', from: 'zoe@example.com',
@@ -1347,38 +1410,107 @@ console.log('\nanything short of yes sends nothing');
   });
   const priced = priceIt('appr2');
   const [letter] = composeQuotes(whatTheQuoteNeeds('appr2', priced.written.offer_id));
-  putForward('appr2', priced.written.offer_id, 'th-owner-2', letter.the_letter_itself);
+  putForward('appr2', priced.written.offer_id, 'th-appr2', letter.the_letter_itself);
 
-  const readOf = (id, text) => {
-    arrive({ id, thread: 'th-owner-2', from: 'flooring.demo.austin@gmail.com',
-      text, extracted: { intent: 'other', evidence: {} } });
-    takeItOn(id);
-    return didSheSaySendIt(whatItAnswers(id, 'th-owner-2'))[0];
-  };
+  // Editing the draft is the whole reason it is a draft. The shape this replaced could not take
+  // an edit at all: `change` was one of the words that meant no, so "almost right, let me change
+  // one line" refused the quote and sent nothing.
+  const edited = `${letter.the_letter_itself}\n\nP.S. I could start the week after next.`;
+  arrive({ id: 'sent2', thread: 'th-appr2', from: 'flooring.demo.austin@gmail.com',
+    text: edited, extracted: { intent: 'other', evidence: {} } });
+  takeItOn('sent2');
+  const answers = whatItAnswers('sent2', 'th-appr2');
+  check('an edited letter still counts as the quote going out', answers.the_quote_went_out, true);
 
-  check('"not yet" is not a yes', readOf('no1', 'not yet, change the removal line').approved, false);
-  check('and it is recognised as a refusal', readOf('no2', 'no, hold off').refused, true);
-  check('"hold on" is not a yes', readOf('no3', 'hold on').approved, false);
-  check('a bare thanks is not a yes', readOf('no4', 'thanks').approved, false);
-  check('and the letter the desk itself sent is not a yes',
-    readOf('no5', 'This quote is ready and has not been sent. For: zoe@example.com').approved, false);
-  check('the offer is still waiting after all of that',
-    ask(`SELECT status FROM offers WHERE id = ${priced.written.offer_id}`), 'awaiting_approval');
-
-  check('but yes still works', readOf('yes2', 'yes').approved, true);
-  check('and so does go ahead', readOf('yes3', 'go ahead').approved, true);
+  const went2 = sayItWentOut('sent2', priced.written.offer_id);
+  // Both facts are kept, because they are two different facts. What the arithmetic proposed stays
+  // on the offer; what the customer read is the message, tied to that offer; and the event says
+  // which of the two happened. Overwriting one with the other was tried and destroys the only
+  // evidence they ever differed -- and with it the answer to "how often is the desk overruled".
+  check('she rewrote it, and the record says so', went2.she_said, 'rejected');
+  check('the drafted wording is kept as it was drafted',
+    ask(`SELECT letter_text LIKE '%week after next%' FROM offers WHERE id = ${priced.written.offer_id}`), 'f');
+  check('and what she really sent is tied to the same offer',
+    ask(`SELECT body LIKE '%week after next%' FROM messages WHERE offer_id = ${priced.written.offer_id} AND is_outbound`), 't');
+  // the one question this exists to answer, asked the way it would really be asked
+  check('the two can be counted apart',
+    ask(`SELECT count(*) FROM order_events WHERE field = 'letter_text' AND kind = 'rejected'`), '1');
+  check('and so can the times she sent it as written',
+    ask(`SELECT count(*) FROM order_events WHERE field = 'letter_text' AND kind = 'approved'`), '1');
 }
 
-console.log('\na reply in a thread with nothing waiting answers nothing');
+console.log('\na letter the owner wrote by hand is not the quote going out');
+{
+  // A thread of its own with an offer genuinely waiting in it. Written against the earlier thread
+  // first, where the quote had already been marked sent, this passed whether or not the rule
+  // existed -- nothing was waiting, so nothing could be mistaken for it.
+  arrive({
+    id: 'note0', thread: 'th-note', from: 'nils@example.com', subject: 'Hello',
+    text: 'lvp, 500 sq ft, kyle tx',
+    extracted: { intent: 'new_quote', material: 'lvp', area_sqft: 500, area_unit: 'sqft',
+      city: 'kyle', evidence: { material: 'lvp', area_sqft: '500', area_unit: 'sq ft', city: 'kyle' } },
+  });
+  const priced = priceIt('note0');
+  const [letter] = composeQuotes(whatTheQuoteNeeds('note0', priced.written.offer_id));
+  putForward('note0', priced.written.offer_id, 'th-note', letter.the_letter_itself);
+  check('an offer really is waiting in this thread',
+    ask(`SELECT status FROM offers WHERE id = ${priced.written.offer_id}`), 'awaiting_approval');
+
+  // an outbound letter, in the customer's own thread, while that offer waits -- and still not the
+  // quote, because it carries none of the offer's figures
+  arrive({ id: 'note1', thread: 'th-note', from: 'flooring.demo.austin@gmail.com',
+    text: 'Quick note before the quote goes out: I will follow up tomorrow.',
+    extracted: { intent: 'other', evidence: {} } });
+  takeItOn('note1');
+  const note = whatItAnswers('note1', 'th-note');
+  check('a letter written by hand does not count as the quote leaving', note.the_quote_went_out, false);
+  check('and no offer is attached to it', note.offer_id, null);
+  check('so the offer is still waiting for somebody to send it',
+    ask(`SELECT status FROM offers WHERE id = ${priced.written.offer_id}`), 'awaiting_approval');
+
+  // and the letter that does carry them is recognised
+  arrive({ id: 'note2', thread: 'th-note', from: 'flooring.demo.austin@gmail.com',
+    text: letter.the_letter_itself, extracted: { intent: 'other', evidence: {} } });
+  takeItOn('note2');
+  const real = whatItAnswers('note2', 'th-note');
+  check('the letter carrying the figures is the quote', real.the_quote_went_out, true);
+  check('and it is the right offer', Number(real.offer_id), Number(priced.written.offer_id));
+}
+
+console.log('\nwith nothing to compare, nothing is claimed about who wrote what');
+{
+  arrive({
+    id: 'appr3', thread: 'th-appr3', from: 'ivy@example.com', subject: 'Hello',
+    text: 'lvp, 300 sq ft, buda tx',
+    extracted: { intent: 'new_quote', material: 'lvp', area_sqft: 300, area_unit: 'sqft',
+      city: 'buda', evidence: { material: 'lvp', area_sqft: '300', area_unit: 'sq ft', city: 'buda' } },
+  });
+  const priced = priceIt('appr3');
+  const [letter] = composeQuotes(whatTheQuoteNeeds('appr3', priced.written.offer_id));
+  putForward('appr3', priced.written.offer_id, 'th-appr3', letter.the_letter_itself);
+  // the drafted wording never reached the offer: a failure between making the draft and recording
+  // it. What was proposed is now unknown, which is not the same as knowing she changed it.
+  ask(`UPDATE offers SET letter_text = NULL WHERE id = ${priced.written.offer_id}`);
+
+  arrive({ id: 'sent3', thread: 'th-appr3', from: 'flooring.demo.austin@gmail.com',
+    text: letter.the_letter_itself, extracted: { intent: 'other', evidence: {} } });
+  takeItOn('sent3');
+  const went = sayItWentOut('sent3', priced.written.offer_id);
+  check('the quote still counts as sent', went.now_sent, 't');
+  check('but nothing is claimed about whether she rewrote it', went.she_said, '');
+  check('and no event pretends to know', ask(
+    `SELECT count(*) FROM order_events WHERE gmail_message_id = 'sent3' AND field = 'letter_text'`), '0');
+}
+
+console.log('\na letter in a thread with nothing waiting is not a quote going out');
 {
   arrive({ id: 'stray1', thread: 'th-nothing', from: 'flooring.demo.austin@gmail.com',
-    text: 'send it', extracted: { intent: 'other', evidence: {} } });
+    text: 'just checking in on this one', extracted: { intent: 'other', evidence: {} } });
   takeItOn('stray1');
   const answers = whatItAnswers('stray1', 'th-nothing');
-  check('no offer is found', answers.an_offer_is_waiting, false);
-  const [readIt] = didSheSaySendIt(answers);
-  check('so the words do not matter', readIt.approved, false);
-  check('and there is nobody to write to', readIt.to, null);
+  check('no offer is found', answers.offer_id, null);
+  check('so nothing is read as a quote leaving', answers.the_quote_went_out, false);
+  check('and there is nobody it would have been for', answers.contact_email, null);
 }
 
 console.log('\nthe gate can hold a letter the wording would have allowed');
@@ -1666,8 +1798,8 @@ console.log('\nsaying something about a booking, a quarter of an hour later');
       RETURNING id) SELECT id FROM made`));
   const visitId = Number(ask(`WITH made AS (
       INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id)
-      VALUES (${orderId}, 'agreed', '["2026-08-04T18:30:00+00:00"]'::jsonb,
-              '2026-08-04T18:30:00+00:00', now() - interval '20 minutes', 'e-1')
+      VALUES (${orderId}, 'agreed', to_jsonb(ARRAY['${VISIT_SOON}']),
+              '${VISIT_SOON}', now() - interval '20 minutes', 'e-1')
       RETURNING id) SELECT id FROM made`));
 
   check('a booking older than the wait is waiting to be answered', waiting(15).length, 1);
@@ -1681,7 +1813,7 @@ console.log('\nsaying something about a booking, a quarter of an hour later');
   // stored as an instant; printed where the work is. The same booking reads half past eight in the
   // evening in Warsaw and half past one in the afternoon to the person driving to it.
   check('the time is written in Texas, not wherever it was booked from',
-    letter.subject, 'Visit booked — Tuesday, August 4 at 1:30pm');
+    letter.subject, `Visit booked — ${texasDay(VISIT_SOON)} at ${texasTime(VISIT_SOON)}`);
   check('the job is repeated back as the desk holds it',
     letter.body.includes('Floor: Laminate') && letter.body.includes('Area: about 400 sqft')
     && letter.body.includes('Where: Kyle, TX'), true);
@@ -1700,8 +1832,8 @@ console.log('\nsaying something about a booking, a quarter of an hour later');
       VALUES ('t-word-2', 'lost', 'gone@example.com', 'LVP', 'Buda, TX', 'core', now())
       RETURNING id) SELECT id FROM made`));
   ask(`INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id)
-       VALUES (${stale}, 'agreed', '["2026-08-04T18:30:00+00:00"]'::jsonb,
-               '2026-08-04T18:30:00+00:00', now() - interval '20 minutes', 'e-2')`);
+       VALUES (${stale}, 'agreed', to_jsonb(ARRAY['${VISIT_SOON}']),
+               '${VISIT_SOON}', now() - interval '20 minutes', 'e-2')`);
   check('a job let go before the letter went out is not written to', waiting(15).length, 0);
 
   // and the refusals the letter states about itself
@@ -1953,7 +2085,7 @@ console.log('\nwhat the owner is told before a visit');
   const visitId = Number(ask(`WITH made AS (
       INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id,
                           agreement_url)
-      VALUES (${orderId}, 'agreed', '["the booking page"]'::jsonb, '2026-08-04T18:30:00+00:00',
+      VALUES (${orderId}, 'agreed', '["the booking page"]'::jsonb, '${VISIT_SOON}',
               now(), 'e-told', 'https://docs.google.com/document/d/told/edit')
       RETURNING id) SELECT id FROM made`));
 
@@ -1962,7 +2094,8 @@ console.log('\nwhat the owner is told before a visit');
 
   const said = compose(mine()[0]);
   check('there is something to say', said.ready_to_tell, true);
-  check('the time is in Texas', said.message.includes('Tuesday, August 4, 1:30pm'), true);
+  check('the time is in Texas',
+    said.message.includes(`${texasDay(VISIT_SOON)}, ${texasTime(VISIT_SOON)}`), true);
   check('the job is in it, from the order rather than a letter',
     ['Laminate', 'about 400 sqft', 'the old floor comes out']
       .every((part) => said.message.includes(part)), true);
@@ -1981,7 +2114,8 @@ console.log('\nwhat the owner is told before a visit');
     said.message.includes('|The page to sign at the door>'), true);
   // these arrive one after another in a channel; the first line is what separates one from the next
   check('it opens with the job and the time, in a line that stands out',
-    said.message.split('\n')[0], '📋 *Job ' + orderId + ' — Tuesday, August 4, 1:30pm*');
+    said.message.split('\n')[0],
+    `📋 *Job ${orderId} — ${texasDay(VISIT_SOON)}, ${texasTime(VISIT_SOON)}*`);
 
   // a price nobody has seen is not what the customer is expecting
   ask(`INSERT INTO offers (order_id, kind, status, total_low, total_high)
@@ -1999,7 +2133,7 @@ console.log('\nwhat the owner is told before a visit');
   // agreed an hour ago and still without a page: the escape, so a broken drive delays the message
   // rather than swallowing it
   ask(`WITH made AS (INSERT INTO visits (order_id, state, offered, agreed, agreed_at, booked_event_id)
-       VALUES (${bareId}, 'agreed', '["the booking page"]'::jsonb, '2026-08-05T18:30:00+00:00',
+       VALUES (${bareId}, 'agreed', '["the booking page"]'::jsonb, '${VISIT_NEXT}',
                now() - interval '1 hour', 'e-bare-told') RETURNING id) SELECT id FROM made`);
   check('a visit with no page yet is still told about once it has waited',
     waiting().filter((r) => Number(r.order_id) === bareId).length, 1);
@@ -2026,13 +2160,13 @@ console.log('\nwhat the owner is told before a visit');
   // agreement it is already over, and this check passes whether or not the rule works. That is how
   // it read before a reviewer pointed at the fixture rather than at the code.
   ask(`UPDATE visits SET agreed_at = now() - interval '1 hour' WHERE id = ${visitId}`);
-  rowOf(visitSql('the-visit-moved'), [visitId, '2026-08-06T18:30:00+00:00']);
+  rowOf(visitSql('the-visit-moved'), [visitId, VISIT_LATER]);
   check('a visit that moved is not told about while its page is the old one', mine().length, 0);
   ask(`UPDATE visits SET agreement_url = 'https://docs.google.com/document/d/moved/edit'
         WHERE id = ${visitId}`);
   check('and is waiting again as soon as the new page exists', mine().length, 1);
   check('what is said carries the new time',
-    compose(mine()[0]).message.includes('Thursday, August 6, 1:30pm'), true);
+    compose(mine()[0]).message.includes(`${texasDay(VISIT_LATER)}, ${texasTime(VISIT_LATER)}`), true);
 
   // an hour that has passed is not something to prepare for
   ask(`UPDATE visits SET agreed = now() - interval '2 hours' WHERE id = ${visitId}`);
@@ -2182,12 +2316,12 @@ console.log('\nthe agreement that is printed before the door');
 
   // a visit that moves needs a page carrying the date it now has, and needs it now: the claim held
   // by whoever was making the old page must not keep it waiting out the half hour
-  rowOf(visitSql('the-visit-moved'), [visitId, '2026-09-09T18:30:00+00:00']);
+  rowOf(visitSql('the-visit-moved'), [visitId, VISIT_FAR]);
   const moved = mine(runs());
   check('a visit that moved is taken again at once, without waiting out the claim on the page it left',
     moved.length, 1);
   check('and the new one carries the new date',
-    compose(moved[0]).replacements.visit_date.includes('September 9'), true);
+    compose(moved[0]).replacements.visit_date.includes(texasDay(VISIT_FAR).split(', ')[1]), true);
 
   // nothing is printed for a door nobody is going to
   ask(`UPDATE visits SET agreement_url = NULL, state = 'lapsed' WHERE id = ${visitId}`);

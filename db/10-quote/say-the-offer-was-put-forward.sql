@@ -1,18 +1,24 @@
--- Written after the letter has gone, never before. One statement, so an offer cannot read as
--- waiting for somebody who was never written to, and the order's history cannot show a quote that
+-- Written after the draft exists in the owner's mailbox, never before. One statement, so an offer cannot
+-- read as waiting on a draft that was never made, and the order's history cannot show a quote that
 -- the offer does not know about.
 --
 -- Only a draft moves. A second run over the same offer -- a redelivered email, a retry -- finds it
--- already awaiting_approval and changes nothing, rather than telling the owner twice about the
--- same figure.
+-- already awaiting_approval and changes nothing, rather than putting a second copy of the same
+-- figure in the owner's drafts.
 
 WITH moved AS (
   UPDATE offers
      SET status = 'awaiting_approval',
-         -- the thread Gmail put the letter in, and the letter as she will read it. Without the
-         -- first her answer cannot be matched to anything; without the second what reaches the
-         -- customer would be a fresh calculation rather than the text she approved.
+         -- the customer's own conversation, which is where the draft was put and where the letter
+         -- will appear when it is sent. It used to be the thread the owner was asked in, back when
+         -- the desk mailed a copy and read the reply; there is no such thread now, because there is
+         -- no such reply -- the sending is the answer.
          approval_thread_id = $3::text,
+         -- the letter as it was drafted. What actually reaches the customer is whatever the owner sends,
+         -- which may not be this: a draft can be edited, and that is the point of a draft. This is
+         -- kept as drafted. What actually reached the customer is the sent message itself, tied
+         -- to this offer when it comes back through the mailbox; the two are separate facts and
+         -- overwriting one with the other would destroy the only evidence they ever differed.
          letter_text = $4::text
    WHERE id = $2::int AND status = 'draft'
   RETURNING id, order_id

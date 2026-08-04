@@ -32,7 +32,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE messages SET\n  status     = $2,\n  handled_by = $3,\n  handoff_at = now()\nWHERE gmail_message_id = $1\nRETURNING gmail_message_id, thread_id, body, category, status, handled_by;",
+        "query": "UPDATE messages SET\n  status     = $2,\n  handled_by = $3,\n  handoff_at = now()\nWHERE gmail_message_id = $1\nRETURNING gmail_message_id, thread_id, category, status, handled_by;",
         "options": {
           "queryReplacement": "={{ [$json.gmail_message_id, 'closed', '60 Approval — Flooring'] }}"
         }
@@ -55,7 +55,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Which offer, if any, this letter is an answer to.\n--\n-- Everything the desk sends to itself arrives back as an owner_reply, including the letters it\n-- sent, so most of what reaches this lane is answering nothing. The only thing that ties an answer\n-- to an offer is the thread the letter went out in, and only an offer still waiting can be\n-- answered -- one already sent has been decided.\n--\n-- The customer's address and the message to reply to come from the order rather than from the\n-- offer, because a reply belongs in the customer's own thread and the last thing they wrote is\n-- what Gmail continues.\n\nWITH waiting AS (\n  SELECT o.id, o.order_id, o.letter_text, o.total_low, o.total_high\n    FROM offers o\n   WHERE o.status = 'awaiting_approval'\n     AND o.approval_thread_id = $2::text\n   ORDER BY o.created_at DESC\n   LIMIT 1\n),\nher_words AS (\n  -- the body with quoted history already stripped by the router. The letter she is replying to\n  -- carries the whole quote underneath it, so reading the raw message would find the desk's own\n  -- words and take them for her answer.\n  SELECT body FROM messages WHERE gmail_message_id = $1::text\n),\ntheir_last_word AS (\n  SELECT m.gmail_message_id, m.contact_email, m.thread_id\n    FROM messages m\n   WHERE m.order_id = (SELECT order_id FROM waiting)\n     AND m.is_outbound = false\n   ORDER BY m.created_at DESC\n   LIMIT 1\n)\nSELECT\n  $1::text                                        AS gmail_message_id,\n  h.body                                          AS said,\n  w.id                                            AS offer_id,\n  w.order_id,\n  w.letter_text,\n  w.total_low, w.total_high,\n  t.gmail_message_id                              AS reply_to,\n  t.contact_email,\n  t.thread_id                                     AS customer_thread_id,\n  w.id IS NOT NULL\n    AND w.letter_text IS NOT NULL\n    AND t.gmail_message_id IS NOT NULL            AS an_offer_is_waiting\n  FROM (SELECT 1) AS always\n  LEFT JOIN her_words        h ON true\n  LEFT JOIN waiting          w ON true\n  LEFT JOIN their_last_word  t ON true;",
+        "query": "-- Whether this outbound letter is the quote going out.\n--\n-- Everything the desk sends reaches the mailbox again as an owner_reply, so most of what arrives\n-- here is the desk reading its own post. What is being looked for is narrower than it used to be:\n-- not a word of assent somewhere in the letter, but one particular letter having left.\n--\n-- The old shape asked \"did the owner say send it\" and read the reply with a pattern. That is gone.\n-- A quote now waits in the owner's drafts, in the customer's own conversation, and the owner sends it --\n-- so the sending IS the answer, and there is nothing left to interpret. A pattern that had to\n-- decide whether \"ok\" meant yes cannot be wrong about this any more, because it is no longer asked.\n-- It also cannot refuse a quote because the owner wrote \"let me change one word\", which is what `change`\n-- being a word of refusal used to do.\n--\n-- What identifies it: an offer waiting on this thread, and this letter going out in it. Between\n-- drafting a quote and its sending the desk puts nothing else into that conversation -- the\n-- branch that asks a customer for what is missing cannot fire for an order that is already quoted,\n-- because nothing is missing from it. So the next letter out of that thread is the quote.\n--\n-- Being wrong here costs bookkeeping and never a customer: what reaches them is whatever the owner\n-- pressed send on, and no row in this database can add to that or take it away.\n\nWITH this_letter AS (\n  SELECT m.gmail_message_id, m.thread_id, m.order_id, m.body, m.is_outbound\n    FROM messages m\n   WHERE m.gmail_message_id = $1::text\n),\nwaiting AS (\n  -- The offer this letter is carrying, identified by the letter carrying its figures.\n  --\n  -- Thread membership alone was not enough and was wrong in two ways at once. The owner writes in\n  -- the customer's own conversation -- that is the whole point of leaving the draft there -- so an\n  -- ordinary note of her own (\"I will follow up tomorrow\") is an outbound message in a thread with\n  -- an offer waiting, and counted as the quote going out. The offer was then marked sent to\n  -- somebody who never received it, which is worse than a wrong statistic: the reminder reads that\n  -- status, so nothing would ever have chased the draft still lying unsent.\n  --\n  -- And with two offers waiting in one thread, the newest was taken whichever was sent.\n  --\n  -- The figures answer both. They are generated from this offer and printed as one line, so a note\n  -- does not carry them and a rewritten quote still does -- removing the price is not an edit to a\n  -- quote, it is not sending one. Formatted here exactly as the composer formats it, because it is\n  -- that string being looked for and not a number.\n  --\n  -- Strict on purpose. Failing to recognise a quote leaves the offer waiting and the owner\n  -- reminded, which is a nuisance; recognising the wrong letter tells a customer's job that a price\n  -- reached them when it did not.\n  SELECT o.id, o.order_id, o.total_low, o.total_high, o.letter_text\n    FROM offers o\n   WHERE o.status = 'awaiting_approval'\n     AND o.approval_thread_id = $2::text\n     AND o.total_low IS NOT NULL\n     AND (SELECT body FROM this_letter) LIKE\n         '%$' || to_char(round(o.total_low),  'FM999,999,999')\n             || ' to $' || to_char(round(o.total_high), 'FM999,999,999') || '%'\n   ORDER BY o.created_at DESC\n   LIMIT 1\n),\nthe_customer AS (\n  SELECT m.contact_email\n    FROM messages m\n   WHERE m.order_id = (SELECT order_id FROM waiting)\n     AND m.is_outbound = false\n     AND m.contact_email IS NOT NULL\n   ORDER BY m.created_at DESC\n   LIMIT 1\n)\nSELECT\n  $1::text                                        AS gmail_message_id,\n  w.id                                            AS offer_id,\n  w.order_id,\n  w.total_low, w.total_high,\n  t.contact_email,\n  $2::text                                        AS customer_thread_id,\n  -- What was actually sent is this message's own body, and it stays there rather than being copied\n  -- onto the offer. Comparing the two to spot an edit was tried and cannot work: what comes back\n  -- has been through the reader that strips quoted history and squeezes runs of spaces, so an\n  -- untouched letter returns different from the one that was drafted.\n  coalesce(w.id IS NOT NULL AND l.is_outbound, false)    AS the_quote_went_out\n  FROM (SELECT 1) AS always\n  LEFT JOIN this_letter  l ON true\n  LEFT JOIN waiting      w ON true\n  LEFT JOIN the_customer t ON true;",
         "options": {
           "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('Accept handoff').item.json.thread_id] }}"
         }
@@ -77,19 +77,6 @@
     },
     {
       "parameters": {
-        "jsCode": "// Whether this letter is the owner saying yes, and what goes out if it is.\n//\n// Every letter the desk sends to itself comes back through here, so most of what arrives is the\n// desk reading its own words. Two things have to hold before anything reaches a customer: an offer\n// is waiting in this thread, and somebody typed an assent into this particular message.\n//\n// The text examined is the body with quoted history already stripped by the router. That matters\n// more here than anywhere else: the letter she is replying to contains the whole quote underneath,\n// and looking at the raw message would find the desk's own words and read them as her answer.\n\nconst YES = /^(?:\\s*(?:yes|yep|yeah|ok|okay|sure|approved?|confirmed?)\\b[\\s.!,]*)+$/i;\nconst SEND = /\\b(?:send it|send that|send them|go ahead|fire away|ship it|send to (?:the )?(?:customer|client)|looks good,? send|approved,? send)\\b/i;\n\n// A refusal is not silence. Saying so is not this branch's job, but reading it as a yes would be\n// the worst thing this file could do, so it is named and stopped here.\nconst NO = /\\b(?:no|not yet|hold(?: off| on)?|don'?t send|do not send|wait|stop|cancel|change|amend|fix)\\b/i;\n\nreturn $input.all().map((item, i) => {\n  const answer = item.json || {};\n  const said = String(answer.said || '').trim();\n  const waiting = answer.an_offer_is_waiting === true || answer.an_offer_is_waiting === 't';\n\n  const assented = waiting && !NO.test(said) && (YES.test(said) || SEND.test(said));\n\n  return {\n    json: {\n      gmail_message_id: answer.gmail_message_id,\n      offer_id: answer.offer_id,\n      order_id: answer.order_id,\n      an_offer_is_waiting: waiting,\n      // what was actually read, so a letter that went nowhere can be explained without guessing\n      said: said.slice(0, 200),\n      approved: assented,\n      refused: waiting && NO.test(said),\n      to: answer.contact_email,\n      reply_to: answer.reply_to,\n      thread_id: answer.customer_thread_id,\n      body: answer.letter_text,\n    },\n    pairedItem: { item: i },\n  };\n});\n"
-      },
-      "id": "aaaa6000-0000-4000-8000-000000000004",
-      "name": "Did she say send it",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        980,
-        380
-      ]
-    },
-    {
-      "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
@@ -99,8 +86,8 @@
           },
           "conditions": [
             {
-              "id": "approved",
-              "leftValue": "={{ $json.approved }}",
+              "id": "went-out",
+              "leftValue": "={{ $json.the_quote_went_out }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -114,7 +101,7 @@
         "options": {}
       },
       "id": "aaaa6000-0000-4000-8000-000000000005",
-      "name": "Approved?",
+      "name": "Did the quote go out?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
@@ -124,36 +111,10 @@
     },
     {
       "parameters": {
-        "operation": "reply",
-        "messageId": "={{ $json.reply_to }}",
-        "emailType": "text",
-        "message": "={{ $json.body }}",
-        "options": {
-          "appendAttribution": false
-        }
-      },
-      "id": "aaaa6000-0000-4000-8000-000000000006",
-      "name": "Send the quote to the customer",
-      "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2.1,
-      "position": [
-        1460,
-        320
-      ],
-      "credentials": {
-        "gmailOAuth2": {
-          "id": null,
-          "name": "Gmail account"
-        }
-      },
-      "webhookId": "61b15e4a-7d8f-4436-b113-8cc228028087"
-    },
-    {
-      "parameters": {
         "operation": "executeQuery",
-        "query": "-- Written after the customer's copy has gone, never before. One statement, so an offer cannot read\n-- as sent to somebody who was never written to.\n--\n-- Only an offer still waiting moves. A second reply in the same thread -- \"thanks\", \"did that go?\"\n-- -- finds it already sent and changes nothing rather than sending the quote twice.\n\nWITH moved AS (\n  UPDATE offers\n     SET status = 'sent'\n   WHERE id = $2::int AND status = 'awaiting_approval'\n  RETURNING id, order_id\n),\nnoted AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT order_id, $1::text, 'state_change', 'offer_status', 'awaiting_approval', 'sent'\n    FROM moved\n  RETURNING 1\n)\nSELECT\n  $2::int                                  AS offer_id,\n  (SELECT count(*) FROM moved)::int = 1    AS now_sent,\n  (SELECT count(*) FROM noted)::int = 1    AS change_recorded;",
+        "query": "-- Written after the customer's copy has gone, never before -- and now it has genuinely gone before\n-- this runs, because the owner sent it. This records what happened; it cannot cause it.\n--\n-- Only an offer still waiting moves. A second letter in the same thread finds it already sent and\n-- changes nothing.\n--\n-- Three things are recorded, and they answer three different questions.\n--\n-- WHAT THE CUSTOMER READ. The sent letter is tied to the offer by offer_id, so what actually\n-- reached them is one join away and is the letter itself rather than a copy of it. letter_text is\n-- left as it was drafted: the two are different facts and overwriting one with the other destroys\n-- the only evidence that they ever differed.\n--\n-- WHETHER THE WORDING WAS REWRITTEN. An event, kind 'approved' or 'rejected' -- two kinds this schema has\n-- always allowed and nothing has ever written. Counting them answers \"how often does the owner\n-- overrule the arithmetic\", which is a question about whether the desk is any good, and there is\n-- nowhere else it could be counted from.\n--\n-- Compared with the whitespace squeezed out of both sides, and that is not a detail. What comes\n-- back has been through the reader that strips quoted history and collapses runs of spaces, so an\n-- untouched letter returns with its indentation flattened and compares unequal to the one that was\n-- drafted. Comparing them raw called every single letter a rewrite. The letters differ in their\n-- spacing every time and in their words only when the owner changed them; this compares the words.\n\nWITH the_letter AS (\n  SELECT m.gmail_message_id, m.order_id, m.body\n    FROM messages m\n   WHERE m.gmail_message_id = $1::text\n),\nproposed AS (\n  SELECT o.id, o.letter_text\n    FROM offers o\n   WHERE o.id = $2::int\n),\nmoved AS (\n  UPDATE offers\n     SET status = 'sent'\n   WHERE id = $2::int AND status = 'awaiting_approval'\n  RETURNING id, order_id\n),\ntied AS (\n  -- what the customer read, findable from the offer rather than guessed at later\n  UPDATE messages\n     SET offer_id = $2::int\n   WHERE gmail_message_id = $1::text\n     AND EXISTS (SELECT 1 FROM moved)\n  RETURNING 1\n),\nnoted AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT order_id, $1::text, 'state_change', 'offer_status', 'awaiting_approval', 'sent'\n    FROM moved\n  RETURNING 1\n),\njudged AS (\n  -- Only when there is something to compare on both sides. A missing letter_text means the drafted\n  -- wording was never recorded, and an empty body means nothing came back -- neither is evidence\n  -- that anything was rewritten. Without this the statement answered \"rejected\" to both, which puts\n  -- \"we do not know\" into the one count that exists to say how often the arithmetic is overruled,\n  -- and does it in the direction that flatters nobody.\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT m.order_id, $1::text,\n         CASE WHEN regexp_replace(btrim(l.body), '\\s+', ' ', 'g')\n                 = regexp_replace(btrim(p.letter_text), '\\s+', ' ', 'g')\n              THEN 'approved' ELSE 'rejected' END,\n         'letter_text',\n         'the wording the desk proposed',\n         CASE WHEN regexp_replace(btrim(l.body), '\\s+', ' ', 'g')\n                 = regexp_replace(btrim(p.letter_text), '\\s+', ' ', 'g')\n              THEN 'sent as it was drafted' ELSE 'rewritten before it was sent' END\n    FROM moved m\n    JOIN the_letter l ON true\n    JOIN proposed   p ON true\n   WHERE p.letter_text IS NOT NULL\n     AND btrim(l.body) <> ''\n  RETURNING kind\n)\nSELECT\n  $2::int                                  AS offer_id,\n  (SELECT count(*) FROM moved)::int = 1    AS now_sent,\n  (SELECT count(*) FROM noted)::int = 1    AS change_recorded,\n  (SELECT count(*) FROM tied)::int = 1     AS letter_tied_to_offer,\n  (SELECT kind FROM judged)                AS she_said;",
         "options": {
-          "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('What this reply answers').item.json.offer_id] }}"
+          "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $json.offer_id] }}"
         }
       },
       "id": "aaaa6000-0000-4000-8000-000000000007",
@@ -199,37 +160,14 @@
       "main": [
         [
           {
-            "node": "Did she say send it",
+            "node": "Did the quote go out?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Did she say send it": {
-      "main": [
-        [
-          {
-            "node": "Approved?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Approved?": {
-      "main": [
-        [
-          {
-            "node": "Send the quote to the customer",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        []
-      ]
-    },
-    "Send the quote to the customer": {
+    "Did the quote go out?": {
       "main": [
         [
           {

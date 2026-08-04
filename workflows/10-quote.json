@@ -313,7 +313,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Everything a letter carrying a price is made of, in one statement: the figures as they were\n-- written down, the job they belong to, who asked, and the words a person wrote to wrap around\n-- them. Nothing downstream asks the database a second question.\n--\n-- The offer is read rather than recomputed. A quote given today has to still be explainable after\n-- the price list has moved, and the only way that stays true is if the letter says what the offer\n-- says -- not what the arithmetic would produce if it ran again now.\n\nWITH the_offer AS (\n  SELECT o.id, o.order_id, o.total_low, o.total_high, o.subtotal_low, o.subtotal_high,\n         o.breakdown, o.status, o.pricing_version\n    FROM offers o\n   WHERE o.id = $2::int\n),\nthe_job AS (\n  SELECT j.id, j.material_category, j.area_sqft, j.area_unit, j.city, j.zone, j.state\n    FROM orders j\n   WHERE j.id = (SELECT order_id FROM the_offer)\n),\nthe_letter AS (\n  SELECT contact_email, thread_id, from_name, auto_blocked\n    FROM messages\n   WHERE gmail_message_id = $1::text\n),\nwords AS (\n  SELECT max(body) FILTER (WHERE key = 'quote_opening') AS opening,\n         max(body) FILTER (WHERE key = 'quote_closing') AS closing,\n         max(body) FILTER (WHERE key = 'signature')     AS signature\n    FROM reply_templates\n   WHERE key IN ('quote_opening', 'quote_closing', 'signature')\n)\nSELECT\n  $1::text                                  AS gmail_message_id,\n  f.id                                      AS offer_id,\n  f.order_id,\n  f.total_low, f.total_high,\n  f.breakdown,\n  f.pricing_version,\n  j.material_category, j.area_sqft, j.city,\n  l.contact_email, l.thread_id, l.from_name,\n  coalesce(l.auto_blocked, false)           AS auto_blocked,\n  w.opening, w.closing, w.signature,\n  f.id IS NOT NULL\n    AND f.total_low IS NOT NULL\n    AND f.status = 'draft'\n    AND w.opening IS NOT NULL\n    AND w.closing IS NOT NULL                AS ready_to_write\n  FROM the_offer f\n  LEFT JOIN the_job    j ON true\n  LEFT JOIN the_letter l ON true\n  LEFT JOIN words      w ON true;",
+        "query": "-- Everything a letter carrying a price is made of, in one statement: the figures as they were\n-- written down, the job they belong to, who asked, and the words a person wrote to wrap around\n-- them. Nothing downstream asks the database a second question.\n--\n-- The offer is read rather than recomputed. A quote given today has to still be explainable after\n-- the price list has moved, and the only way that stays true is if the letter says what the offer\n-- says -- not what the arithmetic would produce if it ran again now.\n\nWITH the_offer AS (\n  SELECT o.id, o.order_id, o.total_low, o.total_high, o.subtotal_low, o.subtotal_high,\n         o.breakdown, o.status, o.pricing_version\n    FROM offers o\n   WHERE o.id = $2::int\n),\nthe_job AS (\n  SELECT j.id, j.material_category, j.area_sqft, j.area_unit, j.city, j.zone, j.state\n    FROM orders j\n   WHERE j.id = (SELECT order_id FROM the_offer)\n),\nthe_letter AS (\n  -- the subject as it arrived, because the draft goes into the customer's own conversation and\n  -- Gmail stitches a thread from the subject as well as from the thread id. A draft carrying a\n  -- subject of its own would sit beside the conversation rather than in it.\n  SELECT contact_email, thread_id, from_name, auto_blocked,\n         raw_email ->> 'subject' AS subject\n    FROM messages\n   WHERE gmail_message_id = $1::text\n),\nwords AS (\n  SELECT max(body) FILTER (WHERE key = 'quote_opening') AS opening,\n         max(body) FILTER (WHERE key = 'quote_closing') AS closing,\n         max(body) FILTER (WHERE key = 'signature')     AS signature\n    FROM reply_templates\n   WHERE key IN ('quote_opening', 'quote_closing', 'signature')\n)\nSELECT\n  $1::text                                  AS gmail_message_id,\n  f.id                                      AS offer_id,\n  f.order_id,\n  f.total_low, f.total_high,\n  f.breakdown,\n  f.pricing_version,\n  j.material_category, j.area_sqft, j.city,\n  l.contact_email, l.thread_id, l.from_name, l.subject,\n  coalesce(l.auto_blocked, false)           AS auto_blocked,\n  w.opening, w.closing, w.signature,\n  f.id IS NOT NULL\n    AND f.total_low IS NOT NULL\n    AND f.status = 'draft'\n    AND w.opening IS NOT NULL\n    AND w.closing IS NOT NULL                AS ready_to_write\n  FROM the_offer f\n  LEFT JOIN the_job    j ON true\n  LEFT JOIN the_letter l ON true\n  LEFT JOIN words      w ON true;",
         "options": {
           "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('Write the offer').item.json.offer_id] }}"
         }
@@ -369,7 +369,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// A letter carrying a price, and the one address it is allowed to reach.\n//\n// Every other letter in this system decides its destination from the stored wording. This one does\n// not, and that is the point: a figure must not be one edit in a table away from leaving unread. It\n// goes to the owner, always, until there is an approval to authorise anything else.\nconst OWNER = 'flooring.demo.austin@gmail.com';\n\nconst money = (n) => `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;\n\n// The breakdown as a person reads it, not as it is stored. Each line already knows what it is, what\n// it was worked out from and at what rate, because the arithmetic wrote all three down when it ran.\nconst readable = (lines) => (lines || []).map((line) => {\n  if (line.kind === 'minimum') {\n    return `  ${line.label}: minimum charge ${money(line.amount)} applies`;\n  }\n  // a flat charge for turning up, not a rate on anything: \"1 visit at $50-$150\" reads as though\n  // there were a price per visit and we had chosen one\n  if (line.kind === 'on_site') {\n    return `  ${line.label}: counted on site, not from an email — they run `\n      + `${money(line.rate_low)}-${money(line.rate_high)} ${line.unit}, and are not in the figures above`;\n  }\n  if (line.kind === 'travel') {\n    return `  ${line.label}: ${money(line.low)}${line.low === line.high ? '' : ` to ${money(line.high)}`}`;\n  }\n  const rate = line.rate_low === line.rate_high\n    ? `${money(line.rate_low)}/${line.unit}`\n    : `${money(line.rate_low)}-${money(line.rate_high)}/${line.unit}`;\n  const waste = line.wastage_pct ? ` (incl. ${line.wastage_pct}% waste)` : '';\n  return `  ${line.label}: ${Number(line.quantity).toLocaleString('en-US')} ${line.unit}${waste} at ${rate}`\n    + `\\n      ${money(line.low)} to ${money(line.high)}`;\n}).join('\\n');\n\nreturn $input.all().map((item, i) => {\n  const q = item.json || {};\n\n  if (q.ready_to_write !== true && q.ready_to_write !== 't') {\n    throw new Error('there is no offer to write about, or no wording stored for one: '\n      + `offer ${q.offer_id || 'unknown'} with total ${q.total_low === null ? 'nothing' : q.total_low}`);\n  }\n\n  const breakdown = typeof q.breakdown === 'string' ? JSON.parse(q.breakdown) : (q.breakdown || {});\n  const range = `${money(q.total_low)} to ${money(q.total_high)}`;\n  const who = q.contact_email || 'a customer with no address on file';\n  // the town is stored the way the customer wrote it, lowercased for matching. A letter is not a\n  // lookup key.\n  const town = q.city ? String(q.city).replace(/\\b[a-z]/g, (c) => c.toUpperCase()) : null;\n  const job = [q.material_category, q.area_sqft ? `${Number(q.area_sqft).toLocaleString('en-US')} sq ft` : null,\n    town].filter(Boolean).join(', ');\n\n  // What the owner reads: the letter as the customer would receive it, and above it the few facts\n  // she needs to decide -- who it is for, what the job is, and where the figures came from.\n  const forTheCustomer = `${q.opening}\\n\\n${job}\\n\\n${readable(breakdown.lines)}\\n\\n`\n    + `All in: ${range}.\\n\\n${q.closing}${q.signature || ''}`;\n\n  const body = `This quote is ready and has not been sent. Nothing carrying a figure leaves without you.\\n\\n`\n    + `For:     ${who}\\n`\n    + `Job:     ${job || 'not described'}\\n`\n    + `Range:   ${range}\\n`\n    + `Priced by: ${q.pricing_version || 'unknown version'}\\n`\n    + `${q.auto_blocked ? '\\nThe gate held this email for a person before anything automatic: read it before you send.\\n' : ''}`\n    + `\\n--- the letter as it stands ---\\n\\n${forTheCustomer}`;\n\n  return {\n    json: {\n      gmail_message_id: q.gmail_message_id,\n      offer_id: q.offer_id,\n      order_id: q.order_id,\n      to: OWNER,\n      reaches_the_customer: false,\n      for_whom: who,\n      subject: `Quote ready for ${who} — ${range}`,\n      body,\n      the_letter_itself: forTheCustomer,\n    },\n    pairedItem: { item: i },\n  };\n});\n"
+        "jsCode": "// A letter carrying a price, written for the customer and left where only the owner can send it.\n//\n// It is composed here and put in the owner's mailbox as a draft, in the customer's own conversation.\n// The owner reads it, changes whatever wants changing, and presses send. Nothing here decides that it goes:\n// the draft has no way of leaving on its own, which is a stronger guarantee than the one this\n// replaced. That one mailed the letter to the owner and read the reply with a pattern -- so a figure\n// reached a customer whenever the pattern matched, and \"almost right, let me change a word\" was\n// read as a refusal, because `change` is one of the words that means no.\n//\n// One thing comes out of this node: the letter the customer would read. Telling the owner that a\n// draft is waiting is a separate step in a separate file, and deliberately so -- what is said to the owner\n// carries figures and what the firm is unsure of, and a check in this repository refuses to let the\n// two be written a few lines apart. Composing both here would put the owner's sentence one mistaken\n// variable away from the customer's letter.\n\nconst money = (n) => `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;\n\n// The breakdown as a person reads it, not as it is stored. Each line already knows what it is, what\n// it was worked out from and at what rate, because the arithmetic wrote all three down when it ran.\nconst readable = (lines) => (lines || []).map((line) => {\n  if (line.kind === 'minimum') {\n    return `  ${line.label}: minimum charge ${money(line.amount)} applies`;\n  }\n  // a flat charge for turning up, not a rate on anything: \"1 visit at $50-$150\" reads as though\n  // there were a price per visit and we had chosen one\n  if (line.kind === 'on_site') {\n    return `  ${line.label}: counted on site, not from an email — they run `\n      + `${money(line.rate_low)}-${money(line.rate_high)} ${line.unit}, and are not in the figures above`;\n  }\n  if (line.kind === 'travel') {\n    return `  ${line.label}: ${money(line.low)}${line.low === line.high ? '' : ` to ${money(line.high)}`}`;\n  }\n  const rate = line.rate_low === line.rate_high\n    ? `${money(line.rate_low)}/${line.unit}`\n    : `${money(line.rate_low)}-${money(line.rate_high)}/${line.unit}`;\n  const waste = line.wastage_pct ? ` (incl. ${line.wastage_pct}% waste)` : '';\n  return `  ${line.label}: ${Number(line.quantity).toLocaleString('en-US')} ${line.unit}${waste} at ${rate}`\n    + `\\n      ${money(line.low)} to ${money(line.high)}`;\n}).join('\\n');\n\n// Gmail threads on the subject as well as on the thread id, so the reply carries the subject it is\n// replying to. Prefixed once and never twice: a conversation five letters deep would otherwise read\n// \"Re: Re: Re: Re: Laminate\".\n//\n// An empty subject stays empty. Gmail will only attach a draft to a thread whose subject matches,\n// so inventing one for a letter that arrived without a subject puts the draft beside the\n// conversation instead of inside it -- and the whole point of this is that the customer's own\n// conversation is where it waits.\nconst replyTo = (subject) => {\n  const said = String(subject || '').trim();\n  if (!said) return '';\n  return /^re\\s*:/i.test(said) ? said : `Re: ${said}`;\n};\n\nreturn $input.all().map((item, i) => {\n  const q = item.json || {};\n\n  if (q.ready_to_write !== true && q.ready_to_write !== 't') {\n    throw new Error('there is no offer to write about, or no wording stored for one: '\n      + `offer ${q.offer_id || 'unknown'} with total ${q.total_low === null ? 'nothing' : q.total_low}`);\n  }\n\n  // No address, no draft. A lead forwarded by a platform with no reply-to leaves nobody to write\n  // to, and a draft addressed to an empty string is one somebody sends by accident.\n  const who = String(q.contact_email || '').trim();\n  if (!who) {\n    throw new Error('there is no address to send this quote to: this arrived through a platform '\n      + 'that forwarded no reply-to, and a draft with nobody in the To field is not a letter');\n  }\n\n  const breakdown = typeof q.breakdown === 'string' ? JSON.parse(q.breakdown) : (q.breakdown || {});\n  const range = `${money(q.total_low)} to ${money(q.total_high)}`;\n  // the town is stored the way the customer wrote it, lowercased for matching. A letter is not a\n  // lookup key.\n  const town = q.city ? String(q.city).replace(/\\b[a-z]/g, (c) => c.toUpperCase()) : null;\n  const job = [q.material_category, q.area_sqft ? `${Number(q.area_sqft).toLocaleString('en-US')} sq ft` : null,\n    town].filter(Boolean).join(', ');\n\n  // What the customer would read, and the whole of what the draft contains. No note to the owner\n  // wrapped around it any more: it is read inside the owner's own mail client, about to be sent, and\n  // anything above it would be one deleted paragraph away from reaching the customer.\n  const forTheCustomer = `${q.opening}\\n\\n${job}\\n\\n${readable(breakdown.lines)}\\n\\n`\n    + `All in: ${range}.\\n\\n${q.closing}${q.signature || ''}`;\n\n  return {\n    json: {\n      gmail_message_id: q.gmail_message_id,\n      offer_id: q.offer_id,\n      order_id: q.order_id,\n      // the draft: the customer's letter, in the customer's conversation\n      write_to: who,\n      thread_id: q.thread_id,\n      subject: replyTo(q.subject),\n      body: forTheCustomer,\n      the_letter_itself: forTheCustomer,\n    },\n    pairedItem: { item: i },\n  };\n});\n"
       },
       "id": "aaaa2222-0000-4000-8000-000000000022",
       "name": "Compose the quote",
@@ -382,38 +382,10 @@
     },
     {
       "parameters": {
-        "resource": "message",
-        "operation": "send",
-        "sendTo": "={{ $json.to }}",
-        "subject": "={{ $json.subject }}",
-        "emailType": "text",
-        "message": "={{ $json.body }}",
-        "options": {
-          "appendAttribution": false
-        }
-      },
-      "id": "aaaa2222-0000-4000-8000-000000000023",
-      "name": "Show the quote to the owner",
-      "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2.1,
-      "position": [
-        2380,
-        100
-      ],
-      "credentials": {
-        "gmailOAuth2": {
-          "id": null,
-          "name": "Gmail account"
-        }
-      },
-      "webhookId": "2ca2aca0-1a74-4a83-b97b-5b66e7a315c1"
-    },
-    {
-      "parameters": {
         "operation": "executeQuery",
-        "query": "-- Written after the letter has gone, never before. One statement, so an offer cannot read as\n-- waiting for somebody who was never written to, and the order's history cannot show a quote that\n-- the offer does not know about.\n--\n-- Only a draft moves. A second run over the same offer -- a redelivered email, a retry -- finds it\n-- already awaiting_approval and changes nothing, rather than telling the owner twice about the\n-- same figure.\n\nWITH moved AS (\n  UPDATE offers\n     SET status = 'awaiting_approval',\n         -- the thread Gmail put the letter in, and the letter as she will read it. Without the\n         -- first her answer cannot be matched to anything; without the second what reaches the\n         -- customer would be a fresh calculation rather than the text she approved.\n         approval_thread_id = $3::text,\n         letter_text = $4::text\n   WHERE id = $2::int AND status = 'draft'\n  RETURNING id, order_id\n),\nnoted AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT order_id, $1::text, 'state_change', 'offer_status', 'draft', 'awaiting_approval'\n    FROM moved\n  RETURNING 1\n)\nSELECT\n  $2::int                                  AS offer_id,\n  $3::text                                 AS approval_thread_id,\n  (SELECT count(*) FROM moved)::int = 1    AS now_waiting,\n  (SELECT count(*) FROM noted)::int = 1    AS change_recorded;",
+        "query": "-- Written after the draft exists in the owner's mailbox, never before. One statement, so an offer cannot\n-- read as waiting on a draft that was never made, and the order's history cannot show a quote that\n-- the offer does not know about.\n--\n-- Only a draft moves. A second run over the same offer -- a redelivered email, a retry -- finds it\n-- already awaiting_approval and changes nothing, rather than putting a second copy of the same\n-- figure in the owner's drafts.\n\nWITH moved AS (\n  UPDATE offers\n     SET status = 'awaiting_approval',\n         -- the customer's own conversation, which is where the draft was put and where the letter\n         -- will appear when it is sent. It used to be the thread the owner was asked in, back when\n         -- the desk mailed a copy and read the reply; there is no such thread now, because there is\n         -- no such reply -- the sending is the answer.\n         approval_thread_id = $3::text,\n         -- the letter as it was drafted. What actually reaches the customer is whatever the owner sends,\n         -- which may not be this: a draft can be edited, and that is the point of a draft. This is\n         -- kept as drafted. What actually reached the customer is the sent message itself, tied\n         -- to this offer when it comes back through the mailbox; the two are separate facts and\n         -- overwriting one with the other would destroy the only evidence they ever differed.\n         letter_text = $4::text\n   WHERE id = $2::int AND status = 'draft'\n  RETURNING id, order_id\n),\nnoted AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT order_id, $1::text, 'state_change', 'offer_status', 'draft', 'awaiting_approval'\n    FROM moved\n  RETURNING 1\n)\nSELECT\n  $2::int                                  AS offer_id,\n  $3::text                                 AS approval_thread_id,\n  (SELECT count(*) FROM moved)::int = 1    AS now_waiting,\n  (SELECT count(*) FROM noted)::int = 1    AS change_recorded;",
         "options": {
-          "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('What the quote letter needs').item.json.offer_id, $json.threadId, $('Compose the quote').item.json.the_letter_itself] }}"
+          "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('What the quote letter needs').item.json.offer_id, $('Compose the quote').item.json.thread_id, $('Compose the quote').item.json.the_letter_itself] }}"
         }
       },
       "id": "aaaa2222-0000-4000-8000-000000000024",
@@ -583,6 +555,77 @@
         1720,
         440
       ]
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "threadId": "={{ $json.thread_id }}",
+          "sendTo": "={{ $json.write_to }}",
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2380,
+        100
+      ],
+      "id": "draft-the-quote",
+      "name": "Draft the quote",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": null,
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "accessToken",
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#visits",
+          "mode": "name"
+        },
+        "text": "={{ $json.message }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        3040,
+        100
+      ],
+      "id": "tell-the-owner-a-quote-is-waiting",
+      "name": "Tell the owner",
+      "credentials": {
+        "slackApi": {
+          "id": null,
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// The line that tells the owner a quote is sitting in the owner's drafts.\n//\n// It exists because a draft announces itself to nobody. The letter the desk used to send\n// arrived in the inbox and was impossible to miss; a draft lies in a folder until somebody\n// remembers to look, and a quote nobody remembers is a customer nobody answered.\n//\n// Written here rather than beside the letter itself, and that separation is the point. This carries\n// the figures and whether the gate held the enquiry for a person -- things the customer must never\n// read. A check in this repository refuses to let a customer letter be composed in a file that\n// reaches for what the owner is told, and composing both in one place would put this sentence one\n// mistaken variable away from the draft.\n//\n// It never carries the letter. The letter lives in exactly one place, which is the draft about to\n// be sent: two copies of it would be two things to keep in step.\n\nconst money = (n) => `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;\n\nreturn $input.all().map((item, i) => {\n  const q = $('What the quote letter needs').itemMatching(i)?.json || {};\n  const drafted = $('Compose the quote').itemMatching(i)?.json || {};\n\n  const range = `${money(q.total_low)} to ${money(q.total_high)}`;\n  const town = q.city ? String(q.city).replace(/\\b[a-z]/g, (c) => c.toUpperCase()) : null;\n  const job = [q.material_category, q.area_sqft ? `${Number(q.area_sqft).toLocaleString('en-US')} sq ft` : null,\n    town].filter(Boolean).join(', ');\n\n  const message = [\n    `📝 *A quote is drafted and waiting — ${range}*`,\n    `✉️ ${drafted.write_to || q.contact_email || 'no address on file'}`,\n    `🧾 ${job || 'job not described'}`,\n    '',\n    q.auto_blocked\n      ? 'The gate held this enquiry for a person before anything automatic happened to it. Read the '\n        + 'enquiry as well as the letter before you send.'\n      : 'It is in your drafts, in their own conversation. Read it, change whatever you want to '\n        + 'change, and send it. Nothing goes until you do.',\n  ].join('\\n');\n\n  return { json: { ...item.json, message }, pairedItem: { item: i } };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2820,
+        100
+      ],
+      "id": "say-a-quote-is-waiting",
+      "name": "Say a quote is waiting"
     }
   ],
   "connections": {
@@ -736,18 +779,7 @@
       "main": [
         [
           {
-            "node": "Show the quote to the owner",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Show the quote to the owner": {
-      "main": [
-        [
-          {
-            "node": "Say the offer was put forward",
+            "node": "Draft the quote",
             "type": "main",
             "index": 0
           }
@@ -810,6 +842,39 @@
         [
           {
             "node": "What a question deserves",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft the quote": {
+      "main": [
+        [
+          {
+            "node": "Say the offer was put forward",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Say the offer was put forward": {
+      "main": [
+        [
+          {
+            "node": "Say a quote is waiting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Say a quote is waiting": {
+      "main": [
+        [
+          {
+            "node": "Tell the owner",
             "type": "main",
             "index": 0
           }
