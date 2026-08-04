@@ -1334,6 +1334,10 @@ console.log('\nthe owner says send it, and only then does the customer get a pri
   check('the draft is addressed to the customer', letter.write_to, 'yuri@example.com');
   check('and it goes into their own conversation', letter.thread_id, 'th-appr1');
   check('carrying the subject it is replying to', /^Re: /.test(letter.subject), true);
+  // Gmail attaches a draft to a thread only when the subject matches, so a letter that arrived
+  // without one has to stay without one rather than be given something invented.
+  check('and an empty subject stays empty rather than being invented',
+    composeQuotes({ ...whatTheQuoteNeeds('appr1', priced.written.offer_id), subject: '' })[0].subject, '');
   putForward('appr1', priced.written.offer_id, 'th-appr1', letter.the_letter_itself);
 
   // she presses send. It reaches the mailbox again like every other letter the desk sends, in the
@@ -1403,6 +1407,44 @@ console.log('\nwhat she sends is what the record keeps, even when she changed it
     ask(`SELECT count(*) FROM order_events WHERE field = 'letter_text' AND kind = 'rejected'`), '1');
   check('and so can the times she sent it as written',
     ask(`SELECT count(*) FROM order_events WHERE field = 'letter_text' AND kind = 'approved'`), '1');
+}
+
+console.log('\na letter the owner wrote by hand is not the quote going out');
+{
+  // A thread of its own with an offer genuinely waiting in it. Written against the earlier thread
+  // first, where the quote had already been marked sent, this passed whether or not the rule
+  // existed -- nothing was waiting, so nothing could be mistaken for it.
+  arrive({
+    id: 'note0', thread: 'th-note', from: 'nils@example.com', subject: 'Hello',
+    text: 'lvp, 500 sq ft, kyle tx',
+    extracted: { intent: 'new_quote', material: 'lvp', area_sqft: 500, area_unit: 'sqft',
+      city: 'kyle', evidence: { material: 'lvp', area_sqft: '500', area_unit: 'sq ft', city: 'kyle' } },
+  });
+  const priced = priceIt('note0');
+  const [letter] = composeQuotes(whatTheQuoteNeeds('note0', priced.written.offer_id));
+  putForward('note0', priced.written.offer_id, 'th-note', letter.the_letter_itself);
+  check('an offer really is waiting in this thread',
+    ask(`SELECT status FROM offers WHERE id = ${priced.written.offer_id}`), 'awaiting_approval');
+
+  // an outbound letter, in the customer's own thread, while that offer waits -- and still not the
+  // quote, because it carries none of the offer's figures
+  arrive({ id: 'note1', thread: 'th-note', from: 'flooring.demo.austin@gmail.com',
+    text: 'Quick note before the quote goes out: I will follow up tomorrow.',
+    extracted: { intent: 'other', evidence: {} } });
+  takeItOn('note1');
+  const note = whatItAnswers('note1', 'th-note');
+  check('a letter written by hand does not count as the quote leaving', note.the_quote_went_out, false);
+  check('and no offer is attached to it', note.offer_id, null);
+  check('so the offer is still waiting for somebody to send it',
+    ask(`SELECT status FROM offers WHERE id = ${priced.written.offer_id}`), 'awaiting_approval');
+
+  // and the letter that does carry them is recognised
+  arrive({ id: 'note2', thread: 'th-note', from: 'flooring.demo.austin@gmail.com',
+    text: letter.the_letter_itself, extracted: { intent: 'other', evidence: {} } });
+  takeItOn('note2');
+  const real = whatItAnswers('note2', 'th-note');
+  check('the letter carrying the figures is the quote', real.the_quote_went_out, true);
+  check('and it is the right offer', Number(real.offer_id), Number(priced.written.offer_id));
 }
 
 console.log('\nwith nothing to compare, nothing is claimed about who wrote what');

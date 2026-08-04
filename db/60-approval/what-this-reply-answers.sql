@@ -25,12 +25,33 @@ WITH this_letter AS (
    WHERE m.gmail_message_id = $1::text
 ),
 waiting AS (
-  -- the offer this letter would be carrying, if it is carrying one. Tied by the customer's thread,
-  -- which is where the draft was left, and only one still waiting can be the one going out.
+  -- The offer this letter is carrying, identified by the letter carrying its figures.
+  --
+  -- Thread membership alone was not enough and was wrong in two ways at once. The owner writes in
+  -- the customer's own conversation -- that is the whole point of leaving the draft there -- so an
+  -- ordinary note of her own ("I will follow up tomorrow") is an outbound message in a thread with
+  -- an offer waiting, and counted as the quote going out. The offer was then marked sent to
+  -- somebody who never received it, which is worse than a wrong statistic: the reminder reads that
+  -- status, so nothing would ever have chased the draft still lying unsent.
+  --
+  -- And with two offers waiting in one thread, the newest was taken whichever was sent.
+  --
+  -- The figures answer both. They are generated from this offer and printed as one line, so a note
+  -- does not carry them and a rewritten quote still does -- removing the price is not an edit to a
+  -- quote, it is not sending one. Formatted here exactly as the composer formats it, because it is
+  -- that string being looked for and not a number.
+  --
+  -- Strict on purpose. Failing to recognise a quote leaves the offer waiting and the owner
+  -- reminded, which is a nuisance; recognising the wrong letter tells a customer's job that a price
+  -- reached them when it did not.
   SELECT o.id, o.order_id, o.total_low, o.total_high, o.letter_text
     FROM offers o
    WHERE o.status = 'awaiting_approval'
      AND o.approval_thread_id = $2::text
+     AND o.total_low IS NOT NULL
+     AND (SELECT body FROM this_letter) LIKE
+         '%$' || to_char(round(o.total_low),  'FM999,999,999')
+             || ' to $' || to_char(round(o.total_high), 'FM999,999,999') || '%'
    ORDER BY o.created_at DESC
    LIMIT 1
 ),

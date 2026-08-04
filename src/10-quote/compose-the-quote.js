@@ -41,9 +41,14 @@ const readable = (lines) => (lines || []).map((line) => {
 // Gmail threads on the subject as well as on the thread id, so the reply carries the subject it is
 // replying to. Prefixed once and never twice: a conversation five letters deep would otherwise read
 // "Re: Re: Re: Re: Laminate".
+//
+// An empty subject stays empty. Gmail will only attach a draft to a thread whose subject matches,
+// so inventing one for a letter that arrived without a subject puts the draft beside the
+// conversation instead of inside it -- and the whole point of this is that the customer's own
+// conversation is where it waits.
 const replyTo = (subject) => {
   const said = String(subject || '').trim();
-  if (!said) return 'Your flooring quote';
+  if (!said) return '';
   return /^re\s*:/i.test(said) ? said : `Re: ${said}`;
 };
 

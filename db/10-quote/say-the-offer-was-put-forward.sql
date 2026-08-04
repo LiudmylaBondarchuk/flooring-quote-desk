@@ -16,7 +16,9 @@ WITH moved AS (
          approval_thread_id = $3::text,
          -- the letter as it was drafted. What actually reaches the customer is whatever the owner sends,
          -- which may not be this: a draft can be edited, and that is the point of a draft. This is
-         -- overwritten with what was really sent once it comes back through the mailbox.
+         -- kept as drafted. What actually reached the customer is the sent message itself, tied
+         -- to this offer when it comes back through the mailbox; the two are separate facts and
+         -- overwriting one with the other would destroy the only evidence they ever differed.
          letter_text = $4::text
    WHERE id = $2::int AND status = 'draft'
   RETURNING id, order_id
