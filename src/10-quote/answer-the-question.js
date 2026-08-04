@@ -43,6 +43,11 @@ return $input.all().map((item, i) => {
   }
 
   const weDo = q.we_do === true || q.we_do === 't';
+  // An opening, because every other letter has one and this is the one most likely to be the first
+  // thing anybody reads from the firm. Absent from the table, the letter still goes -- a missing
+  // greeting is a worse letter, not a broken one, and refusing to answer somebody over it would be
+  // the wrong trade.
+  const opening = String(q.opening || '').trim();
   const answer = String(q.answer).trim();
   const closing = String(q.what_next || '').trim();
   const signature = String(q.signature || '');
@@ -51,9 +56,8 @@ return $input.all().map((item, i) => {
   // rate for work that was just declined, or asking for the square footage of it, reads as not
   // having listened -- and the refusal is the whole of what that letter has to say.
   const rates = weDo ? rateBlock(q) : '';
-  const body = weDo && closing
-    ? `${answer}${rates}\n\n${closing}${signature}`
-    : `${answer}${signature}`;
+  const said = weDo && closing ? `${answer}${rates}\n\n${closing}` : answer;
+  const body = `${opening ? `${opening}\n\n` : ''}${said}${signature}`;
 
   return {
     json: {
