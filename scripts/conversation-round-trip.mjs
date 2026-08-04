@@ -1249,7 +1249,12 @@ console.log('\na question about what the firm does gets an answer');
   const yes = arrive({
     id: 'ask1', thread: 'th-ask1', from: 'cal@example.com',
     text: 'do you install laminate?',
-    extracted: { intent: 'pre_sales_question', evidence: {} },
+    // the material is quoted, as it is in a real letter -- the gate recognises it, and the rates
+    // that come back are narrowed to it. Left with no evidence at all, as this fixture had it, the
+    // gate settles nothing and the whole price list is shown, which is right for a question that
+    // names no material and wrong as a test of one that does.
+    extracted: { intent: 'pre_sales_question', material: 'laminate',
+      evidence: { material: 'laminate' } },
   });
   check('it opens no order', yes.order_id, null);
   const d1 = deserves('ask1');
@@ -1262,7 +1267,27 @@ console.log('\na question about what the firm does gets an answer');
   check('in the words a person wrote',
     /roughly how many square feet/.test(a1.body), true);
   check('it goes back to whoever asked', a1.to, 'cal@example.com');
-  check('with no figure in it', /\$|[0-9]{3,}/.test(a1.body), false);
+
+  // The first answer anybody gets carries a figure. A published range is not a quote -- it commits
+  // nobody and needs no measurements -- and it is the one thing somebody wants before anything
+  // else. This check used to assert the opposite, that no figure appeared at all, which is the
+  // behaviour being replaced: the desk answered "yes we do that" and then asked two questions
+  // before saying anything about money.
+  check('the answer carries what the work costs', a1.quoted_a_rate, true);
+  check('in the words a person wrote', /Here is what it costs, installed/.test(a1.body), true);
+  check('with the rate from the price list',
+    /Laminate standard: \$4-\$8 per sq ft/.test(a1.body), true);
+  check('and the dearer one beside it',
+    /Laminate premium \(water-resistant\): \$6-\$10 per sq ft/.test(a1.body), true);
+  // narrowed to what was asked about: somebody asking after laminate is not shown the whole book
+  check('and nothing they did not ask about',
+    /Engineered wood|Carpet \+ pad|Sheet vinyl|Luxury vinyl/.test(a1.body), false);
+  // stairs are per step and levelling is per square foot of trouble; neither can be honestly
+  // quoted to somebody who has not been measured
+  check('nor anything that only a visit can price',
+    /Stair nosing/.test(a1.body), false);
+  check('the rates come before the question, not after',
+    a1.body.indexOf('per sq ft') < a1.body.indexOf('roughly how many square feet'), true);
 
   const no = arrive({
     id: 'ask2', thread: 'th-ask2', from: 'dot@example.com',
@@ -1273,6 +1298,9 @@ console.log('\na question about what the firm does gets an answer');
   check('a service the firm does not offer is answered too',
     /do not install tile/.test(a2.body), true);
   check('and is not followed by asking for the size', a2.asks_for_more, false);
+  // a rate quoted straight after a refusal reads as not having listened
+  check('nor by a price for work that was just declined', a2.quoted_a_rate, false);
+  check('and no rate appears anywhere in it', /per sq ft/.test(a2.body), false);
 
   const held = arrive({
     id: 'ask3', thread: 'th-ask3', from: 'eve@example.com',
