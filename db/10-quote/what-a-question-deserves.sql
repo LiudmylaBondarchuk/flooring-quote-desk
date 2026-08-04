@@ -8,7 +8,7 @@
 
 WITH asked AS (
   SELECT m.gmail_message_id, m.contact_email, m.thread_id, m.category,
-         m.service_asked_about, m.order_id,
+         m.service_asked_about, m.order_id, m.material_category,
          coalesce(m.auto_blocked, false) AS auto_blocked
     FROM messages m
    WHERE m.gmail_message_id = $1::text
@@ -23,6 +23,30 @@ next_words AS (
 ),
 signature AS (
   SELECT body FROM reply_templates WHERE key = 'signature'
+),
+-- What the work costs per square foot, so the first answer somebody gets carries a figure.
+--
+-- The question this branch answers is "do you do this at all", and until now the reply said yes
+-- and then asked for the size and the town. That is the pause this desk exists to remove: the one
+-- thing anybody wants to know first is what it costs, and the rates are published -- a range from
+-- the price list is not a quote, it commits nobody, and it can be said before anything else is
+-- known. The other branch of this same lane has said it all along; this one had not.
+--
+-- Narrowed to the material the gate recognised in the letter, and to everything the firm lays when
+-- it recognised none. Somebody who asked about laminate is shown laminate rather than a wall of
+-- every floor in the book.
+--
+-- Only floors. Stairs are charged per step and levelling per square foot of trouble, and neither
+-- can be honestly quoted to somebody who has not been measured -- they are named at the visit.
+rates AS (
+  SELECT json_agg(json_build_object('product', b.product,
+                                    'rate_low', b.rate_low,
+                                    'rate_high', b.rate_high) ORDER BY b.rate_low, b.id) AS bands
+    FROM price_bands b
+   WHERE b.active
+     AND b.component = 'floor'
+     AND (b.category = (SELECT material_category FROM asked)
+          OR (SELECT material_category FROM asked) IS NULL)
 )
 SELECT
   a.gmail_message_id,
@@ -33,6 +57,8 @@ SELECT
   w.answer,
   (SELECT body FROM next_words)                       AS what_next,
   (SELECT body FROM signature)                        AS signature,
+  (SELECT bands FROM rates)                           AS bands,
+  (SELECT body FROM reply_templates WHERE key = 'rates_preamble') AS rates_preamble,
   a.auto_blocked,
   a.service_asked_about IS NOT NULL
     AND w.answer IS NOT NULL
