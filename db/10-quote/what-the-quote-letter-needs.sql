@@ -18,7 +18,11 @@ the_job AS (
    WHERE j.id = (SELECT order_id FROM the_offer)
 ),
 the_letter AS (
-  SELECT contact_email, thread_id, from_name, auto_blocked
+  -- the subject as it arrived, because the draft goes into the customer's own conversation and
+  -- Gmail stitches a thread from the subject as well as from the thread id. A draft carrying a
+  -- subject of its own would sit beside the conversation rather than in it.
+  SELECT contact_email, thread_id, from_name, auto_blocked,
+         raw_email ->> 'subject' AS subject
     FROM messages
    WHERE gmail_message_id = $1::text
 ),
@@ -37,7 +41,7 @@ SELECT
   f.breakdown,
   f.pricing_version,
   j.material_category, j.area_sqft, j.city,
-  l.contact_email, l.thread_id, l.from_name,
+  l.contact_email, l.thread_id, l.from_name, l.subject,
   coalesce(l.auto_blocked, false)           AS auto_blocked,
   w.opening, w.closing, w.signature,
   f.id IS NOT NULL

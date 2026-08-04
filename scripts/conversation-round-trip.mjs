@@ -111,12 +111,16 @@ const VISIT_NEXT = aheadUtc(2);
 const VISIT_LATER = aheadUtc(3);
 const VISIT_FAR = aheadUtc(36);
 
-const arrive = ({ id, thread, from, text, extracted, headers, labels }) => {
+const arrive = ({ id, thread, from, text, subject, extracted, headers, labels }) => {
   if (idsUsed.has(id)) throw new Error(`the message id ${id} is already used by another scenario`);
   idsUsed.add(id);
   const [prepared] = node(prepareSource, [{
     id, threadId: thread, labelIds: labels || ['INBOX'],
     from: { value: [{ address: from, name: from.split('@')[0] }] },
+    // Only where a scenario gives one. A subject is text the gate reads like any other, so
+    // handing every fixture the same words would quietly reclassify scenarios that were written
+    // to have nothing readable in them.
+    subject: subject || '',
     text, html: '', headers: headers || {},
   }]);
   run(['-c', fill(logSql, logParams(prepared.json))]);
@@ -193,13 +197,8 @@ const approvalSql = (n) => read('db', '60-approval', `${n}.sql`).replace(/;\s*$/
 const approvalHandoff = params(join('db', '60-approval', 'accept-handoff.params.json'));
 const takeItOn = (id) => rowOf(approvalSql('accept-handoff'),
   approvalHandoff({ gmail_message_id: id }));
-const readSource = read('src', '60-approval', 'did-she-say-send-it.js');
 const whatItAnswers = (id, thread) => JSON.parse(ask(
   `SELECT row_to_json(t) FROM (${fill(approvalSql('what-this-reply-answers'), [id, thread])}) t`));
-const didSheSaySendIt = (...answers) => new Function('$input', '$', readSource)(
-  { all: () => answers.map((json) => ({ json })) },
-  (name) => { throw new Error(`the reading reached back to ${name} instead of its input`); },
-).map((r) => r.json);
 const sayItWentOut = (id, offerId) =>
   rowOf(approvalSql('say-the-quote-went-out'), [id, offerId]);
 const recordAsk = (id, orderId, asking) => rowOf(quoteSql('say-we-asked'), [id, orderId, asking]);
@@ -945,10 +944,10 @@ console.log('\nour own letter coming back into the mailbox');
   });
   check('the gate knows it is ours', ourOwn.decision.category, 'owner_reply');
   check('it goes to the lane that reads answers', ourOwn.decision.route, 'approval');
-  // which is where it stops: that lane looks for an offer waiting in this very thread, and the
-  // desk's own words are not an assent to anything
-  const [readOurs] = didSheSaySendIt(whatItAnswers('l2', 'th-loop'));
-  check('and our own letter is not read as an approval', readOurs.approved, false);
+  // which is where it stops: that lane looks for an offer waiting in this very thread, and there
+  // is none, so nothing this letter says can be mistaken for a quote going out
+  check('and our own letter is not read as a quote leaving',
+    whatItAnswers('l2', 'th-loop').the_quote_went_out, false);
   check('and nothing is handled', ourOwn.decision.handling, 'none');
   // It is linked to the conversation's order, which is right: our own letter belongs to that
   // exchange and a person reading the thread should see it. What matters is that it carries nothing
@@ -1096,13 +1095,12 @@ console.log('\na price becomes a letter, and it only ever reaches the owner');
     Number(needs.total_low), Number(priced.quote.total_low));
 
   const [letter] = composeQuotes(needs);
-  check('it goes to the owner', letter.to, 'flooring.demo.austin@gmail.com');
-  check('and says so plainly', letter.reaches_the_customer, false);
-  check('the subject names who it is for', /vera@example\.com/.test(letter.subject), true);
-  check('the owner is told it has not been sent',
-    /has not been sent/.test(letter.body), true);
-  check('the letter for the customer is in there, whole',
-    letter.body.includes(letter.the_letter_itself), true);
+  check('it is addressed to the customer', letter.write_to, 'vera@example.com');
+  check('and it waits in their own conversation', letter.thread_id, needs.thread_id);
+  check('the draft is the customer letter and nothing else',
+    letter.body, letter.the_letter_itself);
+  check('with nothing wrapped round it for the owner to delete',
+    /has not been sent/.test(letter.body), false);
   check('with the words a person wrote, not the code',
     /Thanks for the details/.test(letter.the_letter_itself), true);
   check('and it is signed', letter.the_letter_itself.trimEnd().endsWith(signature()), true);
@@ -1149,7 +1147,7 @@ console.log('\ntwo quotes in one poll are both written');
                                 whatTheQuoteNeeds('quote3', two.written.offer_id));
   check('both were written', letters.length, 2);
   check('each names its own customer',
-    [letters[0].for_whom, letters[1].for_whom], ['walt@example.com', 'xena@example.com']);
+    [letters[0].write_to, letters[1].write_to], ['walt@example.com', 'xena@example.com']);
   check('and neither carries the other\'s figure',
     letters[0].the_letter_itself === letters[1].the_letter_itself, false);
 }
@@ -1322,44 +1320,53 @@ console.log('\nthe owner says send it, and only then does the customer get a pri
 {
   const a = arrive({
     id: 'appr1', thread: 'th-appr1', from: 'yuri@example.com',
+    // a subject with no word any rule reads, so this scenario tests the draft's threading and
+    // not, by accident, what the gate makes of a different sentence
+    subject: 'Hello',
     text: 'lvp, 350 sq ft, in kyle tx',
     extracted: { intent: 'new_quote', material: 'lvp', area_sqft: 350, area_unit: 'sqft',
       city: 'kyle', evidence: { material: 'lvp', area_sqft: '350', area_unit: 'sq ft', city: 'kyle' } },
   });
   const priced = priceIt('appr1');
   const [letter] = composeQuotes(whatTheQuoteNeeds('appr1', priced.written.offer_id));
-  putForward('appr1', priced.written.offer_id, 'th-owner-1', letter.the_letter_itself);
+  // the draft is the customer's letter, in the customer's conversation. Nothing about it is
+  // addressed to her -- she is the one holding it, not the one receiving it.
+  check('the draft is addressed to the customer', letter.write_to, 'yuri@example.com');
+  check('and it goes into their own conversation', letter.thread_id, 'th-appr1');
+  check('carrying the subject it is replying to', /^Re: /.test(letter.subject), true);
+  putForward('appr1', priced.written.offer_id, 'th-appr1', letter.the_letter_itself);
 
-  // her answer arrives like any other email, from the desk's own address, in the thread the
-  // letter went out in
-  arrive({ id: 'yes1', thread: 'th-owner-1', from: 'flooring.demo.austin@gmail.com',
-    text: 'send it', extracted: { intent: 'other', evidence: {} } });
-  const taken = takeItOn('yes1');
+  // she presses send. It reaches the mailbox again like every other letter the desk sends, in the
+  // customer's thread, because that is where the draft was.
+  arrive({ id: 'sent1', thread: 'th-appr1', from: 'flooring.demo.austin@gmail.com',
+    text: letter.the_letter_itself, extracted: { intent: 'other', evidence: {} } });
+  const taken = takeItOn('sent1');
   check('the lane takes the message on', taken.handled_by, '60 Approval — Flooring');
   check('into a status the database allows', taken.status, 'closed');
-  const answers = whatItAnswers('yes1', 'th-owner-1');
+  const answers = whatItAnswers('sent1', 'th-appr1');
   check('the offer waiting in that thread is found', Number(answers.offer_id), Number(priced.written.offer_id));
-  check('and it knows who it is for', answers.contact_email, 'yuri@example.com');
-  check('with a message of theirs to reply to', answers.reply_to, 'appr1');
+  check('and it knows who it was for', answers.contact_email, 'yuri@example.com');
+  check('the sending is the answer, and it is read as one', answers.the_quote_went_out, true);
 
-  const [read1] = didSheSaySendIt(answers);
-  check('she said send it', read1.approved, true);
-  check('what goes out is the letter she read', read1.body, letter.the_letter_itself);
-  check('to the customer, not to her', read1.to, 'yuri@example.com');
-
-  const went = sayItWentOut('yes1', priced.written.offer_id);
+  const went = sayItWentOut('sent1', priced.written.offer_id);
   check('the offer is sent', went.now_sent, 't');
   check('and the order records the move', went.change_recorded, 't');
+  check('sent as drafted, so the desk was not overruled', went.she_said, 'approved');
+  check('and what the customer read is tied to the offer it answers',
+    went.letter_tied_to_offer, 't');
+  check('so the letter they actually received is one join away',
+    ask(`SELECT gmail_message_id FROM messages WHERE offer_id = ${priced.written.offer_id} AND is_outbound`),
+    'sent1');
   check('the offer says so itself',
     ask(`SELECT status FROM offers WHERE id = ${priced.written.offer_id}`), 'sent');
 
-  const twice = sayItWentOut('yes1', priced.written.offer_id);
-  check('a second reply in the thread sends nothing again', twice.now_sent, 'f');
-  const after = whatItAnswers('yes1', 'th-owner-1');
-  check('and there is nothing left waiting there', after.an_offer_is_waiting, false);
+  const twice = sayItWentOut('sent1', priced.written.offer_id);
+  check('a second letter in the thread sends nothing again', twice.now_sent, 'f');
+  check('and there is nothing left waiting there',
+    whatItAnswers('sent1', 'th-appr1').the_quote_went_out, false);
 }
 
-console.log('\nanything short of yes sends nothing');
+console.log('\nwhat she sends is what the record keeps, even when she changed it');
 {
   const a = arrive({
     id: 'appr2', thread: 'th-appr2', from: 'zoe@example.com',
@@ -1369,38 +1376,44 @@ console.log('\nanything short of yes sends nothing');
   });
   const priced = priceIt('appr2');
   const [letter] = composeQuotes(whatTheQuoteNeeds('appr2', priced.written.offer_id));
-  putForward('appr2', priced.written.offer_id, 'th-owner-2', letter.the_letter_itself);
+  putForward('appr2', priced.written.offer_id, 'th-appr2', letter.the_letter_itself);
 
-  const readOf = (id, text) => {
-    arrive({ id, thread: 'th-owner-2', from: 'flooring.demo.austin@gmail.com',
-      text, extracted: { intent: 'other', evidence: {} } });
-    takeItOn(id);
-    return didSheSaySendIt(whatItAnswers(id, 'th-owner-2'))[0];
-  };
+  // Editing the draft is the whole reason it is a draft. The shape this replaced could not take
+  // an edit at all: `change` was one of the words that meant no, so "almost right, let me change
+  // one line" refused the quote and sent nothing.
+  const edited = `${letter.the_letter_itself}\n\nP.S. I could start the week after next.`;
+  arrive({ id: 'sent2', thread: 'th-appr2', from: 'flooring.demo.austin@gmail.com',
+    text: edited, extracted: { intent: 'other', evidence: {} } });
+  takeItOn('sent2');
+  const answers = whatItAnswers('sent2', 'th-appr2');
+  check('an edited letter still counts as the quote going out', answers.the_quote_went_out, true);
 
-  check('"not yet" is not a yes', readOf('no1', 'not yet, change the removal line').approved, false);
-  check('and it is recognised as a refusal', readOf('no2', 'no, hold off').refused, true);
-  check('"hold on" is not a yes', readOf('no3', 'hold on').approved, false);
-  check('a bare thanks is not a yes', readOf('no4', 'thanks').approved, false);
-  check('and the letter the desk itself sent is not a yes',
-    readOf('no5', 'This quote is ready and has not been sent. For: zoe@example.com').approved, false);
-  check('the offer is still waiting after all of that',
-    ask(`SELECT status FROM offers WHERE id = ${priced.written.offer_id}`), 'awaiting_approval');
-
-  check('but yes still works', readOf('yes2', 'yes').approved, true);
-  check('and so does go ahead', readOf('yes3', 'go ahead').approved, true);
+  const went2 = sayItWentOut('sent2', priced.written.offer_id);
+  // Both facts are kept, because they are two different facts. What the arithmetic proposed stays
+  // on the offer; what the customer read is the message, tied to that offer; and the event says
+  // which of the two happened. Overwriting one with the other was tried and destroys the only
+  // evidence they ever differed -- and with it the answer to "how often is the desk overruled".
+  check('she rewrote it, and the record says so', went2.she_said, 'rejected');
+  check('the drafted wording is kept as it was drafted',
+    ask(`SELECT letter_text LIKE '%week after next%' FROM offers WHERE id = ${priced.written.offer_id}`), 'f');
+  check('and what she really sent is tied to the same offer',
+    ask(`SELECT body LIKE '%week after next%' FROM messages WHERE offer_id = ${priced.written.offer_id} AND is_outbound`), 't');
+  // the one question this exists to answer, asked the way it would really be asked
+  check('the two can be counted apart',
+    ask(`SELECT count(*) FROM order_events WHERE field = 'letter_text' AND kind = 'rejected'`), '1');
+  check('and so can the times she sent it as written',
+    ask(`SELECT count(*) FROM order_events WHERE field = 'letter_text' AND kind = 'approved'`), '1');
 }
 
-console.log('\na reply in a thread with nothing waiting answers nothing');
+console.log('\na letter in a thread with nothing waiting is not a quote going out');
 {
   arrive({ id: 'stray1', thread: 'th-nothing', from: 'flooring.demo.austin@gmail.com',
-    text: 'send it', extracted: { intent: 'other', evidence: {} } });
+    text: 'just checking in on this one', extracted: { intent: 'other', evidence: {} } });
   takeItOn('stray1');
   const answers = whatItAnswers('stray1', 'th-nothing');
-  check('no offer is found', answers.an_offer_is_waiting, false);
-  const [readIt] = didSheSaySendIt(answers);
-  check('so the words do not matter', readIt.approved, false);
-  check('and there is nobody to write to', readIt.to, null);
+  check('no offer is found', answers.offer_id, null);
+  check('so nothing is read as a quote leaving', answers.the_quote_went_out, false);
+  check('and there is nobody it would have been for', answers.contact_email, null);
 }
 
 console.log('\nthe gate can hold a letter the wording would have allowed');
