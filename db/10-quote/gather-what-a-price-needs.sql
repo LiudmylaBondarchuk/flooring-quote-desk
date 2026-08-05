@@ -20,26 +20,21 @@
 -- offers, and quoting it because it is still in the table is how a customer is sold something
 -- that cannot be delivered.
 
+-- Both questions are asked of the same functions the router asks before sending anything here, so
+-- that the two lanes cannot come to different answers about the same job. Null, because by the time
+-- a job reaches this lane every letter in the conversation is filed against it.
 WITH job AS (
   SELECT o.id,
-         o.material_category IS NOT NULL
-           AND o.area_sqft IS NOT NULL
-           AND o.zone IS NOT NULL
-           AND o.zone <> 'out'
-           AND o.state NOT IN ('booked', 'done', 'lost')                        AS fully_described,
-         -- one email in the conversation being held for a person holds the whole job: a commercial
-         -- property does not stop being one because the next letter is ordinary
-         NOT EXISTS (SELECT 1 FROM messages x
-                      WHERE x.order_id = o.id
-                        AND (x.danger OR coalesce(x.auto_blocked, false)))       AS nobody_looking,
+         a_job_is_fully_described(o)                                             AS fully_described,
+         NOT a_job_is_held_for_a_person(o.id, NULL)                              AS free_to_price,
          EXISTS (SELECT 1 FROM messages x
                   WHERE x.order_id = o.id AND x.segment = 'commercial')          AS commercial
     FROM orders o
 )
 SELECT
   m.gmail_message_id,
-  coalesce(j.fully_described AND j.nobody_looking AND NOT j.commercial, false)   AS pricing_allowed,
-  CASE WHEN coalesce(j.fully_described AND j.nobody_looking AND NOT j.commercial, false)
+  coalesce(j.fully_described AND j.free_to_price, false)   AS pricing_allowed,
+  CASE WHEN coalesce(j.fully_described AND j.free_to_price, false)
        THEN 'green' ELSE m.gate_color END                                        AS gate_color,
   CASE WHEN j.commercial THEN 'commercial' ELSE m.segment END                    AS segment,
   m.gate_color                                                                   AS this_email_was,

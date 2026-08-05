@@ -80,29 +80,17 @@ logged AS (
 -- its ladder -- a complaint, an answer to an offer, money, a date -- was decided on words in this
 -- letter rather than on the state of the job, and is not for this to overturn.
 --
--- The last clause is the same hold the quote lane keeps, and has to be repeated because the two
--- lanes cannot share a statement: one email held for a person, or one from a managing agent, holds
--- the whole job -- a commercial property does not stop being one because the next letter is
--- ordinary. Without it a held job is sent to be priced, the lane refuses as it is meant to, finds
--- nothing missing to ask about, and the customer hears nothing at all. The check that the letter
--- completing a held job stays where it was fails if this clause is removed, which is the only thing
--- keeping the two definitions honest with each other.
---
--- This letter is named as well as the ones already on the order, because its own order_id is set
--- further down in this same statement and it would otherwise be counted as belonging to nothing.
+-- Both questions are asked of the functions the quote lane asks, so there is one answer rather than
+-- two that can drift apart. a_job_is_fully_described takes the row this statement has just written,
+-- not the table: everything in here shares one snapshot, so reading orders would answer about the
+-- job as it stood before this letter, which is the mistake being fixed. This letter is named to the
+-- hold because it is not filed against the order until further down.
 ready AS (
-  SELECT coalesce(a.id IS NOT NULL
-         AND a.material_category IS NOT NULL
-         AND a.area_sqft IS NOT NULL
-         AND a.zone IS NOT NULL
-         AND a.zone <> 'out'
-         AND a.state NOT IN ('booked', 'done', 'lost')
+  SELECT coalesce(a_job_is_fully_described(a)
+         AND NOT a_job_is_held_for_a_person(a.id, $1)
          AND $4::text IN ('existing_project', 'unknown')
-         AND NOT EXISTS (SELECT 1 FROM offers f WHERE f.order_id = a.id)
-         AND NOT EXISTS (SELECT 1 FROM messages x
-                          WHERE (x.order_id = a.id OR x.gmail_message_id = $1)
-                            AND (x.danger OR coalesce(x.auto_blocked, false)
-                                 OR x.segment = 'commercial')), false) AS price_is_what_was_waiting
+         AND NOT EXISTS (SELECT 1 FROM offers f WHERE f.order_id = a.id), false)
+                                                  AS price_is_what_was_waiting
     FROM applied a
    -- reads logged, so the change log is forced to run first, for the same reason applied reads
    -- before. Pulling on applied from here is enough to make the planner run the update early, and
