@@ -127,7 +127,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- A computed price that is not written down is a price nobody can be held to. This is where it\n-- becomes a record: the range, the parts it is made of, and the version of the arithmetic that\n-- produced it, so a quote given today can still be explained after the price list has moved.\n--\n-- One statement, so an offer cannot exist without the order having moved, and the order cannot\n-- read as quoted with no offer behind it.\n--\n-- The order's previous state is read before it changes and written into the event, because\n-- \"quoted\" is only half the story — a first quote and a re-quote after the customer changed the\n-- room are different things, and the difference is what it was before.\n--\n-- Nothing here closes anything. The offer is a draft: it exists, it has not been sent, and no\n-- part of this decides whether it should be.\n\nWITH before AS (\n  SELECT id, state FROM orders WHERE id = $2::int FOR UPDATE\n),\nmade AS (\n  INSERT INTO offers (order_id, subtotal_low, subtotal_high, total_low, total_high,\n                      breakdown, pricing_version, status)\n  SELECT b.id, $3::numeric, $4::numeric, $5::numeric, $6::numeric, $7::jsonb, $8::text, 'draft'\n    FROM before b\n   WHERE b.state NOT IN ('booked', 'done', 'lost')\n  RETURNING id, order_id\n),\nmoved AS (\n  UPDATE orders o SET state = 'quoted', updated_at = now()\n   WHERE o.id = (SELECT order_id FROM made)\n     AND (SELECT state FROM before) IS DISTINCT FROM 'quoted'\n  RETURNING o.id\n),\nnoted AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT id, $1, 'state_change', 'state', (SELECT state FROM before), 'quoted' FROM moved\n  RETURNING 1\n),\nlinked AS (\n  UPDATE messages SET offer_id = (SELECT id FROM made)\n   WHERE gmail_message_id = $1 AND (SELECT count(*) FROM made) = 1\n  RETURNING 1\n)\nSELECT\n  $1::text                                     AS gmail_message_id,\n  (SELECT id FROM made)                        AS offer_id,\n  (SELECT order_id FROM made)                  AS order_id,\n  (SELECT state FROM before)                   AS state_before,\n  (SELECT count(*) FROM moved)::int = 1        AS order_moved,\n  (SELECT count(*) FROM noted)::int = 1        AS change_recorded,\n  (SELECT count(*) FROM linked)::int = 1       AS message_linked;",
+        "query": "-- A computed price that is not written down is a price nobody can be held to. This is where it\n-- becomes a record: the range, the parts it is made of, and the version of the arithmetic that\n-- produced it, so a quote given today can still be explained after the price list has moved.\n--\n-- One statement, so an offer cannot exist without the order having moved, and the order cannot\n-- read as quoted with no offer behind it.\n--\n-- The order's previous state is read before it changes and written into the event, because\n-- \"quoted\" is only half the story — a first quote and a re-quote after the customer changed the\n-- room are different things, and the difference is what it was before.\n--\n-- Nothing here closes anything. The offer is a draft: it exists, it has not been sent, and no\n-- part of this decides whether it should be.\n\nWITH before AS (\n  SELECT id, state FROM orders WHERE id = $2::int FOR UPDATE\n),\n-- One job, one live price. A customer who writes again while the first letter is still in the\n-- owner's drafts used to get a second price beside the first, and if the new letter carried\n-- different figures the older draft was already wrong -- with nothing to say so, and both sitting\n-- in the same conversation.\n--\n-- What is waiting is whatever has not gone out: a draft, or one put forward and not yet sent.\nwaiting AS (\n  SELECT id, draft_id, total_low, total_high\n    FROM offers\n   WHERE order_id = (SELECT id FROM before)\n     AND status IN ('draft', 'awaiting_approval')\n   ORDER BY created_at DESC\n   LIMIT 1\n),\n-- and whether the arithmetic has changed its mind. Same figures means the letter already written\n-- is still the right letter: nothing is written, and the owner is told the customer wrote again.\n-- Different figures mean the waiting letter is wrong, and a wrong letter is worse than none.\nverdict AS (\n  SELECT (SELECT id FROM waiting) IS NULL                       AS nothing_waiting,\n         (SELECT total_low  FROM waiting) IS NOT DISTINCT FROM $5::numeric\n     AND (SELECT total_high FROM waiting) IS NOT DISTINCT FROM $6::numeric AS same_figures\n),\nsuperseded AS (\n  UPDATE offers SET status = 'expired'\n   WHERE id = (SELECT id FROM waiting)\n     AND NOT (SELECT nothing_waiting FROM verdict)\n     AND NOT (SELECT same_figures FROM verdict)\n  RETURNING id, draft_id\n),\nmade AS (\n  INSERT INTO offers (order_id, subtotal_low, subtotal_high, total_low, total_high,\n                      breakdown, pricing_version, status)\n  SELECT b.id, $3::numeric, $4::numeric, $5::numeric, $6::numeric, $7::jsonb, $8::text, 'draft'\n    FROM before b\n   WHERE b.state NOT IN ('booked', 'done', 'lost')\n     -- nothing new where the same figures are already waiting to go out\n     AND ((SELECT nothing_waiting FROM verdict) OR NOT (SELECT same_figures FROM verdict))\n  RETURNING id, order_id\n),\nmoved AS (\n  UPDATE orders o SET state = 'quoted', updated_at = now()\n   WHERE o.id = (SELECT order_id FROM made)\n     AND (SELECT state FROM before) IS DISTINCT FROM 'quoted'\n  RETURNING o.id\n),\nnoted AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT id, $1, 'state_change', 'state', (SELECT state FROM before), 'quoted' FROM moved\n  RETURNING 1\n),\nlinked AS (\n  UPDATE messages SET offer_id = (SELECT id FROM made)\n   WHERE gmail_message_id = $1 AND (SELECT count(*) FROM made) = 1\n  RETURNING 1\n)\nSELECT\n  $1::text                                     AS gmail_message_id,\n  (SELECT id FROM made)                        AS offer_id,\n  (SELECT order_id FROM made)                  AS order_id,\n  (SELECT state FROM before)                   AS state_before,\n  (SELECT count(*) FROM moved)::int = 1        AS order_moved,\n  (SELECT count(*) FROM noted)::int = 1        AS change_recorded,\n  (SELECT count(*) FROM linked)::int = 1       AS message_linked,\n  -- what the lane does next hangs on these two\n  coalesce(NOT (SELECT nothing_waiting FROM verdict)\n           AND (SELECT same_figures FROM verdict), false)\n                                               AS already_waiting,\n  (SELECT id FROM waiting)                     AS waiting_offer_id,\n  (SELECT draft_id FROM superseded)            AS stale_draft_id,\n  (SELECT total_low  FROM waiting)             AS waiting_low,\n  (SELECT total_high FROM waiting)             AS waiting_high;",
         "options": {
           "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('Gather what a price needs').item.json.order_id, $json.subtotal_low, $json.subtotal_high, $json.total_low, $json.total_high, JSON.stringify($json.breakdown), $json.pricing_version] }}"
         }
@@ -383,9 +383,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Written after the draft exists in the owner's mailbox, never before. One statement, so an offer cannot\n-- read as waiting on a draft that was never made, and the order's history cannot show a quote that\n-- the offer does not know about.\n--\n-- Only a draft moves. A second run over the same offer -- a redelivered email, a retry -- finds it\n-- already awaiting_approval and changes nothing, rather than putting a second copy of the same\n-- figure in the owner's drafts.\n\nWITH moved AS (\n  UPDATE offers\n     SET status = 'awaiting_approval',\n         -- the customer's own conversation, which is where the draft was put and where the letter\n         -- will appear when it is sent. It used to be the thread the owner was asked in, back when\n         -- the desk mailed a copy and read the reply; there is no such thread now, because there is\n         -- no such reply -- the sending is the answer.\n         approval_thread_id = $3::text,\n         -- the letter as it was drafted. What actually reaches the customer is whatever the owner sends,\n         -- which may not be this: a draft can be edited, and that is the point of a draft. This is\n         -- kept as drafted. What actually reached the customer is the sent message itself, tied\n         -- to this offer when it comes back through the mailbox; the two are separate facts and\n         -- overwriting one with the other would destroy the only evidence they ever differed.\n         letter_text = $4::text\n   WHERE id = $2::int AND status = 'draft'\n  RETURNING id, order_id\n),\nnoted AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT order_id, $1::text, 'state_change', 'offer_status', 'draft', 'awaiting_approval'\n    FROM moved\n  RETURNING 1\n)\nSELECT\n  $2::int                                  AS offer_id,\n  $3::text                                 AS approval_thread_id,\n  (SELECT count(*) FROM moved)::int = 1    AS now_waiting,\n  (SELECT count(*) FROM noted)::int = 1    AS change_recorded;",
+        "query": "-- Written after the draft exists in the owner's mailbox, never before. One statement, so an offer cannot\n-- read as waiting on a draft that was never made, and the order's history cannot show a quote that\n-- the offer does not know about.\n--\n-- Only a draft moves. A second run over the same offer -- a redelivered email, a retry -- finds it\n-- already awaiting_approval and changes nothing, rather than putting a second copy of the same\n-- figure in the owner's drafts.\n\nWITH moved AS (\n  UPDATE offers\n     SET status = 'awaiting_approval',\n         -- the customer's own conversation, which is where the draft was put and where the letter\n         -- will appear when it is sent. It used to be the thread the owner was asked in, back when\n         -- the desk mailed a copy and read the reply; there is no such thread now, because there is\n         -- no such reply -- the sending is the answer.\n         approval_thread_id = $3::text,\n         -- the letter as it was drafted. What actually reaches the customer is whatever the owner sends,\n         -- which may not be this: a draft can be edited, and that is the point of a draft. This is\n         -- kept as drafted. What actually reached the customer is the sent message itself, tied\n         -- to this offer when it comes back through the mailbox; the two are separate facts and\n         -- overwriting one with the other would destroy the only evidence they ever differed.\n         letter_text = $4::text,\n         -- and which draft it is waiting in, so that a price replaced later can have its letter\n         -- removed rather than left in the conversation beside its replacement.\n         draft_id = $5::text\n   WHERE id = $2::int AND status = 'draft'\n  RETURNING id, order_id\n),\nnoted AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT order_id, $1::text, 'state_change', 'offer_status', 'draft', 'awaiting_approval'\n    FROM moved\n  RETURNING 1\n)\nSELECT\n  $2::int                                  AS offer_id,\n  $3::text                                 AS approval_thread_id,\n  (SELECT count(*) FROM moved)::int = 1    AS now_waiting,\n  (SELECT count(*) FROM noted)::int = 1    AS change_recorded;",
         "options": {
-          "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('What the quote letter needs').item.json.offer_id, $('Compose the quote').item.json.thread_id, $('Compose the quote').item.json.the_letter_itself] }}"
+          "queryReplacement": "={{ [$('Accept handoff').item.json.gmail_message_id, $('What the quote letter needs').item.json.offer_id, $('Compose the quote').item.json.thread_id, $('Compose the quote').item.json.the_letter_itself, $('Draft the quote').item.json.id] }}"
         }
       },
       "id": "aaaa2222-0000-4000-8000-000000000024",
@@ -641,6 +641,108 @@
         1940,
         820
       ]
+    },
+    {
+      "id": "is-the-price-already-waiting-",
+      "name": "Is the price already waiting?",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "already",
+              "leftValue": "={{ $json.already_waiting }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1000,
+        900
+      ]
+    },
+    {
+      "id": "say-the-customer-wrote-again",
+      "name": "Say the customer wrote again",
+      "parameters": {
+        "jsCode": "// The line for a customer who has written again while their price is still sitting unsent.\n//\n// Nothing was written this time, and that is the point. The arithmetic came to the same figures it\n// came to before, so the letter already drafted is still the right letter -- a second one beside it\n// would be two prices in one conversation, and the owner would have to work out which of two\n// identical drafts to send.\n//\n// It is the strongest signal this desk produces. Somebody who writes twice about the same job is\n// not going cold; they are waiting. The price is already written, and the only thing between them\n// and it is a click nobody has made.\n//\n// A different figure is not this case: the waiting letter is then wrong, is removed, and a new one\n// takes its place.\n\nconst money = (n) => `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;\n\nconst OWNER = 'flooring.demo.austin@gmail.com';\n\nreturn $input.all().map((item, i) => {\n  const q = item.json || {};\n  const job = $('Gather what a price needs').itemMatching(i)?.json || {};\n\n  const town = job.city ? String(job.city).replace(/\\b[a-z]/g, (c) => c.toUpperCase()) : null;\n  const what = [job.material_category,\n    job.area_sqft ? `${Number(job.area_sqft).toLocaleString('en-US')} sq ft` : null,\n    town].filter(Boolean).join(', ');\n\n  const thread = $('Accept handoff').itemMatching(i)?.json?.thread_id;\n  const conversation = thread\n    ? `\\n🔗 <https://mail.google.com/mail/?authuser=${OWNER}#all/${thread}|Open the conversation>`\n    : '';\n\n  const message = [\n    `📣 *They have written again — the price is still in your drafts*`,\n    `💷 ${money(q.waiting_low)} to ${money(q.waiting_high)}`,\n    `🧾 ${what || 'job not described'}${conversation}`,\n    '',\n    'The figures have not changed, so nothing new was written and there is still one letter to '\n      + 'send. Somebody writing twice about the same job is waiting for it.',\n  ].join('\\n');\n\n  return { json: { ...q, message, channel: '#drafts' }, pairedItem: { item: i } };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        1020
+      ]
+    },
+    {
+      "id": "was-an-older-price-replaced-",
+      "name": "Was an older price replaced?",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "stale",
+              "leftValue": "={{ $json.stale_draft_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1240,
+        780
+      ]
+    },
+    {
+      "id": "remove-the-stale-draft",
+      "name": "Remove the stale draft",
+      "parameters": {
+        "resource": "draft",
+        "operation": "delete",
+        "draftId": "={{ $json.stale_draft_id }}"
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1480,
+        700
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": null,
+          "name": "Gmail account"
+        }
+      }
     }
   ],
   "connections": {
@@ -710,7 +812,7 @@
       "main": [
         [
           {
-            "node": "What the quote letter needs",
+            "node": "Is the price already waiting?",
             "type": "main",
             "index": 0
           }
@@ -908,6 +1010,64 @@
         [
           {
             "node": "Tell the owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is the price already waiting?": {
+      "main": [
+        [
+          {
+            "node": "Say the customer wrote again",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Was an older price replaced?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Say the customer wrote again": {
+      "main": [
+        [
+          {
+            "node": "Tell the owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Was an older price replaced?": {
+      "main": [
+        [
+          {
+            "node": "Remove the stale draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "What the quote letter needs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove the stale draft": {
+      "main": [
+        [
+          {
+            "node": "What the quote letter needs",
             "type": "main",
             "index": 0
           }

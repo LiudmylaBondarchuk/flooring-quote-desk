@@ -7,6 +7,16 @@ this says what changed between releases. Never sync the two.
 
 ## 0.2.0
 
+**One job, one live price.** A customer who wrote again while their letter was still in the owner's
+drafts got a second price beside the first. Where the new letter carried different figures the older
+draft was already wrong — and both sat in the same conversation, with nothing to say which was
+which; the only thing between the customer and the wrong number was somebody noticing at the moment
+they pressed send. The same figures are now no second price at all, just a line saying the customer
+has written again and the letter is still waiting — the strongest signal this desk produces, since
+somebody writing twice about one job is waiting for something already written. Different figures
+supersede: the older offer expires, its draft is removed from the conversation, and the new one
+takes its place.
+
 **A booking made from a different town than the price was worked out for waits for a person.** The
 booking form is where somebody types an address with the deed in hand, so the agreement takes its
 address from there — and nothing noticed when that address was in another town from the one the
