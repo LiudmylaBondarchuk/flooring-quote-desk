@@ -1,0 +1,3 @@
+{
+  "queryReplacement": "={{ [$('Say a draft is still waiting').item.json.offer_id, $('Say a draft is still waiting').item.json.order_id, $('Say a draft is still waiting').item.json.the_last_time, $('Say a draft is still waiting').item.json.state_now] }}"
+}
