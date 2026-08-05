@@ -1,0 +1,180 @@
+{
+  "name": "75 Chase — Flooring",
+  "nodes": [
+    {
+      "parameters": {
+        "width": 520,
+        "height": 200,
+        "content": "### 75 Chase — Flooring\n\nEvery six hours: quotes written and never sent.\n\nTwice, and then the job is closed. A line that repeats until it is obeyed is a line people mute."
+      },
+      "id": "purpose",
+      "name": "Purpose",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "every-six-hours",
+      "name": "Every six hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -200,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Quotes written and left unsent, and how many times the owner has been told about each.\n--\n-- A draft announces itself once, when it is written, and after that it is as quiet as the customer\n-- waiting for it. One had been sitting for five days before anybody noticed, and nothing in the\n-- system was wrong -- there was simply nobody whose job it was to look again.\n--\n-- Twice, and then never. A line that repeats until it is obeyed is a line people mute, and a muted\n-- channel is the same as no channel at all. So the second telling is also the last, and it says so;\n-- what happens after it is that the job is closed rather than chased.\n--\n-- Counted per offer rather than per order, because an order can be quoted more than once and the\n-- second quote deserves its own two tellings.\n\nWITH chases AS (\n  SELECT (e.new_value)::int AS offer_id,\n         count(*)::int      AS so_far,\n         max(e.created_at)  AS last_time\n    FROM order_events e\n   WHERE e.kind = 'asked' AND e.field = 'the_owner'\n     AND e.new_value ~ '^[0-9]+$'\n   GROUP BY 1\n)\nSELECT f.id                              AS offer_id,\n       f.order_id,\n       o.state                           AS state_now,\n       f.total_low, f.total_high,\n       f.approval_thread_id              AS thread_id,\n       o.material_category, o.area_sqft, o.city,\n       o.contact_email,\n       coalesce(c.so_far, 0)             AS said_before,\n       coalesce(c.so_far, 0) + 1 >= 2    AS the_last_time,\n       date_part('hour', now() - f.created_at)::int AS hours_waiting\n  FROM offers f\n  JOIN orders o ON o.id = f.order_id\n  LEFT JOIN chases c ON c.offer_id = f.id\n WHERE f.status = 'awaiting_approval'\n   -- a job somebody has already finished, booked or given up on is not waiting on this letter\n   AND o.state NOT IN ('booked', 'done', 'lost')\n   AND f.created_at < now() - ($1::int * interval '1 hour')\n   AND coalesce(c.so_far, 0) < 2\n   AND coalesce(c.last_time, '-infinity'::timestamptz) < now() - ($1::int * interval '1 hour')\n ORDER BY f.created_at;",
+        "options": {
+          "queryReplacement": "={{ [6] }}"
+        }
+      },
+      "id": "which-drafts",
+      "name": "Which drafts are still waiting",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        40,
+        120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// The line that says a quote was written and never sent.\n//\n// A draft announces itself once and then goes as quiet as the customer waiting for it. One sat for\n// five days; nothing was broken, there was simply nobody whose job it was to look again.\n//\n// Twice, and then never. A line that repeats until it is obeyed is a line people mute, and a muted\n// channel is the same as no channel. So the second one says plainly that it is the last and that\n// the job is being closed as it is written -- not as a threat, but because a job nobody sends a\n// price for is not an open job, and leaving it open would be the desk pretending otherwise.\n//\n// The same channel the draft was announced in, because it is the same errand: read it and send it.\n\nconst OWNER = 'flooring.demo.austin@gmail.com';\n\nconst money = (n) => `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;\n\nconst howLong = (hours) => {\n  const h = Number(hours) || 0;\n  if (h < 48) return `${h} hours`;\n  return `${Math.floor(h / 24)} days`;\n};\n\nreturn $input.all().map((row, i) => {\n  const q = row.json || {};\n\n  const town = q.city ? String(q.city).replace(/\\b[a-z]/g, (c) => c.toUpperCase()) : null;\n  const job = [q.material_category,\n    q.area_sqft ? `${Number(q.area_sqft).toLocaleString('en-US')} sq ft` : null,\n    town].filter(Boolean).join(', ');\n\n  // Straight into the conversation, chosen by address rather than by the u/ index: the index is\n  // different on every machine, and written into the path it answers 404 rather than opening the\n  // wrong mailbox.\n  const conversation = q.thread_id\n    ? `\\n🔗 <https://mail.google.com/mail/?authuser=${OWNER}#all/${q.thread_id}|Open the conversation>`\n    : '';\n\n  const last = q.the_last_time === true || q.the_last_time === 't';\n\n  const message = [\n    last\n      ? `⏳ *Still not sent — ${money(q.total_low)} to ${money(q.total_high)}*`\n      : `⏳ *A quote has been waiting ${howLong(q.hours_waiting)} — ${money(q.total_low)} to ${money(q.total_high)}*`,\n    `✉️ ${q.contact_email || 'no address on file'}`,\n    `🧾 ${job || 'job not described'}${conversation}`,\n    '',\n    last\n      ? 'This is the second time and the last. The job is closed as of now, so nothing further will '\n        + 'be said about it. Send the draft anyway if you want it to go — closing the job does not '\n        + 'delete the letter.'\n      : 'It is still sitting in your drafts. Send it, or leave it and I will say so once more before '\n        + 'closing the job.',\n  ].join('\\n');\n\n  return { json: { ...q, message, channel: '#drafts' }, pairedItem: { item: i } };\n});\n"
+      },
+      "id": "say-still-waiting",
+      "name": "Say a draft is still waiting",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        280,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "accessToken",
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.channel }}",
+          "mode": "name"
+        },
+        "text": "={{ $json.message }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "chase-the-owner",
+      "name": "Chase the owner",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        520,
+        120
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": null,
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Written after the owner has been told, and on the second telling it closes the job.\n--\n-- The closing is here rather than in a step of its own because the two must not come apart: a\n-- telling recorded without the closing would leave the job open with its two tellings spent, waiting\n-- for a third that never comes. The state it is moving from is passed in rather than read here --\n-- read here it would be read after this statement's own update, and the history would record the\n-- job moving from lost to lost.\n\nWITH said AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  VALUES ($2::int, NULL, 'asked', 'the_owner', NULL, $1::text)\n  RETURNING order_id\n),\nclosed AS (\n  UPDATE orders SET state = 'lost', closed_at = now()\n   WHERE id = $2::int AND $3::boolean\n  RETURNING id\n),\nexpired AS (\n  UPDATE offers SET status = 'expired'\n   WHERE id = $1::int AND $3::boolean\n  RETURNING id\n),\nstamped AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT id, NULL, 'state_change', 'state', $4::text, 'lost' FROM closed\n  RETURNING 1\n)\nSELECT $1::int                            AS offer_id,\n       (SELECT count(*) FROM said)::int = 1     AS telling_recorded,\n       (SELECT count(*) FROM closed)::int = 1   AS job_closed,\n       (SELECT count(*) FROM expired)::int = 1  AS offer_expired;",
+        "options": {
+          "queryReplacement": "={{ [$('Say a draft is still waiting').item.json.offer_id, $('Say a draft is still waiting').item.json.order_id, $('Say a draft is still waiting').item.json.the_last_time, $('Say a draft is still waiting').item.json.state_now] }}"
+        }
+      },
+      "id": "say-we-chased",
+      "name": "Say we chased",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        760,
+        120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every six hours": {
+      "main": [
+        [
+          {
+            "node": "Which drafts are still waiting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which drafts are still waiting": {
+      "main": [
+        [
+          {
+            "node": "Say a draft is still waiting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Say a draft is still waiting": {
+      "main": [
+        [
+          {
+            "node": "Chase the owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chase the owner": {
+      "main": [
+        [
+          {
+            "node": "Say we chased",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "90 Errors — Flooring"
+  }
+}

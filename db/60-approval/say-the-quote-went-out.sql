@@ -35,8 +35,24 @@ proposed AS (
 moved AS (
   UPDATE offers
      SET status = 'sent'
-   WHERE id = $2::int AND status = 'awaiting_approval'
+   WHERE id = $2::int AND status IN ('awaiting_approval', 'expired')
   RETURNING id, order_id
+),
+-- and the job comes back from the dead if the chasing had given up on it. Closing after two
+-- tellings is a guess about what silence meant; a letter with the price in it settles the question
+-- the other way, and leaving the job lost would keep a customer who has a price filed under
+-- customers who never got one.
+reopened AS (
+  UPDATE orders o
+     SET state = 'quoted', closed_at = NULL, updated_at = now()
+   WHERE o.id = (SELECT order_id FROM moved)
+     AND o.state = 'lost'
+  RETURNING o.id
+),
+unclosed AS (
+  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)
+  SELECT id, $1::text, 'state_change', 'state', 'lost', 'quoted' FROM reopened
+  RETURNING 1
 ),
 tied AS (
   -- what the customer read, findable from the offer rather than guessed at later

@@ -14,9 +14,13 @@
 // be sent: two copies of it would be two things to keep in step.
 
 // The owner's own mailbox, so the link opens in it whichever account the browser happens to be
-// showing. Gmail takes an address here as readily as the index, and the index is different on every
-// machine. Repeated from three other files, which is three too many already -- it belongs in one
-// place and does not live in one yet.
+// showing on the day. authuser takes an address; the u/ segment takes only an index, and an index
+// is different on every machine -- written into the path it answered 404, because the account it
+// named was not the one that browser had. Gmail resolves this form to whatever index it is locally
+// and rewrites the address bar itself.
+//
+// Repeated from three other files, which is three too many already: it belongs in one place and
+// does not live in one yet.
 const OWNER = 'flooring.demo.austin@gmail.com';
 
 const money = (n) => `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -35,7 +39,7 @@ return $input.all().map((item, i) => {
   // job -- laminate, four hundred feet, Kyle -- can fit more than one of them. The subject is what
   // tells them apart to a person, and the link means nobody has to tell them apart at all.
   const conversation = q.thread_id
-    ? `\n🔗 <https://mail.google.com/mail/u/${OWNER}/#all/${q.thread_id}|`
+    ? `\n🔗 <https://mail.google.com/mail/?authuser=${OWNER}#all/${q.thread_id}|`
       + `${String(drafted.subject || '').trim() || 'Open the conversation'}>`
     : '';
 
