@@ -729,7 +729,7 @@
       "parameters": {
         "resource": "draft",
         "operation": "delete",
-        "draftId": "={{ $json.stale_draft_id }}"
+        "messageId": "={{ $json.stale_draft_id }}"
       },
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
