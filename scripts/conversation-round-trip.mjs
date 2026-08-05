@@ -200,6 +200,17 @@ const sayWaiting = (needs, drafted) => new Function('$input', '$', waitingSource
   (name) => ({ itemMatching: (i) => ({ json: name === 'Compose the quote' ? drafted[i] : needs[i] }) }),
 ).map((r) => r.json);
 
+// The line that reaches the owner when a job can be priced by nobody but them. It sits on the far
+// side of the branch that used to end nowhere, so what it is given is what the question node passed
+// on, and what it reaches back for is the job itself.
+const needsAPersonSource = read('src', '10-quote', 'say-a-job-needs-a-person.js');
+const sayNeedsAPerson = (gathered, asked) => new Function('$input', '$', needsAPersonSource)(
+  { all: () => asked.map((json) => ({ json })) },
+  (name) => ({ itemMatching: (i) => ({
+    json: name === 'Gather what a price needs' ? gathered[i]
+      : (() => { throw new Error(`reached back to ${name}, which is not on this path`); })() }) }),
+).map((r) => r.json);
+
 const putForward = (id, offerId, thread, letter) =>
   rowOf(quoteSql('say-the-offer-was-put-forward'), [id, offerId, thread, letter]);
 
@@ -1447,6 +1458,22 @@ console.log('\na job a person must see is still not priced, whatever the last le
   check('the order now has everything', Number(orderOf(first.order_id).area_sqft), 400);
   check('and it is still not priced', priced.quote.priceable, false);
   check('because the job, not this letter, was held', priced.gathered.pricing_allowed, false);
+
+  // and the owner hears about it. Every automatic door is shut on a job like this -- no price, and
+  // with nothing missing, nothing to ask -- so the last one had better not open onto nowhere.
+  const told = sayNeedsAPerson([priced.gathered], [{ contact_email: 'bea@example.com', auto_blocked: true }]);
+  check('the owner is told a person is the only one who can price it', told.length, 1);
+  check('and told what the job is', told[0].message.includes('Laminate, 400 sq ft, core'), true);
+  check('and who is waiting', told[0].message.includes('bea@example.com'), true);
+  check('and that it is commercial', told[0].message.includes('commercial'), true);
+  check('and that nothing further will happen on its own',
+    told[0].message.includes('will not write again'), true);
+
+  // A job still waiting on the customer is not this. The desk has already asked, and asking again
+  // with nothing new in between is the one thing the asking rule exists to prevent.
+  const halfADescription = { ...priced.gathered, area_sqft: null };
+  check('a job still missing something is left in the silence it belongs in',
+    sayNeedsAPerson([halfADescription], [{ contact_email: 'bea@example.com' }]).length, 0);
 }
 
 console.log('\nthe owner says send it, and only then does the customer get a price');
