@@ -7,6 +7,19 @@ this says what changed between releases. Never sync the two.
 
 ## 0.2.0
 
+**The letter that completes a job is the letter that gets a price.** A customer asked for the size,
+who answers with the size and nothing else, was filed as somebody carrying on a conversation: the
+routing was decided before the size had been written down, so it was decided about a job that was
+still incomplete. The desk asked for what it needed, was given it, and said nothing back. The price
+then arrived on whatever the customer happened to send next — in practice, on "thanks, looking
+forward to it". The decision is now taken where the facts have already been merged.
+
+**Whether a job may be priced is one question with one answer.** Whether it is described well
+enough to cost, and whether somebody has hold of it, were each being worked out in more than one
+place. Copies of a rule drift without saying so, and this pair did: one said a job held for a person
+was ready and sent it to be priced, the other refused it, and with nothing missing to ask about the
+customer heard nothing at all. Both are database functions now, and every lane calls them.
+
 A conversation now outlives the email that started it, the price list is kept by the
 owner rather than by a developer, and a price is computed and written down. The desk
 answers a customer for the first time — with a question, never with a figure.

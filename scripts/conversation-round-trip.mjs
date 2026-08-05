@@ -216,6 +216,10 @@ const orderOf = (id) => JSON.parse(ask(
   `SELECT row_to_json(o) FROM (SELECT material_category, area_sqft, area_unit, city, zone, state
      FROM orders WHERE id = ${literal(String(id))}::int) o`));
 
+const messageOf = (gmailId) => JSON.parse(ask(
+  `SELECT row_to_json(m) FROM (SELECT route, matched_rule, category, status
+     FROM messages WHERE gmail_message_id = ${literal(gmailId)}) m`));
+
 let failed = 0;
 const check = (what, got, want) => {
   const ok = JSON.stringify(got) === JSON.stringify(want);
@@ -258,6 +262,15 @@ console.log('\none customer, three emails, the facts arriving in pieces');
   });
   check('the second email joins the same order', second.order_id, first.order_id);
   check('and nothing is missing any more', missing(second.merged.still_missing), []);
+  // The letter that answers what the desk asked for is the letter that makes the job priceable, and
+  // the gate cannot know it: it reads the job as it stood before this letter was merged, where the
+  // size is still missing, and quite correctly calls this somebody carrying on a conversation.
+  // Left there, the desk asks for the size, is given the size, and says nothing back for ever.
+  check('the gate, reading the job as it was, calls it a conversation',
+    second.decision.route, 'project');
+  check('but the letter that completed the job is priced', second.merged.route, 'quote');
+  check('and the record says so too', messageOf('c2-2').route, 'quote');
+  check('under the rule that named it', messageOf('c2-2').matched_rule, 'the_job_is_ready');
   check('the material from the first email is still there', orderOf(second.order_id).material_category, 'Laminate');
 
   const third = arrive({
@@ -267,6 +280,23 @@ console.log('\none customer, three emails, the facts arriving in pieces');
   });
   check('a third email with nothing in it joins the same order', third.order_id, first.order_id);
   check('and changes nothing', orderOf(third.order_id).area_sqft, 450);
+
+  // Completeness on its own cannot be the test, or every later letter in a finished conversation
+  // would be answered with a price. It is completeness arriving where no price has yet been --
+  // and a draft waiting in the owner's mailbox counts as a price, whether or not it has been sent.
+  ask(`INSERT INTO offers (order_id, total_low, total_high, breakdown, status)
+       VALUES (${literal(String(first.order_id))}::int, 1000, 1400, '{}'::jsonb, 'awaiting_approval')`);
+  ask(`UPDATE messages SET offer_id = (SELECT id FROM offers WHERE order_id
+       = ${literal(String(first.order_id))}::int) WHERE gmail_message_id = 'c2-1'`);
+  const fourth = arrive({
+    id: 'c2-4', thread: 'th-c2', from: 'ben@example.com',
+    text: 'thanks again, talk soon',
+    extracted: { intent: 'follow_up', evidence: {} },
+  });
+  check('a job whose price is already drafted is not quoted over the top of it',
+    fourth.merged.route, 'project');
+  check('and the record is left as the gate wrote it',
+    messageOf('c2-4').matched_rule, 'thread_continuation');
 }
 
 console.log('\na question first, then the work');
@@ -1379,12 +1409,13 @@ console.log('\na job a person must see is still not priced, whatever the last le
       evidence: { material: 'laminate', city: 'kyle' } },
   });
   check('the first letter is held back', first.decision.auto_blocked, true);
-  arrive({
+  const completes = arrive({
     id: 'held2', thread: 'th-held', from: 'bea@example.com',
     text: 'it is about 400 sq ft',
     extracted: { intent: 'new_quote', area_sqft: 400, area_unit: 'sqft',
       evidence: { area_sqft: '400', area_unit: 'sq ft' } },
   });
+  check('the letter that completes a held job is not sent to be priced', completes.merged.route, 'project');
   const priced = priceIt('held2');
   check('the order now has everything', Number(orderOf(first.order_id).area_sqft), 400);
   check('and it is still not priced', priced.quote.priceable, false);
