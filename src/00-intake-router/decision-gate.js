@@ -563,7 +563,23 @@ for (const item of $input.all()) {
   // The merge reads this and nothing else, so there is one place that decides what is believed —
   // rather than nine fields gathered by an expression in a workflow, where a value the gate had
   // already refused could be picked up again.
-  const settled = {
+  // Nothing the desk wrote is evidence about the customer.
+  //
+  // Its own letters come back through this lane, and have to: a thread has no other way of knowing
+  // it has been answered. Until now they were read for facts like any other letter, and the desk's
+  // own signature -- "Austin, TX -- and about thirty miles around it" -- settled a city. A live
+  // order for a customer in Round Rock was corrected to Austin by the letter the desk sent them,
+  // and the correction was logged as though the customer had changed their mind. A reply quoting
+  // the customer back at them would do the same with figures they had already superseded.
+  //
+  // The letter is still recorded, still classified, still tied to its thread. It simply stops
+  // counting as testimony about somebody else.
+  const nothingIsSettled = {
+    material_category: null, area_sqft: null, area_unit: null, area_status: null,
+    city: null, zone: null, existing_floor_action: null, fixing_method: null,
+    old_floor_removal: null, on_site_items: [],
+  };
+  const settled = category === 'owner_reply' ? nothingIsSettled : {
     material_category: material,
     area_sqft: areaUsable ? area : null,
     area_unit: areaUsable ? quantity.unit : null,

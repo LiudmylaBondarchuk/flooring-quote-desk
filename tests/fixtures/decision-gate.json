@@ -2354,5 +2354,37 @@
       "area_status": "no_unit"
     },
     "why": "Only what stands immediately after the quoted figure can be its unit. Reading the whole letter for any unit word would let a metre mentioned about somebody else's floor decide this one, and a wrong unit is worse than no unit: it prices confidently and wrongly."
+  },
+  {
+    "name": "the desk's own signature is not a fact about the customer",
+    "row": {
+      "is_outbound": true,
+      "zone_by_city": "core",
+      "source_text": "Thanks for getting in touch. To price this I need one more thing: roughly how many square feet is the floor?\n\nBest,\nShoal Creek Flooring\nAustin, TX — and about thirty miles around it",
+      "prior_in_thread": 1,
+      "extracted": {
+        "intent": "follow_up",
+        "city": "Austin, TX",
+        "evidence": {
+          "city": "Austin, TX"
+        }
+      }
+    },
+    "expect": {
+      "category": "owner_reply",
+      "settled": {
+        "material_category": null,
+        "area_sqft": null,
+        "area_unit": null,
+        "area_status": null,
+        "city": null,
+        "zone": null,
+        "existing_floor_action": null,
+        "fixing_method": null,
+        "old_floor_removal": null,
+        "on_site_items": []
+      }
+    },
+    "why": "The desk's letters come back through this lane and have to, because a thread has no other way of knowing it has been answered. They were being read for facts like any other letter, so the firm's own signature settled a city: a live order for a customer in Round Rock was corrected to Austin by the letter the desk sent them, and the change was logged as though the customer had said it. What the desk wrote is a record of what it said, never testimony about somebody else."
   }
 ]
