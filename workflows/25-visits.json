@@ -716,7 +716,7 @@
       },
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- What the customer typed on the booking form, kept against the job.\n--\n-- coalesce rather than assignment: a rebooking that leaves a question blank must not wipe what the\n-- last one answered. The newest thing said is the truth; silence is not a thing said.\n\nUPDATE orders\n   SET site_street   = coalesce($2::text, site_street),\n       site_city     = coalesce($3::text, site_city),\n       site_postcode = coalesce($4::text, site_postcode),\n       updated_at    = now()\n WHERE id = $1::int\n-- order_id rather than id, because the next node in the lane binds $json.order_id and a column\n-- named anything else arrives there as nothing. The visit insert then refuses an empty parameter\n-- and no visit is recorded -- a booking that vanishes, from a rename.\nRETURNING id AS order_id, site_street, site_city, site_postcode;\n",
+        "query": "-- What the customer typed on the booking form, kept against the job.\n--\n-- coalesce rather than assignment: a rebooking that leaves a question blank must not wipe what the\n-- last one answered. The newest thing said is the truth; silence is not a thing said.\n\nUPDATE orders\n   SET site_street   = coalesce($2::text, site_street),\n       site_city     = coalesce($3::text, site_city),\n       site_postcode = coalesce($4::text, site_postcode),\n       updated_at    = now()\n WHERE id = $1::int\n-- order_id rather than id, because the next node in the lane binds $json.order_id and a column\n-- named anything else arrives there as nothing. The visit insert then refuses an empty parameter\n-- and no visit is recorded -- a booking that vanishes, from a rename.\n-- and whether the town they booked from is the town the price was worked out for. Nothing here\n-- decides anything about it: the two are compared with case and spacing ignored, because \"kyle\" and\n-- \"Kyle\" are the same town written twice, and anything else is said out loud for a person to look\n-- at. A typo and a different city look identical from here, and only one of them matters -- but the\n-- one that matters is a job priced for one town and a van driven to another, sometimes outside the\n-- area the firm works at all.\nRETURNING id AS order_id, site_street, site_city, site_postcode,\n          city AS priced_for,\n          coalesce(lower(btrim(site_city)) <> lower(btrim(city)), false) AS two_towns;",
         "options": {
           "queryReplacement": "={{ [$json.order_id, $('Read the booking').item.json.site_street, $('Read the booking').item.json.site_city, $('Read the booking').item.json.site_postcode] }}"
         }
@@ -823,6 +823,19 @@
           "queryReplacement": "={{ [] }}"
         }
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "// The line that says the town booked from is not the town the price was worked out for.\n//\n// The booking form is where somebody types an address with the deed in hand, so the agreement takes\n// its address from there and is right to. What nothing did was notice when that address is in a\n// different town from the one the quote was priced against.\n//\n// A job quoted for Kyle is quoted with Kyle's travel and Kyle's zone. Booked to an address in\n// Dallas it is a van driven three hundred kilometres for a price that never counted the journey --\n// and Dallas is outside the area the firm works at all, which is a job that should never have been\n// taken rather than one taken cheaply.\n//\n// It decides nothing. A typo and a different city look the same from here and only one of them\n// matters, so both towns are printed as they were written and a person looks. Case and spacing are\n// ignored upstream, because \"kyle\" and \"Kyle\" are one town written twice and a line about that is\n// a line nobody reads twice.\n\nreturn $input.all().flatMap((row, i) => {\n  const q = row.json || {};\n  if (q.two_towns !== true && q.two_towns !== 't') return [];\n\n  const where = [q.site_street, q.site_postcode].filter(Boolean).join(', ');\n\n  const message = [\n    `📍 *Two towns on one job — ${q.order_id}*`,\n    `🧾 priced for *${q.priced_for || 'nowhere on file'}*`,\n    `📮 booked from *${q.site_city}*${where ? ` — ${where}` : ''}`,\n    '',\n    'The price was worked out for the first of those, and the visit is to the second. Nothing has '\n      + 'been changed and nothing has been said to the customer. It may be a typo; it may be a job '\n      + 'in a town this firm does not cover.',\n  ].join('\\n');\n\n  return [{ json: { ...q, message, channel: '#needs-a-person' }, pairedItem: { item: i } }];\n});\n"
+      },
+      "id": "say-two-towns",
+      "name": "Say two towns are on one job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        60
+      ]
     }
   ],
   "connections": {
@@ -1107,6 +1120,11 @@
             "node": "Write the booked visit",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Say two towns are on one job",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -1145,6 +1163,17 @@
         [
           {
             "node": "Write the agreement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Say two towns are on one job": {
+      "main": [
+        [
+          {
+            "node": "Tell the owner",
             "type": "main",
             "index": 0
           }
