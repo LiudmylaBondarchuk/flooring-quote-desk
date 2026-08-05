@@ -76,11 +76,26 @@ return $input.all().map((item, i) => {
   const job = [q.material_category, q.area_sqft ? `${Number(q.area_sqft).toLocaleString('en-US')} sq ft` : null,
     town].filter(Boolean).join(', ');
 
+  // The way to say yes, carried by the letter that gives them something to say yes to.
+  //
+  // A yes used to be read out of whatever came back -- "sounds good", "go ahead" -- and a sentence
+  // can hold a yes and a question at the same time. A booking cannot: it is an entry in a calendar
+  // with this job's code on it, and there is nothing to interpret. The page, the code and the words
+  // that explain them all existed already; they were simply sent afterwards, once the guess had
+  // already been made.
+  //
+  // Left out rather than half-written when anything is missing. A booking line with no code asks
+  // the customer for something they were not given, and a line with no page asks them to go
+  // nowhere.
+  const bookIt = q.booking && q.booking_link && q.booking_code
+    ? `\n\n${q.booking}\n\n  ${q.booking_link}\n\n  Your code: ${q.booking_code}`
+    : '';
+
   // What the customer would read, and the whole of what the draft contains. No note to the owner
   // wrapped around it any more: it is read inside the owner's own mail client, about to be sent, and
   // anything above it would be one deleted paragraph away from reaching the customer.
   const forTheCustomer = `${q.opening}\n\n${job}\n\n${readable(breakdown.lines)}\n\n`
-    + `All in: ${range}.\n\n${q.closing}${q.signature || ''}`;
+    + `All in: ${range}.\n\n${q.closing}${bookIt}${q.signature || ''}`;
 
   return {
     json: {

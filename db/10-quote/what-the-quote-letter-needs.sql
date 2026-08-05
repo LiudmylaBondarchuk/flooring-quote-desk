@@ -13,7 +13,8 @@ WITH the_offer AS (
    WHERE o.id = $2::int
 ),
 the_job AS (
-  SELECT j.id, j.material_category, j.area_sqft, j.area_unit, j.city, j.zone, j.state
+  SELECT j.id, j.material_category, j.area_sqft, j.area_unit, j.city, j.zone, j.state,
+         j.booking_code
     FROM orders j
    WHERE j.id = (SELECT order_id FROM the_offer)
 ),
@@ -26,12 +27,18 @@ the_letter AS (
     FROM messages
    WHERE gmail_message_id = $1::text
 ),
+-- and the way to say yes, which the letter has never carried. A yes was left to be read out of
+-- whatever the customer wrote back -- "sounds good", "go ahead" -- and a sentence can carry a yes
+-- and a question at once. The booking page, the code and the words that explain it already existed
+-- and were only sent later, after that guess had already been made.
 words AS (
-  SELECT max(body) FILTER (WHERE key = 'quote_opening') AS opening,
-         max(body) FILTER (WHERE key = 'quote_closing') AS closing,
-         max(body) FILTER (WHERE key = 'signature')     AS signature
+  SELECT max(body) FILTER (WHERE key = 'quote_opening')    AS opening,
+         max(body) FILTER (WHERE key = 'quote_closing')    AS closing,
+         max(body) FILTER (WHERE key = 'signature')        AS signature,
+         max(body) FILTER (WHERE key = 'quote_booking')    AS booking,
+         max(body) FILTER (WHERE key = 'booking_link')     AS booking_link
     FROM reply_templates
-   WHERE key IN ('quote_opening', 'quote_closing', 'signature')
+   WHERE key IN ('quote_opening', 'quote_closing', 'signature', 'quote_booking', 'booking_link')
 )
 SELECT
   $1::text                                  AS gmail_message_id,
@@ -44,6 +51,7 @@ SELECT
   l.contact_email, l.thread_id, l.from_name, l.subject,
   coalesce(l.auto_blocked, false)           AS auto_blocked,
   w.opening, w.closing, w.signature,
+  w.booking, w.booking_link, j.booking_code,
   f.id IS NOT NULL
     AND f.total_low IS NOT NULL
     AND f.status = 'draft'
