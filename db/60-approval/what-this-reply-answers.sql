@@ -44,9 +44,14 @@ waiting AS (
   -- Strict on purpose. Failing to recognise a quote leaves the offer waiting and the owner
   -- reminded, which is a nuisance; recognising the wrong letter tells a customer's job that a price
   -- reached them when it did not.
+  --
+  -- An expired one counts too. Being told twice and left unsent closes the job -- which is a guess
+  -- about what the owner meant by saying nothing, and this letter is not a guess. Somebody sent the
+  -- price. Whatever the desk concluded from the silence before it, it was wrong, and a job whose
+  -- price reached the customer is not a lost job.
   SELECT o.id, o.order_id, o.total_low, o.total_high, o.letter_text
     FROM offers o
-   WHERE o.status = 'awaiting_approval'
+   WHERE o.status IN ('awaiting_approval', 'expired')
      AND o.approval_thread_id = $2::text
      AND o.total_low IS NOT NULL
      AND (SELECT body FROM this_letter) LIKE
