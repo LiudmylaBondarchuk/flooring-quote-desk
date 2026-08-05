@@ -235,7 +235,31 @@ for (const item of $input.all()) {
   const areaUnitRaw = norm(take('area_unit', ex.area_unit));
   const unitClaimed = unitInWords(areaUnitRaw);
   const unitQuoted = unitInWords(ev.area_unit);
-  const areaUnit = unitClaimed && unitClaimed === unitQuoted ? unitClaimed : null;
+  const claimedUnit = unitClaimed && unitClaimed === unitQuoted ? unitClaimed : null;
+
+  // The model quotes the figure and sometimes stops before the words that give it meaning: a
+  // customer asked for the size answered "About 400 sq ft." and it came back quoted as "About 400".
+  // A number with no unit is refused, quite rightly -- so the desk asked, was answered, and asked
+  // again, and the conversation had no way to end.
+  //
+  // The unit is in the letter whether or not the model quoted it, and the letter is what every
+  // quote is already checked against. Only what stands immediately after the quoted figure counts:
+  // reading the whole letter for any unit word would let a metre mentioned about somebody else's
+  // floor decide this one, and a wrong unit is worse than none -- it prices confidently and wrongly.
+  const unitAfterTheFigureInTheLetter = () => {
+    const quoted = norm(ev.area_sqft);
+    if (!quoted || !src) return null;
+    const at = src.indexOf(quoted);
+    if (at < 0) return null;
+    return unitInWords(src.slice(at + quoted.length, at + quoted.length + 12));
+  };
+  const unitTheLetterGives = claimedUnit ? null : unitAfterTheFigureInTheLetter();
+  if (unitTheLetterGives) {
+    reasons.push(`the figure was quoted as "${ev.area_sqft}", which stops before its unit; the `
+      + `letter reads ${AREA_UNITS[unitTheLetterGives].spoken} straight after it, so that is what `
+      + 'the number was taken to be');
+  }
+  const areaUnit = claimedUnit || unitTheLetterGives;
   if (areaUnitRaw && !areaUnit) {
     reasons.push(unitQuoted
       ? `the unit was given as "${areaUnitRaw}" but the words quoted for it read as `

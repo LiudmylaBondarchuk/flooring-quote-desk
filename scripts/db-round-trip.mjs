@@ -129,6 +129,20 @@ try {
 
   const script = [];
   const labels = [];
+  // psql prints a full row for every statement it is given, so each fixture added to the gate's
+  // list costs a few more kilobytes here. Node's default is a megabyte, and crossing it kills psql
+  // part way through: the cases after the cut never run at all. What surfaced was "a statement was
+  // accepted and stored nothing" -- true of a run that had been cut off, and pointing at the wrong
+  // thing entirely. Two fixtures were enough to cross it.
+  const ROOM_TO_TALK = { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 };
+  const cutShort = (e) => {
+    if (e && (e.code === 'ENOBUFS' || /maxBuffer/i.test(String(e.message)))) {
+      throw new Error('psql produced more output than this harness allowed and was killed part way '
+        + 'through, so whatever came after the cut never ran. Raise maxBuffer rather than reading '
+        + 'the counts below, which describe a run that did not finish.');
+    }
+  };
+
   const step = (stage, name, sql) => {
     labels.push({ stage, name });
     script.push(`\\warn CASE ${labels.length - 1}`, sql.replace(/;\s*$/, '') + ';');
@@ -153,8 +167,9 @@ try {
   let output = '';
   try {
     output = execFileSync('sh', ['-c', 'psql "$0" -q -f - 2>&1', url],
-      { input: script.join('\n') + '\n', encoding: 'utf8' });
+      { input: script.join('\n') + '\n', ...ROOM_TO_TALK });
   } catch (e) {
+    cutShort(e);
     output = String(e.stdout || '') + String(e.stderr || '');
   }
 
@@ -244,8 +259,8 @@ try {
   let laneOut = '';
   try {
     laneOut = execFileSync('sh', ['-c', 'psql "$0" -q -f - 2>&1', url],
-      { input: laneScript.join('\n') + '\n', encoding: 'utf8' });
-  } catch (e) { laneOut = String(e.stdout || '') + String(e.stderr || ''); }
+      { input: laneScript.join('\n') + '\n', ...ROOM_TO_TALK });
+  } catch (e) { cutShort(e); laneOut = String(e.stdout || '') + String(e.stderr || ''); }
 
   let lane = null;
   for (const line of laneOut.split('\n')) {
@@ -299,8 +314,8 @@ try {
   let refusedOut = '';
   try {
     refusedOut = execFileSync('sh', ['-c', 'psql "$0" -q -f - 2>&1', url],
-      { input: refusedScript.join('\n') + '\n', encoding: 'utf8' });
-  } catch (e) { refusedOut = String(e.stdout || '') + String(e.stderr || ''); }
+      { input: refusedScript.join('\n') + '\n', ...ROOM_TO_TALK });
+  } catch (e) { cutShort(e); refusedOut = String(e.stdout || '') + String(e.stderr || ''); }
 
   let refused = null;
   for (const line of refusedOut.split('\n')) {
