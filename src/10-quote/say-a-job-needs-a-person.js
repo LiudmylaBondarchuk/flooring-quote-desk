@@ -38,5 +38,11 @@ return $input.all().flatMap((item, i) => {
       + 'write again on its own.',
   ].join('\n');
 
-  return [{ json: { ...q, order_id: job.order_id, message }, pairedItem: { item: i } }];
+// Which channel this belongs in travels with the message, because one Slack node is fed by
+// composers that mean different things: a draft waiting to be sent and a job nobody but the
+// owner can price are not the same errand, and a channel chosen at the node could only ever be
+// right for one of them. Named by what the owner has to do about it, never by which lane it
+// came from -- the lane is this desk's business, and the errand is theirs.
+  return [{ json: { ...q, order_id: job.order_id, message, channel: '#needs-a-person' },
+    pairedItem: { item: i } }];
 });

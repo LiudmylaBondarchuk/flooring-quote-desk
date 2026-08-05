@@ -114,7 +114,12 @@ return $input.all().map((item, i) => {
   ].join('\n');
 
   return {
-    json: { ...row, ready_to_tell: true, why_not: null, message },
+// Which channel this belongs in travels with the message, because one Slack node is fed by
+// composers that mean different things: a draft waiting to be sent and a job nobody but the
+// owner can price are not the same errand, and a channel chosen at the node could only ever be
+// right for one of them. Named by what the owner has to do about it, never by which lane it
+// came from -- the lane is this desk's business, and the errand is theirs.
+    json: { ...row, ready_to_tell: true, why_not: null, message, channel: '#going-out' },
     pairedItem: { item: i },
   };
 });
