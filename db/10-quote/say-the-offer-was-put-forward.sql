@@ -19,7 +19,10 @@ WITH moved AS (
          -- kept as drafted. What actually reached the customer is the sent message itself, tied
          -- to this offer when it comes back through the mailbox; the two are separate facts and
          -- overwriting one with the other would destroy the only evidence they ever differed.
-         letter_text = $4::text
+         letter_text = $4::text,
+         -- and which draft it is waiting in, so that a price replaced later can have its letter
+         -- removed rather than left in the conversation beside its replacement.
+         draft_id = $5::text
    WHERE id = $2::int AND status = 'draft'
   RETURNING id, order_id
 ),

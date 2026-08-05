@@ -532,4 +532,10 @@ ALTER TABLE visits
 COMMENT ON COLUMN visits.site_agreed IS
   'Null while nobody has answered. True when a person confirmed the booked address is the job''s. False when they said it is not, which calls the visit off.';
 
+ALTER TABLE offers
+  ADD COLUMN IF NOT EXISTS draft_id text;
+
+COMMENT ON COLUMN offers.draft_id IS
+  'The Gmail draft this offer is waiting in, so a superseded one can be removed rather than left beside its replacement. Null once sent: sending a draft ends it.';
+
 COMMIT;

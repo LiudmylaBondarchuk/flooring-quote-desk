@@ -211,8 +211,10 @@ const sayNeedsAPerson = (gathered, asked) => new Function('$input', '$', needsAP
       : (() => { throw new Error(`reached back to ${name}, which is not on this path`); })() }) }),
 ).map((r) => r.json);
 
-const putForward = (id, offerId, thread, letter) =>
-  rowOf(quoteSql('say-the-offer-was-put-forward'), [id, offerId, thread, letter]);
+// The draft's own id travels with it now, so a price replaced later can have its letter removed
+// rather than left in the conversation beside its replacement. Gmail's own shape: an `r` and digits.
+const putForward = (id, offerId, thread, letter, draftId = `r${offerId}000000000000000`) =>
+  rowOf(quoteSql('say-the-offer-was-put-forward'), [id, offerId, thread, letter, draftId]);
 
 const approvalSql = (n) => read('db', '60-approval', `${n}.sql`).replace(/;\s*$/, '');
 // the lane's own first statement, run for real: it writes a status the database has to allow, and
@@ -1540,7 +1542,11 @@ console.log('\nthe owner says send it, and only then does the customer get a pri
   // without one has to stay without one rather than be given something invented.
   check('and an empty subject stays empty rather than being invented',
     composeQuotes({ ...whatTheQuoteNeeds('appr1', priced.written.offer_id), subject: '' })[0].subject, '');
-  putForward('appr1', priced.written.offer_id, 'th-appr1', letter.the_letter_itself);
+  putForward('appr1', priced.written.offer_id, 'th-appr1', letter.the_letter_itself, 'r-appr1-draft');
+  // which draft it is waiting in, so a price replaced later can have its letter removed rather than
+  // left in the conversation beside its replacement
+  check('the offer remembers the draft it waits in',
+    ask(`SELECT draft_id FROM offers WHERE id = ${priced.written.offer_id}`), 'r-appr1-draft');
 
   // she presses send. It reaches the mailbox again like every other letter the desk sends, in the
   // customer's thread, because that is where the draft was.
