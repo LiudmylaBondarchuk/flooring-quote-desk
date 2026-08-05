@@ -1,0 +1,148 @@
+{
+  "name": "85 Morning — Flooring",
+  "nodes": [
+    {
+      "parameters": {
+        "width": 560,
+        "height": 220,
+        "content": "### 85 Morning — Flooring\n\nSix in the morning, Texas time: what today and tomorrow hold.\n\nIt goes out every morning whether or not there is anything in it. A morning without it means the desk has stopped, and somebody notices over the first coffee rather than at the end of the week."
+      },
+      "id": "purpose",
+      "name": "Purpose",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 6,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "at-six",
+      "name": "At six",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -200,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Every visit standing today and tomorrow, in the days as they are in Texas, gathered into one row.\n--\n-- One row on purpose, and always one. A morning with nothing in it is the morning this exists for:\n-- if the line does not arrive, something has stopped -- the mail, the desk, the machine -- and\n-- somebody notices over their first coffee rather than at the end of the week. A statement that\n-- returned no rows on a quiet day would take the whole lane down with it, and the silence that is\n-- supposed to mean \"broken\" would mean \"nothing on\".\n--\n-- The days are cut in the timezone the work is in, not the one the server keeps. A visit at seven in\n-- the evening in Austin is tomorrow already in UTC, and putting it under \"tomorrow\" for somebody\n-- about to drive to it this evening is worse than saying nothing.\n--\n-- Lapsed visits are left out: a job called off is not a place anybody is going. One nobody has\n-- confirmed to the customer is left in, because it is still a booking in a calendar and somebody\n-- may still turn up for it -- and that is worth knowing before the day starts rather than after.\n\nWITH here AS (\n  SELECT (now() AT TIME ZONE 'America/Chicago')::date AS today\n),\nstanding AS (\n  SELECT v.id                                            AS visit_id,\n         v.order_id,\n         v.agreed,\n         CASE WHEN (v.agreed AT TIME ZONE 'America/Chicago')::date = (SELECT today FROM here)\n              THEN 'today' ELSE 'tomorrow' END           AS when_it_is,\n         v.confirmed_at IS NOT NULL                      AS customer_told,\n         v.site_agreed,\n         v.agreement_url IS NOT NULL                     AS page_ready,\n         o.contact_email,\n         o.material_category, o.area_sqft, o.area_unit,\n         coalesce(o.site_city, o.city)                   AS town,\n         o.site_street, o.booking_code\n    FROM visits v\n    JOIN orders o ON o.id = v.order_id\n   WHERE v.state = 'agreed'\n     AND (v.agreed AT TIME ZONE 'America/Chicago')::date\n         BETWEEN (SELECT today FROM here) AND (SELECT today FROM here) + 1\n)\n-- As text, not as a date. A date column crosses the wire as an instant -- Postgres hands it over as\n-- midnight in the server's timezone, and the driver turns that into \"2026-08-04T22:00:00.000Z\" for\n-- a day that is the fifth. The calendar day cannot be recovered from an instant without knowing the\n-- timezone it was midnight in, so nothing downstream can repair it; it has to leave here as the day\n-- it is.\nSELECT (SELECT today FROM here)::text                    AS the_day,\n       coalesce((SELECT json_agg(s ORDER BY s.agreed) FROM standing s), '[]'::json) AS visits;",
+        "options": {
+          "queryReplacement": "={{ [] }}"
+        }
+      },
+      "id": "what-today-holds",
+      "name": "What today and tomorrow hold",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        60,
+        120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// What the day and the one after it hold, said once, early, before anybody has opened anything.\n//\n// It goes out every morning whether or not there is anything in it, and the empty morning is the\n// one it exists for. A line that only appears when there is news teaches nobody anything by its\n// absence; a line that appears every day at six means that a morning without one is a morning when\n// something has stopped -- the mail, the desk, the machine -- and it is noticed over the first\n// coffee rather than at the end of the week.\n//\n// Tomorrow as well as today, because a visit at nine in the morning is not something to find out\n// about at six on the day. The evening before is when somebody can still move it.\n//\n// Only what a person does something about is marked. A visit nobody has confirmed to the customer\n// is a visit somebody may or may not turn up for, and that is worth a word before the day starts.\n\nconst WHERE_THE_WORK_IS = 'America/Chicago';\n\nconst clock = (iso) => new Date(iso).toLocaleTimeString('en-US', {\n  timeZone: WHERE_THE_WORK_IS, hour: 'numeric', minute: '2-digit',\n});\n\n// A calendar day, and it has to arrive as one. Anything else is refused rather than guessed at: an\n// instant carries no day without the timezone it was midnight in, and a line that prints the wrong\n// Wednesday is worse than a line that does not arrive -- somebody drives on the strength of it.\n// Noon rather than midnight so that no timezone can push the day either way.\nconst longDay = (day) => {\n  const said = String(day ?? '');\n  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(said)) {\n    throw new Error(`the day arrived as ${JSON.stringify(day)} rather than a calendar day; `\n      + 'a date column crossing the wire becomes an instant, and the day it belonged to cannot be '\n      + 'recovered from one here');\n  }\n  return new Date(`${said}T12:00:00Z`).toLocaleDateString('en-US', {\n    weekday: 'long', month: 'long', day: 'numeric',\n  });\n};\n\nconst line = (v) => {\n  const job = [v.material_category,\n    v.area_sqft ? `${Number(v.area_sqft).toLocaleString('en-US')} ${v.area_unit || 'sqft'}` : null]\n    .filter(Boolean).join(', ');\n  const where = [v.town, v.site_street].filter(Boolean).join(' — ');\n  const flags = [\n    v.customer_told ? null : '⚠️ not confirmed to them',\n    v.site_agreed === false ? '⚠️ address was queried' : null,\n    v.page_ready ? null : '⚠️ no page to sign yet',\n  ].filter(Boolean);\n  return `  \\`${clock(v.agreed)}\\`  ${where || 'no address'}  ·  ${job || 'job not described'}`\n    + `${v.booking_code ? `  ·  \\`${v.booking_code}\\`` : ''}`\n    + (flags.length ? `\\n       ${flags.join('  ')}` : '');\n};\n\nreturn $input.all().map((item, i) => {\n  const q = item.json || {};\n  const all = typeof q.visits === 'string' ? JSON.parse(q.visits) : (q.visits || []);\n  const today = all.filter((v) => v.when_it_is === 'today');\n  const tomorrow = all.filter((v) => v.when_it_is === 'tomorrow');\n\n  const message = [\n    `☀️ *${longDay(q.the_day)}*`,\n    '',\n    today.length ? '*Today*' : '*Today* — nothing booked',\n    ...today.map(line),\n    '',\n    tomorrow.length ? '*Tomorrow*' : '*Tomorrow* — nothing booked',\n    ...tomorrow.map(line),\n    ...(all.length ? [] : ['', 'This arrives every morning either way, so a morning without it '\n      + 'means the desk has stopped rather than that nothing is on.']),\n  ].join('\\n');\n\n  return { json: { ...q, message, channel: '#going-out' }, pairedItem: { item: i } };\n});\n"
+      },
+      "id": "write-the-morning",
+      "name": "Write the morning",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "accessToken",
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.channel }}",
+          "mode": "name"
+        },
+        "text": "={{ $json.message }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "tell-the-owner",
+      "name": "Tell the owner",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        580,
+        120
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": null,
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "At six": {
+      "main": [
+        [
+          {
+            "node": "What today and tomorrow hold",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What today and tomorrow hold": {
+      "main": [
+        [
+          {
+            "node": "Write the morning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the morning": {
+      "main": [
+        [
+          {
+            "node": "Tell the owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "90 Errors — Flooring",
+    "timezone": "America/Chicago"
+  }
+}
