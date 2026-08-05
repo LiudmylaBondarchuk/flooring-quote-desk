@@ -1213,13 +1213,13 @@ console.log('\ntwo quotes in one poll are both written');
 {
   const a = arrive({
     id: 'quote2', thread: 'th-quote2', from: 'walt@example.com',
-    text: 'lvp, 300 sq ft, buda tx',
+    subject: 'Living room floor', text: 'lvp, 300 sq ft, buda tx',
     extracted: { intent: 'new_quote', material: 'lvp', area_sqft: 300, area_unit: 'sqft',
       city: 'buda', evidence: { material: 'lvp', area_sqft: '300', area_unit: 'sq ft', city: 'buda' } },
   });
   const b = arrive({
     id: 'quote3', thread: 'th-quote3', from: 'xena@example.com',
-    text: 'laminate, 500 sq ft, leander tx',
+    subject: 'Kitchen and hall', text: 'laminate, 500 sq ft, leander tx',
     extracted: { intent: 'new_quote', material: 'laminate', area_sqft: 500, area_unit: 'sqft',
       city: 'leander',
       evidence: { material: 'laminate', area_sqft: '500', area_unit: 'sq ft', city: 'leander' } },
@@ -1254,6 +1254,24 @@ console.log('\ntwo quotes in one poll are both written');
     said[0].message.includes(letters[0].the_letter_itself), false);
   check('it says where to find the draft',
     said[0].message.includes('in your drafts'), true);
+
+  // and a way there that does not involve finding anything. A customer several conversations deep
+  // has more than one that a description of the job would fit.
+  check('each links into its own conversation',
+    [said[0].message.includes(`#all/${needs[0].thread_id}`),
+     said[1].message.includes(`#all/${needs[1].thread_id}`)],
+    [true, true]);
+  check('and not into the other one',
+    said[0].message.includes(`#all/${needs[1].thread_id}`), false);
+  check('the link is labelled with what the customer called it',
+    said[0].message.includes(`|${letters[0].subject}>`), true);
+  check('and it opens the owner\'s own mailbox, not whichever one the browser has',
+    said[0].message.includes('mail/u/flooring.demo.austin@gmail.com/'), true);
+  // A letter can arrive with no subject at all -- a platform lead often does -- and a link labelled
+  // with nothing is a link nobody can see to click.
+  check('a draft with no subject still has something to click',
+    sayWaiting([needs[0]], [{ ...letters[0], subject: '' }])[0].message
+      .includes('|Open the conversation>'), true);
 }
 
 console.log('\nan order that has gone quiet is chased once, then let go');
