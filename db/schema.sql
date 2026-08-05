@@ -523,4 +523,13 @@ RETURNS boolean LANGUAGE sql STABLE AS $$
                     AND (x.danger OR coalesce(x.auto_blocked, false) OR x.segment = 'commercial'))
 $$;
 
+ALTER TABLE visits
+  ADD COLUMN IF NOT EXISTS site_check_ts      text,
+  ADD COLUMN IF NOT EXISTS site_check_channel text,
+  ADD COLUMN IF NOT EXISTS site_check_asked_at timestamptz,
+  ADD COLUMN IF NOT EXISTS site_agreed        boolean;
+
+COMMENT ON COLUMN visits.site_agreed IS
+  'Null while nobody has answered. True when a person confirmed the booked address is the job''s. False when they said it is not, which calls the visit off.';
+
 COMMIT;

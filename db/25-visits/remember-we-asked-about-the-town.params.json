@@ -1,0 +1,3 @@
+{
+  "queryReplacement": "={{ [$('Say two towns are on one job').item.json.visit_id, $('Ask about the two towns').item.json.ts, $('Ask about the two towns').item.json.channel] }}"
+}

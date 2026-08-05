@@ -26,4 +26,8 @@ SELECT v.id                              AS visit_id,
    AND v.agreed_at < now() - ($1::int * interval '1 minute')
    AND o.contact_email IS NOT NULL
    AND o.state NOT IN ('done', 'lost')
+   -- and nobody is being asked about it. A booking whose town disagrees with the town the price was
+   -- worked out for waits for an answer; confirming it on a timer would tell the customer their
+   -- visit is on before anybody has looked at where it is.
+   AND (v.site_check_ts IS NULL OR v.site_agreed IS TRUE)
  ORDER BY v.agreed_at;
