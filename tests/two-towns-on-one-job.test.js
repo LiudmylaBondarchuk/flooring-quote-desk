@@ -15,7 +15,12 @@ import { dirname, join } from 'node:path';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const source = readFileSync(join(root, 'src', '25-visits', 'say-two-towns-are-on-one-job.js'), 'utf8');
 
-const said = (row) => new Function('$input', source)({ all: () => [{ json: row }] }).map((r) => r.json);
+// The visit is what the line is hung off now, and the two towns are read back from the step that
+// compared them -- which ran before the visit existed.
+const said = (row) => new Function('$input', '$', source)(
+  { all: () => [{ json: { id: 5 } }] },
+  () => ({ itemMatching: () => ({ json: row }) }),
+).map((r) => r.json);
 
 const BOOKED = {
   order_id: 16, priced_for: 'Georgetown', site_city: 'Warszawa',
@@ -39,16 +44,20 @@ test('it says which of the two the price was worked out for', () => {
   assert.match(line.message, /priced for/);
 });
 
-test('it says nothing was changed and nobody was told', () => {
+test('it says the customer has been told nothing and will not be until she answers', () => {
   const [line] = said(BOOKED);
-  assert.match(line.message, /Nothing has been changed/);
-  assert.match(line.message, /nothing has been said to the customer/);
+  assert.match(line.message, /nothing has been said to the customer/i);
+  assert.match(line.message, /until you answer/,
+    'the confirmation is held now, and a line that does not say so reads as something to get to later');
 });
 
-test('it allows for the dull explanation as well as the expensive one', () => {
+test('it names both answers and what each one does', () => {
   const [line] = said(BOOKED);
-  assert.match(line.message, /typo/,
-    'most of these will be a typo, and a line that assumes the worst gets argued with rather than read');
+  assert.match(line.message, /✅ the address is right/);
+  assert.match(line.message, /❌ it is not/);
+  assert.match(line.message, /call the visit off and close the job/,
+    'a cross ends the job, and somebody about to click one is owed that in the message rather than '
+    + 'after it');
 });
 
 test('it goes where the desk cannot act on its own', () => {

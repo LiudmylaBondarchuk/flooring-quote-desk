@@ -129,7 +129,7 @@
       },
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Bookings the desk has not answered yet, and everything a letter about one needs.\n--\n-- Old enough, and only once. The wait is here rather than in a pause inside a workflow, so that\n-- \"which bookings are waiting\" is a question with an answer on any row at any moment -- including\n-- in a test, which a sleeping execution never is.\n--\n-- The address comes from the order and never from the booking form. Somebody who typed a code that\n-- was not theirs must not be told what is on that job.\n\nSELECT v.id                              AS visit_id,\n       v.order_id,\n       v.agreed,\n       o.contact_email                   AS write_to,\n       o.material_category,\n       o.area_sqft,\n       o.area_unit,\n       o.city,\n       o.on_site_items,\n       (SELECT body FROM reply_templates WHERE key = 'visit_confirmed_opening') AS opening,\n       (SELECT body FROM reply_templates WHERE key = 'visit_confirmed_closing') AS closing,\n       (SELECT body FROM reply_templates WHERE key = 'signature')       AS signature\n  FROM visits v\n  JOIN orders o ON o.id = v.order_id\n WHERE v.state = 'agreed'\n   AND v.confirmed_at IS NULL\n   AND v.agreed_at < now() - ($1::int * interval '1 minute')\n   AND o.contact_email IS NOT NULL\n   AND o.state NOT IN ('done', 'lost')\n ORDER BY v.agreed_at;\n",
+        "query": "-- Bookings the desk has not answered yet, and everything a letter about one needs.\n--\n-- Old enough, and only once. The wait is here rather than in a pause inside a workflow, so that\n-- \"which bookings are waiting\" is a question with an answer on any row at any moment -- including\n-- in a test, which a sleeping execution never is.\n--\n-- The address comes from the order and never from the booking form. Somebody who typed a code that\n-- was not theirs must not be told what is on that job.\n\nSELECT v.id                              AS visit_id,\n       v.order_id,\n       v.agreed,\n       o.contact_email                   AS write_to,\n       o.material_category,\n       o.area_sqft,\n       o.area_unit,\n       o.city,\n       o.on_site_items,\n       (SELECT body FROM reply_templates WHERE key = 'visit_confirmed_opening') AS opening,\n       (SELECT body FROM reply_templates WHERE key = 'visit_confirmed_closing') AS closing,\n       (SELECT body FROM reply_templates WHERE key = 'signature')       AS signature\n  FROM visits v\n  JOIN orders o ON o.id = v.order_id\n WHERE v.state = 'agreed'\n   AND v.confirmed_at IS NULL\n   AND v.agreed_at < now() - ($1::int * interval '1 minute')\n   AND o.contact_email IS NOT NULL\n   AND o.state NOT IN ('done', 'lost')\n   -- and nobody is being asked about it. A booking whose town disagrees with the town the price was\n   -- worked out for waits for an answer; confirming it on a timer would tell the customer their\n   -- visit is on before anybody has looked at where it is.\n   AND (v.site_check_ts IS NULL OR v.site_agreed IS TRUE)\n ORDER BY v.agreed_at;",
         "options": {
           "queryReplacement": "={{ [15] }}"
         }
@@ -826,16 +826,184 @@
     },
     {
       "parameters": {
-        "jsCode": "// The line that says the town booked from is not the town the price was worked out for.\n//\n// The booking form is where somebody types an address with the deed in hand, so the agreement takes\n// its address from there and is right to. What nothing did was notice when that address is in a\n// different town from the one the quote was priced against.\n//\n// A job quoted for Kyle is quoted with Kyle's travel and Kyle's zone. Booked to an address in\n// Dallas it is a van driven three hundred kilometres for a price that never counted the journey --\n// and Dallas is outside the area the firm works at all, which is a job that should never have been\n// taken rather than one taken cheaply.\n//\n// It decides nothing. A typo and a different city look the same from here and only one of them\n// matters, so both towns are printed as they were written and a person looks. Case and spacing are\n// ignored upstream, because \"kyle\" and \"Kyle\" are one town written twice and a line about that is\n// a line nobody reads twice.\n\nreturn $input.all().flatMap((row, i) => {\n  const q = row.json || {};\n  if (q.two_towns !== true && q.two_towns !== 't') return [];\n\n  const where = [q.site_street, q.site_postcode].filter(Boolean).join(', ');\n\n  const message = [\n    `📍 *Two towns on one job — ${q.order_id}*`,\n    `🧾 priced for *${q.priced_for || 'nowhere on file'}*`,\n    `📮 booked from *${q.site_city}*${where ? ` — ${where}` : ''}`,\n    '',\n    'The price was worked out for the first of those, and the visit is to the second. Nothing has '\n      + 'been changed and nothing has been said to the customer. It may be a typo; it may be a job '\n      + 'in a town this firm does not cover.',\n  ].join('\\n');\n\n  return [{ json: { ...q, message, channel: '#needs-a-person' }, pairedItem: { item: i } }];\n});\n"
+        "jsCode": "// The line that says the town booked from is not the town the price was worked out for.\n//\n// The booking form is where somebody types an address with the deed in hand, so the agreement takes\n// its address from there and is right to. What nothing did was notice when that address is in a\n// different town from the one the quote was priced against.\n//\n// A job quoted for Kyle is quoted with Kyle's travel and Kyle's zone. Booked to an address in\n// Dallas it is a van driven three hundred kilometres for a price that never counted the journey --\n// and Dallas is outside the area the firm works at all, which is a job that should never have been\n// taken rather than one taken cheaply.\n//\n// It decides nothing by itself. A typo and a different city look the same from here and only one of\n// them matters, so both towns are printed as they were written and a person answers with a tick or\n// a cross. Case and spacing are ignored upstream, because \"kyle\" and \"Kyle\" are one town written\n// twice and a line about that is a line nobody reads twice.\n\n// Hung off the visit rather than off the address, because the answer has to be filed against\n// something and the visit is what gets called off. The two towns themselves are read back from the\n// step that compared them, which ran before the visit existed.\nreturn $input.all().flatMap((row, i) => {\n  const v = row.json || {};\n  const q = $('Remember where the job is').itemMatching(i)?.json || {};\n  if (q.two_towns !== true && q.two_towns !== 't') return [];\n\n  const where = [q.site_street, q.site_postcode].filter(Boolean).join(', ');\n\n  const message = [\n    `📍 *Two towns on one job — ${q.order_id}*`,\n    `🧾 priced for *${q.priced_for || 'nowhere on file'}*`,\n    `📮 booked from *${q.site_city}*${where ? ` — ${where}` : ''}`,\n    '',\n    'The price was worked out for the first of those, and the visit is to the second. Nothing has '\n      + 'been said to the customer and nothing will be until you answer here.',\n    '',\n    '✅ the address is right — confirm the visit to them',\n    '❌ it is not — call the visit off and close the job',\n  ].join('\\n');\n\n  return [{ json: { ...q, visit_id: v.id, message, channel: '#needs-a-person' },\n    pairedItem: { item: i } }];\n});\n"
       },
       "id": "say-two-towns",
       "name": "Say two towns are on one job",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        720,
-        60
+        1100,
+        1400
       ]
+    },
+    {
+      "id": "ask-about-the-two-towns",
+      "name": "Ask about the two towns",
+      "parameters": {
+        "authentication": "accessToken",
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.channel }}",
+          "mode": "name"
+        },
+        "text": "={{ $json.message }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1340,
+        1400
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": null,
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "id": "remember-we-asked-about-the-town",
+      "name": "Remember we asked about the town",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Which line was posted about this booking, so the answer to it can be found later.\n--\n-- The channel as well as the timestamp: Slack needs both to say what a message has been reacted to\n-- with, and which channel a line goes to is a thing that changes.\n--\n-- Only the first asking sticks. A lane that runs again over the same booking must not move the\n-- question to a newer message and leave an answer sitting on the old one, unread for ever.\n\nUPDATE visits\n   SET site_check_ts       = $2::text,\n       site_check_channel  = $3::text,\n       site_check_asked_at = now()\n WHERE id = $1::int\n   AND site_check_ts IS NULL\nRETURNING id AS visit_id, order_id, site_check_ts, site_check_asked_at;",
+        "options": {
+          "queryReplacement": "={{ [$('Say two towns are on one job').item.json.visit_id, $('Ask about the two towns').item.json.ts, $('Ask about the two towns').item.json.channel] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1580,
+        1400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    },
+    {
+      "id": "time-to-read-the-answers",
+      "name": "Time to read the answers",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        380,
+        1660
+      ]
+    },
+    {
+      "id": "which-answers-are-we-waiting-on",
+      "name": "Which answers are we waiting on",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Bookings held while somebody looks at the town they were made from.\n--\n-- Old enough to have been seen. Slack takes a moment to accept a message and a person takes longer\n-- than that to read one, so asking straight away only ever finds no answer.\n--\n-- No upper limit here on purpose. A booking nobody answers is not a booking that stops mattering,\n-- and quietly abandoning the question after a day would confirm nothing and call nothing off --\n-- the visit would simply arrive with nobody having decided anything about it.\n\nSELECT v.id                        AS visit_id,\n       v.order_id,\n       v.site_check_ts,\n       v.site_check_channel,\n       v.site_check_asked_at,\n       o.city                      AS priced_for,\n       o.site_city                 AS booked_from,\n       o.state                     AS state_was\n  FROM visits v\n  JOIN orders o ON o.id = v.order_id\n WHERE v.site_check_ts IS NOT NULL\n   AND v.site_agreed IS NULL\n   AND v.state = 'agreed'\n   AND v.site_check_asked_at < now() - ($1::int * interval '1 second')\n ORDER BY v.site_check_asked_at;",
+        "options": {
+          "queryReplacement": "={{ [30] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        620,
+        1660
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
+    },
+    {
+      "id": "ask-slack-what-they-said",
+      "name": "Ask Slack what they said",
+      "parameters": {
+        "url": "https://slack.com/api/reactions.get",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "channel",
+              "value": "={{ $json.site_check_channel }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $json.site_check_ts }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        860,
+        1660
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": null,
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "id": "read-the-answer",
+      "name": "Read the answer",
+      "parameters": {
+        "jsCode": "// What a person said about a booking, read off the line they were asked on.\n//\n// A tick and a cross, and nothing else counts. Slack lets anybody put anything on a message, and\n// the ones that mean something here were named in the message itself -- so a thumbs up, a shrug or\n// somebody's joke leaves the booking exactly where it was, waiting, which is the honest answer to\n// \"I do not know what that meant\".\n//\n// Both at once is not an answer either. Two people can disagree, or one can change their mind by\n// adding rather than removing, and acting on whichever was read first would make the outcome depend\n// on the order Slack happened to list them in.\n//\n// No answer is the ordinary case: this runs every couple of minutes and most of the time nobody has\n// looked yet. Dropping the item is what \"not yet\" looks like.\n\nconst YES = 'white_check_mark';\nconst NO = 'x';\n\nreturn $input.all().flatMap((item, i) => {\n  const said = item.json || {};\n  const waiting = $('Which answers are we waiting on').itemMatching(i)?.json || {};\n\n  if (said.ok !== true) {\n    throw new Error(`Slack would not say what is on that message: ${said.error || 'no reason given'}`);\n  }\n\n  const names = (said.message?.reactions || []).map((r) => r.name);\n  const yes = names.includes(YES);\n  const no = names.includes(NO);\n  if (yes === no) return [];\n\n  return [{\n    json: { ...waiting, she_agreed: yes, state_was: waiting.state_was },\n    pairedItem: { item: i },\n  }];\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        1660
+      ]
+    },
+    {
+      "id": "write-down-the-answer",
+      "name": "Write down the answer",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- What a person said about a booking made from a town the price was not worked out for.\n--\n-- A no calls the visit off and closes the job in the same statement as recording the answer,\n-- because an answer written without the acting on it leaves a booking marked as decided and a\n-- visit still standing in the calendar -- the worst of both, and silent.\n--\n-- A yes only writes the yes down. What happens next is the ordinary confirmation, which the letter\n-- step picks up on its own now that nothing is holding it.\n\n-- The answer and what it does to the visit are one update, not two. Postgres carries out a single\n-- modification per row per statement and drops the rest without a word, so writing the answer and\n-- then calling the visit off left a booking marked as answered and still standing in the calendar.\nWITH answered AS (\n  UPDATE visits\n     SET site_agreed = $2::boolean,\n         state       = CASE WHEN $2::boolean THEN state ELSE 'lapsed' END\n   WHERE id = $1::int\n     AND site_agreed IS NULL\n  RETURNING id, order_id, site_agreed, state\n),\ncalled_off AS (\n  SELECT id FROM answered WHERE site_agreed = false\n),\nclosed AS (\n  UPDATE orders\n     SET state = 'lost', closed_at = now(), updated_at = now()\n   WHERE id = (SELECT order_id FROM answered WHERE site_agreed = false)\n     AND state NOT IN ('booked', 'done', 'lost')\n  RETURNING id\n),\nstamped AS (\n  INSERT INTO order_events (order_id, gmail_message_id, kind, field, old_value, new_value)\n  SELECT id, NULL, 'state_change', 'state', $3::text, 'lost' FROM closed\n  RETURNING 1\n)\nSELECT $1::int                                  AS visit_id,\n       (SELECT count(*) FROM answered)::int = 1 AS answer_recorded,\n       (SELECT count(*) FROM called_off)::int = 1 AS visit_called_off,\n       (SELECT count(*) FROM closed)::int = 1     AS job_closed;",
+        "options": {
+          "queryReplacement": "={{ [$json.visit_id, $json.she_agreed, $json.state_was] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1340,
+        1660
+      ],
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "Postgres account -- flooring"
+        }
+      }
     }
   ],
   "connections": {
@@ -1120,11 +1288,6 @@
             "node": "Write the booked visit",
             "type": "main",
             "index": 0
-          },
-          {
-            "node": "Say two towns are on one job",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
@@ -1173,7 +1336,73 @@
       "main": [
         [
           {
-            "node": "Tell the owner",
+            "node": "Ask about the two towns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the booked visit": {
+      "main": [
+        [
+          {
+            "node": "Say two towns are on one job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask about the two towns": {
+      "main": [
+        [
+          {
+            "node": "Remember we asked about the town",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Time to read the answers": {
+      "main": [
+        [
+          {
+            "node": "Which answers are we waiting on",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which answers are we waiting on": {
+      "main": [
+        [
+          {
+            "node": "Ask Slack what they said",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask Slack what they said": {
+      "main": [
+        [
+          {
+            "node": "Read the answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the answer": {
+      "main": [
+        [
+          {
+            "node": "Write down the answer",
             "type": "main",
             "index": 0
           }

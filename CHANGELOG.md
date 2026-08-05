@@ -7,6 +7,17 @@ this says what changed between releases. Never sync the two.
 
 ## 0.2.0
 
+**A booking made from a different town than the price was worked out for waits for a person.** The
+booking form is where somebody types an address with the deed in hand, so the agreement takes its
+address from there — and nothing noticed when that address was in another town from the one the
+quote was priced against. A job quoted for Kyle carries Kyle's zone and Kyle's travel; booked to an
+address in Dallas it is a van driven three hundred kilometres for a price that never counted the
+journey, to a town the firm does not cover. The desk now says so and stops: the confirmation to the
+customer is held until somebody answers with a tick or a cross on that line. A tick sends it; a
+cross calls the visit off and closes the job. Where the two towns match, nothing is said and nothing
+waits — a desk that held every booking for a person would be a desk with a person in front of it all
+night.
+
 **The letter that completes a job is the letter that gets a price.** A customer asked for the size,
 who answers with the size and nothing else, was filed as somebody carrying on a conversation: the
 routing was decided before the size had been written down, so it was decided about a job that was
