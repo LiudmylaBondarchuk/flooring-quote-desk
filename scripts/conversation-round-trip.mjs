@@ -111,7 +111,7 @@ const VISIT_NEXT = aheadUtc(2);
 const VISIT_LATER = aheadUtc(3);
 const VISIT_FAR = aheadUtc(36);
 
-const arrive = ({ id, thread, from, text, subject, extracted, headers, labels }) => {
+const arrive = ({ id, thread, from, text, subject, extracted, headers, labels, sentByUs }) => {
   if (idsUsed.has(id)) throw new Error(`the message id ${id} is already used by another scenario`);
   idsUsed.add(id);
   const [prepared] = node(prepareSource, [{
@@ -123,6 +123,9 @@ const arrive = ({ id, thread, from, text, subject, extracted, headers, labels })
     subject: subject || '',
     text, html: '', headers: headers || {},
   }]);
+  // The desk's own letters come back through this same lane -- a thread has no other way of knowing
+  // it has been answered -- so a scenario has to be able to send one.
+  if (sentByUs) prepared.json.is_outbound = true;
   run(['-c', fill(logSql, logParams(prepared.json))]);
 
   const lookup = JSON.parse(ask(
@@ -297,6 +300,30 @@ console.log('\none customer, three emails, the facts arriving in pieces');
     fourth.merged.route, 'project');
   check('and the record is left as the gate wrote it',
     messageOf('c2-4').matched_rule, 'thread_continuation');
+}
+
+console.log('\nthe desk answers, and its own letter comes back');
+{
+  const asked = arrive({
+    id: 'own-1', thread: 'th-own', from: 'nina@example.com',
+    text: 'lvp for the living room, round rock tx',
+    extracted: { intent: 'new_quote', material: 'lvp', city: 'round rock',
+      evidence: { material: 'lvp', city: 'round rock' } },
+  });
+  check('the customer is in round rock', orderOf(asked.order_id).city, 'round rock');
+
+  // Word for word what the desk signs its letters with, taken from the row rather than typed here.
+  const signature = ask("SELECT body FROM reply_templates WHERE key = 'signature'").trim();
+  const ours = arrive({
+    id: 'own-2', thread: 'th-own', from: 'flooring.demo.austin@gmail.com', sentByUs: true,
+    text: `To price this I need one more thing: roughly how many square feet is the floor?${signature}`,
+    extracted: { intent: 'follow_up', city: 'Austin, TX', evidence: { city: 'Austin, TX' } },
+  });
+  check('the desk knows it wrote this one', ours.decision.category, 'owner_reply');
+  check('and takes no facts from its own signature', Number(ours.merged.facts_written), 0);
+  check('so the customer is still in round rock', orderOf(asked.order_id).city, 'round rock');
+  check('and nothing was logged as the customer changing their mind',
+    Number(ours.merged.facts_corrected), 0);
 }
 
 console.log('\na question first, then the work');
