@@ -753,12 +753,14 @@
       }
     },
     "expect": {
-      "gate_color": "red",
+      "area_sqft": 344,
+      "area_status": "converted",
+      "area_unit": "sqm",
+      "gate_color": "yellow",
       "pricing_allowed": false,
-      "missing_fields": [
-        "area_sqft"
-      ]
-    }
+      "missing_fields": []
+    },
+    "why": "The model quoted the figure bare and the letter says m² right beside it. Refusing left the desk asking for a size the customer had already given, which is the one thing a conversation cannot recover from. 32 m² is 344 sq ft and the letter is where that is written."
   },
   {
     "name": "a new job inside an existing thread is quoted, not filed as follow-up",
@@ -1318,7 +1320,7 @@
     }
   },
   {
-    "name": "metric in the body but not in the quoted words is asked about",
+    "name": "metric beside the figure but outside the quoted words is read from the letter",
     "row": {
       "zone_by_city": "core",
       "source_text": "lvp, about 32 m2 of flooring, austin tx",
@@ -1335,12 +1337,14 @@
       }
     },
     "expect": {
-      "area_status": "no_unit",
-      "area_sqft": null,
-      "gate_color": "red",
-      "pricing_allowed": false
+      "area_sqft": 344,
+      "area_status": "converted",
+      "area_unit": "sqm",
+      "gate_color": "yellow",
+      "pricing_allowed": false,
+      "missing_fields": []
     },
-    "why": "Only what the model copied counts. It quoted \"32\" with no unit; the m2 sits in the body it did not cite. Inferring the unit from uncited text is the guessing the grounding rule exists to forbid, so the number has no established unit and the customer is asked."
+    "why": "This used to refuse, on the rule that only what the model copied counts. The rule guards against a unit invented out of nothing; it was costing the opposite -- a unit the customer wrote, standing immediately after the figure, thrown away because the quote stopped a word early. What is adjacent to the citation is not uncited text. A unit from another sentence is still refused, and has its own fixture."
   },
   {
     "name": "a product resolves through the catalogue before any blacklist",
@@ -1997,8 +2001,8 @@
     }
   },
   {
-    "name": "a mangled quote of the unit is asked about, not stored",
-    "why": "Asking the model to copy a unit verbatim invites non-ASCII: it answered m2 as a byte sequence carrying a NUL. Postgres refuses NUL in text, so anything the model produces must be stripped of control characters before it crosses into the database, and a unit whose quote cannot be verified is a question rather than a conversion.",
+    "name": "a mangled quote of the unit does not stop the letter from settling it",
+    "why": "The model answered m2 as bytes carrying a NUL, so its own quote proves nothing. That is a transport fault, not a doubt about what the customer wrote: the letter says m² next to the figure and is not mangled. Control characters are still stripped before anything crosses into the database.",
     "row": {
       "zone_by_city": "core",
       "source_text": "i need about 32 m² of lvp in austin tx",
@@ -2017,11 +2021,12 @@
       }
     },
     "expect": {
-      "area_status": "no_unit",
-      "area_sqft": null,
-      "area_unit": null,
-      "gate_color": "red",
-      "pricing_allowed": false
+      "area_sqft": 344,
+      "area_status": "converted",
+      "area_unit": "sqm",
+      "gate_color": "yellow",
+      "pricing_allowed": false,
+      "missing_fields": []
     }
   },
   {
@@ -2073,8 +2078,8 @@
     }
   },
   {
-    "name": "a unit that does not match the words quoted for it is not a unit",
-    "why": "Grounding proves the quoted words are in the email; it cannot prove the value means them. A model that answers sqft while quoting m2 would have the gate store the metric number unconverted — the tenfold error the unit field exists to prevent, arriving through the field itself.",
+    "name": "when the model's unit disagrees with the words it quoted, the letter decides",
+    "why": "The model answered sqft while quoting m². Refusing was safe but blind; reading the letter is safer still, because it is the letter that says metres and the letter that the number came from. This is precisely the tenfold error the unit field exists to prevent, and it is prevented by believing the customer rather than the model.",
     "row": {
       "zone_by_city": "core",
       "source_text": "lvp, about 32 m² in austin tx",
@@ -2093,11 +2098,12 @@
       }
     },
     "expect": {
-      "area_sqft": null,
-      "area_status": "no_unit",
-      "area_unit": null,
-      "gate_color": "red",
-      "pricing_allowed": false
+      "area_sqft": 344,
+      "area_status": "converted",
+      "area_unit": "sqm",
+      "gate_color": "yellow",
+      "pricing_allowed": false,
+      "missing_fields": []
     }
   },
   {
@@ -2305,5 +2311,48 @@
       "auto_blocked": false
     },
     "why": "The word stairs used to mark the scope unknown, which holds the whole email for a person -- so a customer who mentioned a staircase got no number for their floor either, and the floor was always perfectly priceable. The stairs are named in the quote at the firm's own rate per step and counted on site."
+  },
+  {
+    "name": "a quote that stops before the unit takes it from the letter",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "About 400 sq ft.",
+      "prior_in_thread": 2,
+      "prior_from_contact": 2,
+      "extracted": {
+        "intent": "new_quote",
+        "area_sqft": 400,
+        "evidence": {
+          "area_sqft": "About 400"
+        }
+      }
+    },
+    "expect": {
+      "area_sqft": 400,
+      "area_status": "known",
+      "area_unit": "sqft"
+    },
+    "why": "The model quotes the figure and sometimes stops before the words that give it meaning: a customer asked for the size answered \"About 400 sq ft.\" and it came back quoted as \"About 400\". A number with no unit is refused, quite rightly, so the desk asked for the size, was given it, and asked again -- and the conversation could not end. The unit is in the letter whether or not the model quoted it, and the letter is what the gate already checks every quote against."
+  },
+  {
+    "name": "a unit from another sentence is not this number's unit",
+    "row": {
+      "zone_by_city": "core",
+      "source_text": "My neighbour did hers in square metres. Mine is about 400, whatever that is in your units.",
+      "prior_in_thread": 2,
+      "prior_from_contact": 2,
+      "extracted": {
+        "intent": "new_quote",
+        "area_sqft": 400,
+        "evidence": {
+          "area_sqft": "about 400"
+        }
+      }
+    },
+    "expect": {
+      "area_sqft": null,
+      "area_status": "no_unit"
+    },
+    "why": "Only what stands immediately after the quoted figure can be its unit. Reading the whole letter for any unit word would let a metre mentioned about somebody else's floor decide this one, and a wrong unit is worse than no unit: it prices confidently and wrongly."
   }
 ]
