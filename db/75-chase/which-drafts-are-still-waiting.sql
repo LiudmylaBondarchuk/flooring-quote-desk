@@ -29,7 +29,10 @@ SELECT f.id                              AS offer_id,
        o.contact_email,
        coalesce(c.so_far, 0)             AS said_before,
        coalesce(c.so_far, 0) + 1 >= 2    AS the_last_time,
-       date_part('hour', now() - f.created_at)::int AS hours_waiting
+       -- the whole wait, not the hours left over after the days are taken out. date_part('hour')
+       -- reads the hour field of the interval, so four days and four hours came back as four, and
+       -- the line would have told the owner a quote from last week had been waiting since breakfast.
+       (extract(epoch FROM now() - f.created_at) / 3600)::int AS hours_waiting
   FROM offers f
   JOIN orders o ON o.id = f.order_id
   LEFT JOIN chases c ON c.offer_id = f.id
