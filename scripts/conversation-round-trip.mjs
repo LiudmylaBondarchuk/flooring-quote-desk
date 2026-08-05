@@ -1195,6 +1195,26 @@ console.log('\na price becomes a letter, and it only ever reaches the owner');
   check('and the closing explains the spread it actually has',
     /options listed above/.test(letter.the_letter_itself), true);
 
+  // and the way to say yes, in the letter that gives them something to say yes to. Agreement read
+  // out of prose is a guess -- a sentence can carry a yes and a question at once -- and a booking
+  // cannot be misread: it is an entry in a calendar with this job's code on it.
+  check('the letter offers the booking page',
+    letter.the_letter_itself.includes(ask("SELECT body FROM reply_templates WHERE key = 'booking_link'").trim()),
+    true);
+  check('and the code that ties a booking to this job',
+    letter.the_letter_itself.includes(needs.booking_code), true);
+  check('in the firm\'s own words, not words typed into the composer',
+    letter.the_letter_itself.includes(ask("SELECT body FROM reply_templates WHERE key = 'quote_booking'").trim()),
+    true);
+  check('and the code comes after the words that explain it, not before',
+    letter.the_letter_itself.indexOf(needs.booking_code)
+      > letter.the_letter_itself.indexOf(ask("SELECT body FROM reply_templates WHERE key = 'quote_booking'").trim()),
+    true);
+  // A job with no code cannot be booked against, and a booking line without one asks the customer
+  // for something they were never given.
+  check('a job with no code is not asked to book',
+    /Your code/.test(composeQuotes({ ...needs, booking_code: null })[0].the_letter_itself), false);
+
   const said = putForward('quote1', priced.written.offer_id, 'th-approve-1',
     letter.the_letter_itself);
   check('the offer is now waiting for her', said.now_waiting, 't');
@@ -1265,8 +1285,12 @@ console.log('\ntwo quotes in one poll are both written');
     said[0].message.includes(`#all/${needs[1].thread_id}`), false);
   check('the link is labelled with what the customer called it',
     said[0].message.includes(`|${letters[0].subject}>`), true);
-  check('and it opens the owner\'s own mailbox, not whichever one the browser has',
-    said[0].message.includes('mail/u/flooring.demo.austin@gmail.com/'), true);
+  // By address, never by the u/ index: the index is different on every machine, and written into
+  // the path it answers 404 rather than opening the wrong mailbox, which is at least loud.
+  check('and it picks the owner\'s mailbox by address',
+    said[0].message.includes('?authuser=flooring.demo.austin@gmail.com#all/'), true);
+  check('and never by an index that is only right on one machine',
+    /mail\/u\/\d/.test(said[0].message), false);
   // A letter can arrive with no subject at all -- a platform lead often does -- and a link labelled
   // with nothing is a link nobody can see to click.
   check('a draft with no subject still has something to click',
@@ -1548,6 +1572,41 @@ console.log('\nthe owner says send it, and only then does the customer get a pri
     whatItAnswers('sent1', 'th-appr1').the_quote_went_out, false);
 }
 
+console.log('\nsending a quote the desk had given up on brings the job back');
+{
+  const a = arrive({
+    id: 'gone1', thread: 'th-gone', from: 'ivy@example.com',
+    text: 'laminate, 240 sq ft, kyle tx',
+    extracted: { intent: 'new_quote', material: 'laminate', area_sqft: 240, area_unit: 'sqft',
+      city: 'kyle', evidence: { material: 'laminate', area_sqft: '240', area_unit: 'sq ft', city: 'kyle' } },
+  });
+  const priced = priceIt('gone1');
+  const [letter] = composeQuotes(whatTheQuoteNeeds('gone1', priced.written.offer_id));
+  putForward('gone1', priced.written.offer_id, 'th-gone', letter.the_letter_itself);
+
+  // Told twice and left unsent, so the chasing closed the job. That is a guess about what saying
+  // nothing meant, and the letter below is not a guess.
+  ask(`UPDATE offers SET status = 'expired' WHERE id = ${priced.written.offer_id}`);
+  ask(`UPDATE orders SET state = 'lost', closed_at = now() WHERE id = ${a.order_id}`);
+  check('the job was given up on', orderOf(a.order_id).state, 'lost');
+
+  arrive({ id: 'sent-again', thread: 'th-gone', from: 'flooring.demo.austin@gmail.com',
+    text: letter.the_letter_itself, extracted: { intent: 'other', evidence: {} } });
+  takeItOn('sent-again');
+  check('the letter is still recognised as this quote going out',
+    whatItAnswers('sent-again', 'th-gone').the_quote_went_out, true);
+
+  const went = sayItWentOut('sent-again', priced.written.offer_id);
+  check('and the offer stops being expired', went.now_sent, 't');
+  check('the job comes back', orderOf(a.order_id).state, 'quoted');
+  check('and stops being stamped as closed',
+    ask(`SELECT closed_at IS NULL FROM orders WHERE id = ${a.order_id}`), 't');
+  check('the history says both things happened, in order',
+    ask(`SELECT string_agg(old_value || '->' || new_value, ' ' ORDER BY created_at)
+           FROM order_events WHERE order_id = ${a.order_id} AND field = 'state'`),
+    'new->quoted lost->quoted');
+}
+
 console.log('\nwhat she sends is what the record keeps, even when she changed it');
 {
   const a = arrive({
@@ -1583,8 +1642,9 @@ console.log('\nwhat she sends is what the record keeps, even when she changed it
   // the one question this exists to answer, asked the way it would really be asked
   check('the two can be counted apart',
     ask(`SELECT count(*) FROM order_events WHERE field = 'letter_text' AND kind = 'rejected'`), '1');
+  // Two by now: the one above, and the quote sent after the chasing had already closed its job.
   check('and so can the times she sent it as written',
-    ask(`SELECT count(*) FROM order_events WHERE field = 'letter_text' AND kind = 'approved'`), '1');
+    ask(`SELECT count(*) FROM order_events WHERE field = 'letter_text' AND kind = 'approved'`), '2');
 }
 
 console.log('\na letter the owner wrote by hand is not the quote going out');
@@ -1642,8 +1702,8 @@ console.log('\nwith nothing to compare, nothing is claimed about who wrote what'
 
   arrive({ id: 'sent3', thread: 'th-appr3', from: 'flooring.demo.austin@gmail.com',
     text: letter.the_letter_itself, extracted: { intent: 'other', evidence: {} } });
-  takeItOn('sent3');
-  const went = sayItWentOut('sent3', priced.written.offer_id);
+  takeItOn('sent-again');
+  const went = sayItWentOut('sent-again', priced.written.offer_id);
   check('the quote still counts as sent', went.now_sent, 't');
   check('but nothing is claimed about whether she rewrote it', went.she_said, '');
   check('and no event pretends to know', ask(
